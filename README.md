@@ -1,12 +1,10 @@
-gdrcopy
-=======
+# gdrcopy
 
 A low-latency GPU memory copy library based on NVIDIA GPUDirect RDMA
 technology.
 
 
-Introduction
-===
+## Introduction
 
 While GPUDirect RDMA is meant for direct access to GPU memory from
 third-party devices, it is possible to use these same APIs to create
@@ -17,8 +15,7 @@ involved in the copy process. This might be useful when low latencies
 are required.
 
 
-Disclaimer
-===
+## Disclaimer
 
 This is just for technology demonstration purposes. In particular this
 is not an NVIDIA-supported product.
@@ -29,8 +26,7 @@ latent bug related to the concurrent invalidation of mappings and
 memory deallocation.
 
 
-What is inside
-===
+## What is inside
 
 Basically, gdrcopy offers the infrastructure to create user-space
 mappings of GPU memory, which can then be manipulated as if it was
@@ -54,8 +50,8 @@ The library comes with two tests:
 - copybw, a minimal application which calculates the R/W bandwidth.
 
 
-Requirements
-===
+
+## Requirements
 
 GPUDirect RDMA requires an NVIDIA Tesla and Quadro class GPUs based on
 Kepler/Maxwell, see [GPUDirect
@@ -75,21 +71,30 @@ root priviledges are necessary to load/install the kernel-mode device
 driver.
 
 
-Build & execution
-===
+## Build & execution
 
 Build:
-$ cd gdrcopy
-$ make PREFIX=<install path dir> CUDA=<cuda install path> all install
+
+```shell
+cd gdrcopy
+make PREFIX=<install path dir> CUDA=<cuda install path> all install
+```
 
 Install kernel-mode driver (root/sudo caps required):
-$ ./insmod.sh
+
+```shell
+insmod.sh
+```
 
 Prepare environment:
-$ export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
+
+```
+export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
+```
 
 Execute provided tests:
-$ ./validate
+```
+./validate
 buffer size: 327680
 check 1: direct access + read back via cuMemcpy D->H
 check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H
@@ -114,16 +119,12 @@ Assertion "fabs(roMBps - expected_read_MBps)/expected_read_MBps <= bw_tolerance"
 unmapping buffer
 unpinning buffer
 closing gdrdrv
+```
 
-
-TODO
-===
+## TODO
 
 - add RPM specs for both library and kernel-mode driver
-
 - explore use of DKMS for kernel-mode driver
-
 - Conditionally use P2P tokens, to be compatible with CUDA 5.x.
-
 - Implement an event-queue mechanism in gdrdrv to deliver mapping
   invalidation events to user-space applications.
