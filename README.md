@@ -46,7 +46,7 @@ A simple by-product of it is a copy library with the following characteristics:
   PCIE
 
 The library comes with two tests:
-- copy, which is a simple application testing the APIs.
+- validate, which is a simple application testing the APIs.
 - copybw, a minimal application which calculates the R/W bandwidth.
 
 
@@ -74,27 +74,24 @@ driver.
 ## Build & execution
 
 Build:
-
 ```shell
-cd gdrcopy
-make PREFIX=<install path dir> CUDA=<cuda install path> all install
+$ cd gdrcopy
+$ make PREFIX=<install path dir> CUDA=<cuda install path> all install
 ```
 
 Install kernel-mode driver (root/sudo caps required):
-
 ```shell
-insmod.sh
+$ ./insmod.sh
 ```
 
 Prepare environment:
-
-```
-export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
+```shell
+$ export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
 ```
 
 Execute provided tests:
-```
-./validate
+```shell
+$ ./validate
 buffer size: 327680
 check 1: direct access + read back via cuMemcpy D->H
 check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H
