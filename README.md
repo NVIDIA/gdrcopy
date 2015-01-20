@@ -100,19 +100,17 @@ check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + extra_dwords=5
 $ ./copybw
 testing size: 4096
 rounded size: 65536
-device ptr: 2304740000
-bar_ptr: 0x7fd8992fe000
-info.va: 2304740000
+device ptr: 5046c0000
+bar_ptr: 0x7f8cff410000
+info.va: 5046c0000
 info.mapped_size: 65536
 info.page_size: 65536
-off: 0
-buf_ptr:0x7fd8992fe000
+page offset: 0
+user-space pointer:0x7f8cff410000
 BAR writing test...
-BAR1 write BW: 8132.49MB/s
-Assertion "fabs(woMBps - expected_write_MBps)/expected_write_MBps <= bw_tolerance" failed at copybw.cpp:123
+BAR1 write BW: 9549.25MB/s
 BAR reading test...
-BAR1 read BW: 1.54918MB/s
-Assertion "fabs(roMBps - expected_read_MBps)/expected_read_MBps <= bw_tolerance" failed at copybw.cpp:142
+BAR1 read BW: 1.50172MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
