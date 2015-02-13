@@ -33,7 +33,8 @@ mappings of GPU memory, which can then be manipulated as if it was
 plain host memory (caveats apply here).
 
 A simple by-product of it is a copy library with the following characteristics:
-- Zero-latency, as it is driven by the CPU.
+- very low overhead, as it is driven by the CPU. As a reference, currently a 
+  cudaMemcpy can incur in a 6-7us overhead.
 
 - An initial memory "pinning" phase is required, which is potentially expensive,
   10us-1ms depending on the buffer size.
