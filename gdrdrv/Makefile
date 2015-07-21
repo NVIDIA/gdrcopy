@@ -26,40 +26,25 @@ NVIDIA_SRC_DIR := $(shell $(src)/path_to_p2p_header.sh)
 ifneq ($(KERNELRELEASE),)
 
 kver_major:=$(shell echo $(KERNELRELEASE) | awk -F '.' '// { print $$2;}' )
-obj-m := gdrdrv.o
-#EXTRA_CFLAGS += -Werror-implicit-function-declaration -Wno-format
+
+obj-m := nv-p2p-dummy.o
+obj-m += gdrdrv.o
+
 EXTRA_CFLAGS += -I $(NVIDIA_SRC_DIR)
 
 else
 
 KDIR ?= /lib/modules/$(shell uname -r)/build
-#REL := $(subst ., , $(shell lsb_release -rs))
 REL := $(subst ., , $(subst -, , $(shell uname -r)))
 REL_MAJOR  := $(word 1,$(REL))
 REL_MEDIUM := $(word 2,$(REL))
 REL_MINOR  := $(word 3,$(REL))
 
-#NVIDIA_SRC_DIR := $(shell $$PWD/path_to_p2p_header.sh)
-
-all: nvidia_src_dir linksyms default
+all: nvidia_src_dir default
 
 nvidia_src_dir:
 	@ [ -e $(src)/path_to_p2p_header.sh ] || { echo "can't exec path_to_p2p_header.sh"; exit 1; }; \
 	echo "src dir: $(NVIDIA_SRC_DIR)"
-
-linksyms:
-	@ rm -f rm Module.symvers; \
-	echo "kernel versions is: $(REL_MAJOR).$(REL_MEDIUM).$(REL_MINOR)"; \
-        if [ $(REL_MAJOR) -gt 2 ]; then \
-		echo "assuming this is RHEL 7.x"; \
-		ln -sf Module.symvers.nvidia_on_rhel7.x Module.symvers; \
-	elif [ $(REL_MINOR) -gt 18 ]; then \
-		echo "assuming this is RHEL 6.x"; \
-		ln -sf Module.symvers.nvidia_on_rhel6.x Module.symvers; \
-	else \
-		echo "assuming this is RHEL 5.x"; \
-		ln -sf Module.symvers.nvidia_on_rhel5.x Module.symvers; \
-	fi
 
 default:
 	@ $(MAKE) -C $(KDIR) M=$$PWD  modules
@@ -71,7 +56,7 @@ help:
 	$(MAKE) -C $(KDIR) M=$$PWD help
 
 clean:
-	rm -rf *.o *.ko* *.mod.* .*.cmd modules.order .tmp_versions/ *~ core .depend TAGS 
+	rm -rf *.o *.ko* *.mod.* .*.cmd Module.symvers modules.order .tmp_versions/ *~ core .depend TAGS 
 
 TAGS:
 	find $(KERNELDIR) -follow -name \*.h -o -name \*.c  |xargs etags
