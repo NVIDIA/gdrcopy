@@ -37,15 +37,15 @@ using namespace std;
 //#define OUT TESTSTACK
 
 // manually tuned...
-const int num_write_iters = 500000;
-const int num_read_iters  = 500;
+const int num_write_iters = 5000;
+const int num_read_iters  = 100;
+const size_t _size = 4*32*1024;
 
 main()
 {
     void *dummy;
     ASSERTRT(cudaMalloc(&dummy, 0));
 
-    const size_t _size = 4*1024;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     OUT << "testing size: " << _size << endl;
