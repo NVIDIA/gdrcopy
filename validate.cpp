@@ -60,9 +60,11 @@ main()
 
     gdr_mh_t mh;
     BEGIN_CHECK {
+        CUdeviceptr d_ptr = d_A;
+
         // tokens are optional in CUDA 6.0
         // wave out the test if GPUDirectRDMA is not enabled
-        BREAK_IF_NEQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
+        BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
         ASSERT_NEQ(mh, 0U);
 
         void *bar_ptr  = NULL;
@@ -71,24 +73,25 @@ main()
 
         gdr_info_t info;
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-        int off = info.va - d_A;
-        //OUT << "off: " << off << endl;
+        int off = d_ptr - info.va;
+        cout << "off: " << off << endl;
 
         uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
         //OUT << "buf_ptr:" << buf_ptr << endl;
 
-        printf("check 1: direct access + read back via cuMemcpy D->H\n");
+        printf("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
         init_hbuf_walking_bit(buf_ptr, size);
         //mmiowcwb();
-        ASSERTDRV(cuMemcpyDtoH(copy_buf, d_A, size));
+        ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
         //ASSERTDRV(cuCtxSynchronize());
         compare_buf(init_buf, copy_buf, size);
 
         printf("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
         gdr_copy_to_bar(buf_ptr, init_buf, size);
-        ASSERTDRV(cuMemcpyDtoH(copy_buf, d_A, size));
+        ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
         //ASSERTDRV(cuCtxSynchronize());
         compare_buf(init_buf, copy_buf, size);
+        fflush(stdout);
 
         printf("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
         gdr_copy_to_bar(buf_ptr, init_buf, size);
@@ -98,10 +101,16 @@ main()
 
         int extra_dwords = 5;
         int extra_off = extra_dwords * sizeof(uint32_t);
-        printf("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + extra_dwords=%d\n", extra_dwords);
+        printf("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset\n", extra_dwords);
         gdr_copy_to_bar(buf_ptr + extra_dwords, init_buf, size - extra_off);
         gdr_copy_from_bar(copy_buf, buf_ptr + extra_dwords, size - extra_off);
         compare_buf(init_buf, copy_buf, size - extra_off);
+
+        extra_off = 11;
+        printf("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
+        gdr_copy_to_bar((char*)buf_ptr + extra_off, init_buf, size);
+        gdr_copy_from_bar(copy_buf, (char*)buf_ptr + extra_off, size);
+        compare_buf(init_buf, copy_buf, size);
 
         ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
