@@ -41,7 +41,7 @@ main()
     const size_t _size = 256*1024+16; //32*1024+8;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
-    printf("buffer size: %d\n", size);
+    printf("buffer size: %zu\n", size);
     CUdeviceptr d_A;
     ASSERTDRV(cuMemAlloc(&d_A, size));
     //OUT << "device ptr: " << hex << d_A << dec << endl;
