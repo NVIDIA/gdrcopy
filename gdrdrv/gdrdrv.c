@@ -512,8 +512,20 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
     int ret = 0;
     unsigned long pfn;
 
-    gdr_info("mmaping phys mem addr=0x%lx size=%zu at user virt addr=0x%lx\n", 
+    gdr_dbg("mmaping phys mem addr=0x%lx size=%zu at user virt addr=0x%lx\n", 
              paddr, size, vaddr);
+
+    // in case the original user address was not properly host page-aligned
+    if (0 != (paddr & (PAGE_SIZE-1))) {
+        gdr_err("paddr=%lx, original mr address was not host page-aligned\n", paddr);
+        ret = -EINVAL;
+        goto out;
+    }
+    if (0 != (vaddr & (PAGE_SIZE-1))) {
+        gdr_err("vaddr=%lx, trying to map to non page-aligned vaddr\n", vaddr);
+        ret = -EINVAL;
+        goto out;
+    }
 
     pfn = paddr >> PAGE_SHIFT;
     gdr_dbg("pfn=0x%lx\n", pfn);
@@ -525,15 +537,18 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
     if (remap_page_range(vma, vaddr, paddr, size, vma->vm_page_prot)) {
         gdr_err("error in remap_pfn_range()\n");
         ret = -EAGAIN;
+        goto out;
     }
 #else
     vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
     if (remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
         gdr_err("error in remap_pfn_range()\n");
         ret = -EAGAIN;
+        goto out;
     }
 #endif
 
+out:
     return ret;
 }
 
@@ -559,41 +574,14 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     }
     offset = mr->offset;
     if (!mr->cb_flag && mr->page_table) {
-#if 0   // old implementation, left here in case of problems
-        // this one only handles mapping of a single 64KB GPU page
-
-        //size_t n_pages = mr->page_table->entries;
-        // simple implementation, mapping only 1st page
-        struct nvidia_p2p_page *page = mr->page_table->pages[0];
-        unsigned long page_paddr = page->physical_address;
-        unsigned long paddr = page_paddr + offset;
-        // cannot map beyond 1st page
-        if (mr->offset + size > GPU_PAGE_SIZE) {
-            gdr_err("mmap size goes beyond 1st gpu page\n");
-            ret = -EINVAL;
-            goto out;
-        }
-        // in case the original user address was not properly host page-aligned
-        if (0 != (paddr & (PAGE_SIZE-1))) {
-            gdr_err("paddr=%lx, original mr address was not host page-aligned\n", paddr);
-            ret = -EINVAL;
-            goto out;
-        }
-        ret = gdrdrv_mmap_phys_mem_wcomb(vma, vma->vm_start, paddr, size);
-        if (ret) {
-            gdr_err("mmap error\n");
-            goto out;
-        }
-        offset = 0;
-#else
         int p = 0;
         unsigned long vaddr = vma->vm_start;
         while(size && p < mr->page_table->entries) {
             struct nvidia_p2p_page *page = mr->page_table->pages[p];
             unsigned long page_paddr = page->physical_address;
-            size_t page_size = MIN(GPU_PAGE_SIZE-offset, size);
+            size_t len = MIN(GPU_PAGE_SIZE-offset, size);
 
-            gdr_dbg("offset=%llx page_i=%d page_size=%zu vaddr+offset=%llx\n", offset, p, page_size, vaddr+offset);
+            gdr_dbg("offset=%llx page_i=%d len=%zu vaddr+offset=%llx\n", offset, p, len, vaddr+offset);
 
             if (offset > GPU_PAGE_SIZE) {
                 ++p;
@@ -604,27 +592,28 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
             ret = gdrdrv_mmap_phys_mem_wcomb(vma, 
                                              vaddr + offset, 
                                              page_paddr + offset, 
-                                             page_size);
+                                             len);
             if (ret) {
                 gdr_err("mmap error\n");
                 goto out;
             }
 
-            vaddr += page_size;
-            size -= page_size;
+            vaddr += len;
+            size -= len;
             offset = 0;
             ++p;
         }
         
         if (size)
             gdr_err("size is too big!!!\n");
-#endif
     } else {
         gdr_err("mr is not ready\n");
         ret = -EINVAL;
     }
 
 out:
+    // TBD: don't leave partial mappings on error
+
     return ret;
 }
 
