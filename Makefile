@@ -18,7 +18,7 @@ LIBS     += -lcudart -lcuda -lpthread -ldl
 LIB := libgdrapi.so
 
 
-LIBSRCS := gdrapi.c memcpy_avx.c memcpy_sse.c
+LIBSRCS := gdrapi.c memcpy_avx.c memcpy_sse.c memcpy_sse41.c
 LIBOBJS := $(LIBSRCS:.c=.o)
 
 SRCS := validate.cpp copybw.cpp
@@ -46,6 +46,9 @@ memcpy_avx.o: memcpy_avx.c
 
 memcpy_sse.o: memcpy_sse.c
 	$(COMPILE.c) -msse -o $@ $^
+
+memcpy_sse41.o: memcpy_sse41.c
+	$(COMPILE.c) -msse4.1 -o $@ $^
 
 gdrapi.o: gdrapi.c gdrapi.h 
 validate.o: validate.cpp gdrapi.h common.hpp

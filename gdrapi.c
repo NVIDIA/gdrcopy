@@ -271,6 +271,14 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
 }
 
 #include <cpuid.h>
+
+// prepare for AVX2 implementation
+#ifndef bit_AVX2
+/* Extended Features (%eax == 7) */
+/* %ebx */
+#define bit_AVX2 (1 << 5)
+#endif
+
 #include <immintrin.h>
 
 static int first_time = 1;
@@ -278,11 +286,13 @@ static int has_sse = 0;
 static int has_sse2 = 0;
 static int has_sse4_1 = 0;
 static int has_avx = 0;
+static int has_avx2 = 0;
 
 extern int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
+extern int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes);
 
 #ifndef min
 #define min(A,B) ((A)<(B)?(A):(B))
@@ -299,6 +309,12 @@ static int gdr_init_cpu_flags()
        has_sse2   = ((dx & bit_SSE2)   != 0);
        gdr_dbg("sse4_1=%d avx=%d sse=%d sse2=%d\n", has_sse4_1, has_avx, has_sse, has_sse2);
     }
+#if 0
+    info_type = 0x7;
+    if (__get_cpuid(info_type, &ax, &bx, &cx, &dx) == 1) {
+        has_avx2 = bx & bit_AVX2;
+    }
+#endif
     first_time = 0;
 }
 
@@ -339,6 +355,11 @@ int gdr_copy_from_bar(void *h_ptr, const void *bar_ptr, size_t size)
 
     do {
         // pick the most performing implementation compatible with the platform we are running on
+        if (has_sse4_1) {
+            gdr_dbgc(1, "using SSE4_1 implementation of gdr_copy_from_bar\n");
+            memcpy_uncached_load_sse41(h_ptr, bar_ptr, size);
+            break;
+        }
         if (has_avx) {
             gdr_dbgc(1, "using AVX implementation of gdr_copy_from_bar\n");
             memcpy_cached_store_avx(h_ptr, bar_ptr, size);
