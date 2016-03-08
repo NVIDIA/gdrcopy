@@ -26,7 +26,7 @@ EXES := $(SRCS:.cpp=)
 
 all: $(LIB) driver $(EXES)
 
-install: lib_install drv_install
+install: lib_install #drv_install
 
 lib_install:
 	@ install -D -v -m u=rw,g=rw,o=r $(LIB) $(PREFIX)/lib/ && \
