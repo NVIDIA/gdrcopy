@@ -30,11 +30,13 @@ log_msg()
 function createnodes() {
     local module=$1
     local RC
+    local inode=/dev/$module
 
-    major=`fgrep $ /proc/devices | cut -b 1-4`
+    major=`fgrep $module /proc/devices | cut -b 1-4`
     log_msg "$module: driver major is $major"
 
-    mknod -m 666 /dev/$module c 195 0
+    [ -e $inode ] && rm -f $inode
+    mknod -m 666 $inode c $major 0
     RC=$?
 
     return $RC
