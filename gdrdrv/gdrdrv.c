@@ -50,6 +50,43 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 #include "gdrdrv.h"
 #include "nv-p2p.h"
 
+//-----------------------------------------------------------------------------
+
+#ifndef NVIDIA_P2P_MAJOR_VERSION_MASK
+#define NVIDIA_P2P_MAJOR_VERSION_MASK   0xffff0000
+#endif
+#ifndef NVIDIA_P2P_MINOR_VERSION_MASK
+#define NVIDIA_P2P_MINOR_VERSION_MASK   0x0000ffff
+#endif
+
+#ifndef NVIDIA_P2P_MAJOR_VERSION
+#define NVIDIA_P2P_MAJOR_VERSION(v) \
+    (((v) & NVIDIA_P2P_MAJOR_VERSION_MASK) >> 16)
+#endif
+
+#ifndef NVIDIA_P2P_MINOR_VERSION
+#define NVIDIA_P2P_MINOR_VERSION(v) \
+    (((v) & NVIDIA_P2P_MINOR_VERSION_MASK))
+#endif
+
+#ifndef NVIDIA_P2P_MAJOR_VERSION_MATCHES
+#define NVIDIA_P2P_MAJOR_VERSION_MATCHES(p, v) \
+    (NVIDIA_P2P_MAJOR_VERSION((p)->version) == NVIDIA_P2P_MAJOR_VERSION(v))
+#endif
+
+#ifndef NVIDIA_P2P_VERSION_COMPATIBLE
+#define NVIDIA_P2P_VERSION_COMPATIBLE(p, v)             \
+    (NVIDIA_P2P_MAJOR_VERSION_MATCHES(p, v) &&          \
+    (NVIDIA_P2P_MINOR_VERSION((p)->version) >= NVIDIA_P2P_MINOR_VERSION(v)))
+#endif
+
+#ifndef NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE
+#define NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE(p) \
+    NVIDIA_P2P_VERSION_COMPATIBLE(p, NVIDIA_P2P_PAGE_TABLE_VERSION)
+#endif
+
+//-----------------------------------------------------------------------------
+
 MODULE_AUTHOR("drossetti@nvidia.com");
 MODULE_LICENSE("MIT");
 MODULE_DESCRIPTION("GDRCopy kernel-mode driver");
@@ -291,6 +328,12 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     mr->page_table = page_table;
     mr->tm_cycles = tb - ta;
     mr->tsc_khz = cpu_khz; // tsc_khz
+
+    // check version before accessing page table
+    if (!NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE(page_table)) {
+        gdr_err("incompatible page table version 0x%08x\n", page_table->version);
+        goto out;
+    }
 
     switch(page_table->page_size) {
     case NVIDIA_P2P_PAGE_SIZE_4KB:
