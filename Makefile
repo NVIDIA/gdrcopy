@@ -24,7 +24,11 @@ LIBOBJS := $(LIBSRCS:.c=.o)
 SRCS := validate.cpp copybw.cpp
 EXES := $(SRCS:.cpp=)
 
-all: $(LIB) driver $(EXES)
+all: lib driver exes
+
+lib: $(LIB)
+
+exes: $(EXES)
 
 install: lib_install #drv_install
 
@@ -61,7 +65,8 @@ copybw: copybw.o $(LIB)
 	$(LINK.cc)  -o $@ $^ $(LIBS)
 
 driver:
-	$(MAKE) -C gdrdrv
+	cd gdrdrv; \
+	$(MAKE) $(MAKE_PARAMS)
 
 drv_install:
 	$(MAKE) -C gdrdrv install
@@ -70,4 +75,4 @@ clean:
 	rm -f *.o $(EXES) lib*.{a,so} *~ core.* && \
 	$(MAKE) -C gdrdrv clean
 
-.PHONY: driver clean all
+.PHONY: driver clean all lib exes lib_install install
