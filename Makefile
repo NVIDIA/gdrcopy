@@ -25,7 +25,7 @@ LIB := libgdrapi.so
 
 
 LIBSRCS := gdrapi.c
-ifeq ($(ARCH),X86)
+ifeq ($(GDRAPI_ARCH),X86)
 LIBSRCS += memcpy_avx.c memcpy_sse.c memcpy_sse41.c
 endif
 
