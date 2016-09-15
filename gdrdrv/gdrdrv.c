@@ -56,7 +56,7 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 }
 #define get_tsc_khz() (get_cycles()/1000) // dirty hack
 #else
-#error "X86_64/32 | PPC64 is required"
+#error "X86_64/32 or PPC64 is required"
 #endif
 
 #include "gdrdrv.h"
