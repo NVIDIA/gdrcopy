@@ -4,6 +4,13 @@
 # chkconfig: 2345 80 20
 # description: Startup/shutdown script for GDRcopy driver
 
+### BEGIN INIT INFO
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Setup gdrcopy
+#
+### END INIT INFO
+
 # Source function library.
 . /etc/rc.d/init.d/functions
 
