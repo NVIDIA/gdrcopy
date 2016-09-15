@@ -33,7 +33,12 @@
 #include <linux/list.h>
 #include <linux/mm.h>
 #include <linux/io.h>
-#include <asm/timex.h>
+#include <linux/timex.h>
+#include <linux/timer.h>
+
+#ifndef random_get_entropy
+#define random_get_entropy()	get_cycles()
+#endif
 
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_32)
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
@@ -43,8 +48,15 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
     new_prot = __pgprot(pgprot_val(new_prot) | _PAGE_PWT);
     return new_prot;
 }
+#define get_tsc_khz() cpu_khz // tsc_khz
+#elif defined(CONFIG_PPC64)
+static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
+{
+    return pgprot_writecombine(old_prot);
+}
+#define get_tsc_khz() (get_cycles()/1000) // dirty hack
 #else
-#error "X86_64/32 is required"
+#error "X86_64/32 or PPC64 is required"
 #endif
 
 #include "gdrdrv.h"
@@ -311,7 +323,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     mr->mapped_size  = rounded_size;
     mr->page_table   = NULL;
     mr->cb_flag      = 0;
-    mr->handle       = get_cycles() & GDR_HANDLE_MASK; // this is a hack, we need something really unique and randomized
+    mr->handle       = random_get_entropy() & GDR_HANDLE_MASK; // this is a hack, we need something really unique and randomized
 
     gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x)\n",
              mr->va, mr->mapped_size, mr->p2p_token, mr->va_space);
@@ -327,7 +339,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     }
     mr->page_table = page_table;
     mr->tm_cycles = tb - ta;
-    mr->tsc_khz = cpu_khz; // tsc_khz
+    mr->tsc_khz = get_tsc_khz();
 
     // check version before accessing page table
     if (!NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE(page_table)) {

@@ -42,6 +42,7 @@
 
 #include "gdrapi.h"
 #include "gdrdrv.h"
+#include "gdrconfig.h"
 
 #define STATIC_ASSERT(COND,MSG) typedef char static_assertion_##MSG[(!!(COND))*2-1]
 // token pasting madness:
@@ -49,12 +50,18 @@
 #define COMPILE_TIME_ASSERT2(X,L) COMPILE_TIME_ASSERT3(X,L)
 #define COMPILE_TIME_ASSERT(X)    COMPILE_TIME_ASSERT2(X,__LINE__)
 
+#ifndef min
+#define min(A,B) ((A)<(B)?(A):(B))
+#endif
 
-// use 	page_size = sysconf(_SC_PAGESIZE) instead
+// hint: use page_size = sysconf(_SC_PAGESIZE) instead
+#ifdef GDRAPI_POWER
+#define PAGE_SHIFT 16
+#else // catching all 4KB page size platforms here
 #define PAGE_SHIFT 12
+#endif
 #define PAGE_SIZE  (1UL << PAGE_SHIFT)
 #define PAGE_MASK  (~(PAGE_SIZE-1))
-
 
 // logging/tracing
 
@@ -270,6 +277,7 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
     return ret;
 }
 
+#ifdef GDRAPI_X86
 #include <cpuid.h>
 
 // prepare for AVX2 implementation
@@ -281,25 +289,30 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
 
 #include <immintrin.h>
 
+extern int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes);
+extern int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes);
+extern int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes);
+extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
+extern int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes);
+#else // GDRAPI_X86
+static int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
+static int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
+static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
+static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
+static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
+#endif // GDRAPI_X86
+
 static int first_time = 1;
 static int has_sse = 0;
 static int has_sse2 = 0;
 static int has_sse4_1 = 0;
 static int has_avx = 0;
 static int has_avx2 = 0;
-
-extern int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes);
-extern int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes);
-extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
-extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
-extern int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes);
-
-#ifndef min
-#define min(A,B) ((A)<(B)?(A):(B))
-#endif
+static int has_smx = 0;
 
 static int gdr_init_cpu_flags()
 {
+#ifdef GDRAPI_X86
     unsigned int info_type = 0x00000001;
     unsigned int ax, bx, cx, dx;
     if (__get_cpuid(info_type, &ax, &bx, &cx, &dx) == 1) {
@@ -309,16 +322,22 @@ static int gdr_init_cpu_flags()
        has_sse2   = ((dx & bit_SSE2)   != 0);
        gdr_dbg("sse4_1=%d avx=%d sse=%d sse2=%d\n", has_sse4_1, has_avx, has_sse, has_sse2);
     }
-#if 0
+#ifdef bit_AVX2
     info_type = 0x7;
     if (__get_cpuid(info_type, &ax, &bx, &cx, &dx) == 1) {
         has_avx2 = bx & bit_AVX2;
     }
+#endif // bit_AVX2
+#endif // GDRAPI_X86
+
+#ifdef GDRAPI_POWER
+    // detect and enable Altivec/SMX support
 #endif
+
     first_time = 0;
 }
 
-// more than one implementation may be compiled
+// note: more than one implementation may be compiled in
 
 
 int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)

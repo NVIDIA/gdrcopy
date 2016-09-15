@@ -1,30 +1,44 @@
 PREFIX ?= /usr/local
 CUDA ?= /usr/local/cuda
 
+# todo: autodetect target platform
+#GDRAPI_ARCH := POWER
+#GDRAPI_ARCH := X86
+#GDRAPI_ARCH := $(shell echo POWER)
+GDRAPI_ARCH := $(shell ./config_arch)
+
 #CUDA_LIB := -L /home/drossetti/work/p4/userevents/sw/dev/gpu_drv/cuda_a/drivers/gpgpu/_out/Linux_amd64_debug/bin \
 #	    -L /home/drossetti/work/p4/userevents/sw/gpgpu/bin/x86_64_Linux_debug
-CUDA_LIB :=-L $(CUDA)/lib64 -L $(CUDA)/lib -L /usr/lib64/nvidia -L /usr/lib/nvidia
+CUDA_LIB := -L $(CUDA)/lib64 -L $(CUDA)/lib -L /usr/lib64/nvidia -L /usr/lib/nvidia
 #CUDA_INC := -I /home/drossetti/work/p4/userevents/sw/dev/gpu_drv/cuda_a/drivers/gpgpu/cuda/inc
 CUDA_INC += -I $(CUDA)/include
 
-CPPFLAGS := $(CUDA_INC) -I gdrdrv/ -I $(CUDA)/include
+CPPFLAGS := $(CUDA_INC) -I gdrdrv/ -I $(CUDA)/include -D GDRAPI_ARCH=$(GDRAPI_ARCH)
 LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64
-CFLAGS   := -O2
+CFLAGS   += -O2
 CXXFLAGS += -O2
-LIBS     += -lcudart -lcuda -lpthread -ldl
+LIBS     := -lcudart -lcuda -lpthread -ldl
 #CXX := nvcc
 
 #LIB := libgdrapi.a
 LIB := libgdrapi.so
 
 
-LIBSRCS := gdrapi.c memcpy_avx.c memcpy_sse.c memcpy_sse41.c
+LIBSRCS := gdrapi.c
+ifeq ($(ARCH),X86)
+LIBSRCS += memcpy_avx.c memcpy_sse.c memcpy_sse41.c
+endif
+
 LIBOBJS := $(LIBSRCS:.c=.o)
 
 SRCS := validate.cpp copybw.cpp
 EXES := $(SRCS:.cpp=)
 
-all: lib driver exes
+
+all: config lib driver exes
+
+config:
+	echo "GDRAPI_ARCH=$(GDRAPI_ARCH)"
 
 lib: $(LIB)
 
@@ -33,8 +47,12 @@ exes: $(EXES)
 install: lib_install #drv_install
 
 lib_install:
-	@ install -D -v -m u=rw,g=rw,o=r $(LIB) $(PREFIX)/lib/ && \
-	install -D -v -m u=rw,g=rw,o=r gdrapi.h $(PREFIX)/include/gdrapi.h
+	@ echo "installing in $(PREFIX)..." && \
+	install -D -v -m u=rw,g=rw,o=r $(LIB) -t $(PREFIX)/lib/ && \
+	install -D -v -m u=rw,g=rw,o=r gdrapi.h -t $(PREFIX)/include/
+
+drv_install:
+	$(MAKE) -C gdrdrv install
 
 
 #static
@@ -67,9 +85,6 @@ copybw: copybw.o $(LIB)
 driver:
 	cd gdrdrv; \
 	$(MAKE) $(MAKE_PARAMS)
-
-drv_install:
-	$(MAKE) -C gdrdrv install
 
 clean:
 	rm -f *.o $(EXES) lib*.{a,so} *~ core.* && \
