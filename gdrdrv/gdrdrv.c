@@ -99,18 +99,40 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 
 //-----------------------------------------------------------------------------
 
+#define DEVNAME "gdrdrv"
+
+#define gdr_msg(KRNLVL, FMT, ARGS...) printk(KRNLVL DEVNAME ":" FMT, ## ARGS)
+//#define gdr_msg(KRNLVL, FMT, ARGS...) printk_ratelimited(KRNLVL DEVNAME ":" FMT, ## ARGS)
+
+static int dbg_enabled = 0;
+#define gdr_dbg(FMT, ARGS...)                               \
+    do {                                                    \
+        if (dbg_enabled)                                    \
+            gdr_msg(KERN_DEBUG, FMT, ## ARGS);              \
+    } while(0)
+
+static int info_enabled = 0;
+#define gdr_info(FMT, ARGS...)                               \
+    do {                                                     \
+        if (info_enabled)                                    \
+            gdr_msg(KERN_INFO, FMT, ## ARGS);                \
+    } while(0)
+
+#define gdr_err(FMT, ARGS...)                               \
+    gdr_msg(KERN_DEBUG, FMT, ## ARGS)
+
+//-----------------------------------------------------------------------------
+
 MODULE_AUTHOR("drossetti@nvidia.com");
 MODULE_LICENSE("MIT");
 MODULE_DESCRIPTION("GDRCopy kernel-mode driver");
 MODULE_VERSION("1.1");
+module_param(dbg_enabled, int, 0000);
+MODULE_PARM_DESC(dbg_enabled, "enable debug tracing");
+module_param(info_enabled, int, 0000);
+MODULE_PARM_DESC(info_enabled, "enable info tracing");
 
-#define DEVNAME "gdrdrv"
-
-//#define gdr_dbg(FMT, ARGS...)  printk(KERN_DEBUG DEVNAME ":" FMT, ## ARGS)
-#define gdr_dbg(FMT, ARGS...) do { } while(0)
-#define gdr_info(FMT, ARGS...) printk(KERN_DEBUG DEVNAME ":" FMT, ## ARGS)
-//#define gdr_info(FMT, ARGS...) do { } while(0)
-#define gdr_err(FMT, ARGS...)  printk(KERN_DEBUG DEVNAME ":" FMT, ## ARGS)
+//-----------------------------------------------------------------------------
 
 #define GPU_PAGE_SHIFT   16
 #define GPU_PAGE_SIZE    ((u64)1 << GPU_PAGE_SHIFT)
@@ -125,7 +147,7 @@ MODULE_VERSION("1.1");
 #define MIN(a,b) ((a) < (b) ? a : b)
 #endif
 
-//-----------------------------------------------------------------------------
+
 // compatibility with old Linux kernels
 
 #ifndef ACCESS_ONCE
@@ -234,7 +256,6 @@ static gdr_mr_t *gdr_mr_from_handle(gdr_info_t *info, gdr_hnd_t handle)
 {
     gdr_mr_t *mr = NULL;
     struct list_head *p;
-    gdr_dbg("closing\n");
 
     list_for_each(p, &info->mr_list) {
         mr = list_entry(p, gdr_mr_t, node);
@@ -757,7 +778,8 @@ static int __init gdrdrv_init(void)
     }
     if (gdrdrv_major == 0) gdrdrv_major = result; /* dynamic */
 
-    gdr_info("device registered with major number %d\n", gdrdrv_major);
+    gdr_msg(KERN_INFO, "device registered with major number %d\n", gdrdrv_major);
+    gdr_msg(KERN_INFO, "dbg traces %s, info traces %s", dbg_enabled ? "enabled" : "disabled", info_enabled ? "enabled" : "disabled");
 
     //gdrdrv_init_devices();/* fills to zero the device array */
 
@@ -768,13 +790,14 @@ static int __init gdrdrv_init(void)
 
 static void __exit gdrdrv_cleanup(void)
 {
-    gdr_info("unregistering major=%d\n", gdrdrv_major);
+    gdr_msg(KERN_INFO, "unregistering major number %d\n", gdrdrv_major);
 
     /* cleanup_module is never called if registering failed */
     unregister_chrdev(gdrdrv_major, DEVNAME);
 }
 
 //-----------------------------------------------------------------------------
+
 module_init(gdrdrv_init);
 module_exit(gdrdrv_cleanup);
 
