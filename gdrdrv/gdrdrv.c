@@ -102,26 +102,24 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 #define DEVNAME "gdrdrv"
 
 #define gdr_msg(KRNLVL, FMT, ARGS...) printk(KRNLVL DEVNAME ":" FMT, ## ARGS)
+//#define gdr_msg(KRNLVL, FMT, ARGS...) printk_ratelimited(KRNLVL DEVNAME ":" FMT, ## ARGS)
 
 static int dbg_enabled = 0;
 #define gdr_dbg(FMT, ARGS...)                               \
     do {                                                    \
-        if (dbg_enabled && printk_ratelimit())              \
+        if (dbg_enabled)                                    \
             gdr_msg(KERN_DEBUG, FMT, ## ARGS);              \
     } while(0)
 
 static int info_enabled = 0;
 #define gdr_info(FMT, ARGS...)                               \
     do {                                                     \
-        if (info_enabled && printk_ratelimit())              \
+        if (info_enabled)                                    \
             gdr_msg(KERN_INFO, FMT, ## ARGS);                \
     } while(0)
 
 #define gdr_err(FMT, ARGS...)                               \
-    do {                                                    \
-        if (printk_ratelimit())                             \
-            gdr_msg(KERN_DEBUG, FMT, ## ARGS);              \
-    } while(0)
+    gdr_msg(KERN_DEBUG, FMT, ## ARGS)
 
 //-----------------------------------------------------------------------------
 
