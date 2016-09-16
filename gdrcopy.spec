@@ -1,3 +1,4 @@
+%{!?_release: %define _release 1}
 %{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?KVERSION: %define KVERSION %(uname -r)}
 %global krelver %(echo -n %{KVERSION} | sed -e 's/-/_/g')
@@ -9,7 +10,7 @@
 
 Name:           gdrcopy
 Version:        1.2
-Release:        1%{?dist}
+Release:        %{_release}%{?dist}
 Summary:        GDRcopy library and companion kernel-mode driver    
 Group:          System Environment/Libraries
 License:        MIT
@@ -56,8 +57,9 @@ ls
 echo "building"
 ls
 ## %configure
-#export KVER=%{KVERSION}
-make %{?_smp_mflags} CUDA=%{CUDA} KVER=%{KVERSION} all
+export KVER=%{KVERSION}
+echo $KVER
+make %{?_smp_mflags} CUDA=%{CUDA} KVER=$KVER all
 
 
 %install

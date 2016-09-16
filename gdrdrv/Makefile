@@ -31,7 +31,7 @@ ccflags-y += -I$(NVIDIA_SRC_DIR)
 
 else
 
-KVER := $(shell uname -r)
+KVER ?= $(shell uname -r)
 MODULES_DIR := /lib/modules/$(KVER)
 KDIR := $(MODULES_DIR)/build
 MODULE_DESTDIR := $(MODULES_DIR)/extra/

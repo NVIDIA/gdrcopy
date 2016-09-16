@@ -95,7 +95,7 @@ drv_install:
 
 
 clean:
-	rm -f *.o $(EXES) lib*.{a,so} *~ core.* && \
+	rm -f *.o $(EXES) lib*.{a,so}* *~ core.* && \
 	$(MAKE) -C gdrdrv clean
 
 .PHONY: driver clean all lib exes lib_install install
