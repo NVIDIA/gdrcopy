@@ -98,6 +98,7 @@ check 1: direct access + read back via cuMemcpy D->H
 check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H
 check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()
 check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + extra_dwords=5
+
 $ ./copybw
 testing size: 4096
 rounded size: 65536
@@ -112,6 +113,71 @@ BAR writing test...
 BAR1 write BW: 9549.25MB/s
 BAR reading test...
 BAR1 read BW: 1.50172MB/s
+unmapping buffer
+unpinning buffer
+closing gdrdrv
+```
+
+## NUMA effects
+
+Depending on the platform architecture, like where the GPU are placed in
+the PCIe topology, performance may suffer is the processor which is driving
+the copy is not the one which is hosting the GPU, for example in a
+multi-socket server.
+
+In the example below, the K40m and K80 GPU are respectively hosted by
+socket0 and socket1. By explicitly playing with the OS process and memory
+affinity, it is possible to run the test onto the optimal processor:
+
+```shell
+$ GDRCOPY_ENABLE_LOGGING=1 GDRCOPY_LOG_LEVEL=0 LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH numactl -N 0 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
+GPU id:0 name:Tesla K40m PCI domain: 0 bus: 2 device: 0
+GPU id:1 name:Tesla K80 PCI domain: 0 bus: 132 device: 0
+GPU id:2 name:Tesla K80 PCI domain: 0 bus: 133 device: 0
+selecting device 0
+testing size: 65536
+rounded size: 65536
+device ptr: 2305ba0000
+bar_ptr: 0x7fe60956c000
+info.va: 2305ba0000
+info.mapped_size: 65536
+info.page_size: 65536
+page offset: 0
+user-space pointer:0x7fe60956c000
+BAR writing test, size=65536 offset=0 num_iters=10000
+DBG:  sse4_1=1 avx=1 sse=1 sse2=1
+DBG:  using AVX implementation of gdr_copy_to_bar
+BAR1 write BW: 9793.23MB/s
+BAR reading test, size=65536 offset=0 num_iters=100
+DBG:  using SSE4_1 implementation of gdr_copy_from_bar
+BAR1 read BW: 787.957MB/s
+unmapping buffer
+unpinning buffer
+closing gdrdrv
+```
+
+or on the other one:
+drossetti@drossetti-hsw0 16:52 (1181) gdrcopy>GDRCOPY_ENABLE_LOGGING=1 GDRCOPY_LOG_LEVEL=0 LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH numactl -N 1 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
+GPU id:0 name:Tesla K40m PCI domain: 0 bus: 2 device: 0
+GPU id:1 name:Tesla K80 PCI domain: 0 bus: 132 device: 0
+GPU id:2 name:Tesla K80 PCI domain: 0 bus: 133 device: 0
+selecting device 0
+testing size: 65536
+rounded size: 65536
+device ptr: 2305ba0000
+bar_ptr: 0x7f2299166000
+info.va: 2305ba0000
+info.mapped_size: 65536
+info.page_size: 65536
+page offset: 0
+user-space pointer:0x7f2299166000
+BAR writing test, size=65536 offset=0 num_iters=10000
+DBG:  sse4_1=1 avx=1 sse=1 sse2=1
+DBG:  using AVX implementation of gdr_copy_to_bar
+BAR1 write BW: 6812.08MB/s
+BAR reading test, size=65536 offset=0 num_iters=100
+DBG:  using SSE4_1 implementation of gdr_copy_from_bar
+BAR1 read BW: 669.825MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
