@@ -641,6 +641,9 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     gdr_hnd_t handle;
     gdr_mr_t *mr = NULL;
     u64 offset;
+    int p = 0;
+    unsigned long vaddr, prev_page_paddr;
+    int phys_contiguous = 1;
 
     gdr_info("mmap start=0x%lx size=%zu off=0x%lx\n", vma->vm_start, size, vma->vm_pgoff);
 
@@ -672,14 +675,13 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         goto out;
     }    
 
-    int p = 0;
-    unsigned long vaddr = vma->vm_start;
-    unsigned long prev_page_paddr = mr->page_table->pages[0]->physical_address;
-    unsigned long page_paddr;
-    int phys_contiguous = 1;
+    p = 0;
+    vaddr = vma->vm_start;
+    prev_page_paddr = mr->page_table->pages[0]->physical_address;
+    phys_contiguous = 1;
     for(p = 1; p < mr->page_table->entries; ++p) {
         struct nvidia_p2p_page *page = mr->page_table->pages[p];
-        page_paddr = page->physical_address;
+        unsigned long page_paddr = page->physical_address;
         if (prev_page_paddr + GPU_PAGE_SIZE != page_paddr) {
             gdr_dbg("page table entry %d is non-contiguous with previous\n", p);
             phys_contiguous = 0;
