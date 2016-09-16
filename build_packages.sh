@@ -39,8 +39,4 @@ cd $cwd
 mv $tmpdir/topdir/SRPMS/*.rpm .
 mv $tmpdir/topdir/RPMS/*/*.rpm .
 
-
-#rm -rf $tmpdir
-
-
-
+rm -rf $tmpdir

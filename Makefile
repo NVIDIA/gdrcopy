@@ -1,4 +1,5 @@
 PREFIX ?= /usr/local
+DESTLIB ?= /usr/local/lib64
 CUDA ?= /usr/local/cuda
 
 # todo: autodetect target platform
@@ -53,7 +54,8 @@ install: lib_install #drv_install
 
 lib_install:
 	@ echo "installing in $(PREFIX)..." && \
-	install -D -v -m u=rw,g=rw,o=r $(LIB) -t $(PREFIX)/lib/ && \
+	install -D -v -m u=rw,g=rw,o=r $(LIB_SONAME) -t $(DESTLIB) && \
+	install -D -v -m u=rw,g=rw,o=r $(LIB_BASENAME) -t $(DESTLIB) && \
 	install -D -v -m u=rw,g=rw,o=r gdrapi.h -t $(PREFIX)/include/
 
 #static

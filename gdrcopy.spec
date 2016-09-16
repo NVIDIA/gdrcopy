@@ -65,9 +65,10 @@ make %{?_smp_mflags} CUDA=%{CUDA} KVER=$KVER all
 %install
 %{__mkdir_p} $RPM_BUILD_ROOT%{_libdir}
 %{__mkdir_p} $RPM_BUILD_ROOT%{_prefix}/include
-#%{__make} PREFIX=$RPM_BUILD_ROOT%{_prefix} lib_install
-install -d $RPM_BUILD_ROOT%{_libdir}
-install -m 0755 libgdrapi.so $RPM_BUILD_ROOT%{_libdir}/libgdrapi.so
+
+%{__make} PREFIX=$RPM_BUILD_ROOT%{_prefix} DESTLIB=$RPM_BUILD_ROOT%{_libdir} lib_install
+#install -d $RPM_BUILD_ROOT%{_libdir}
+#install -Dpm 0755 libgdrapi.so $RPM_BUILD_ROOT%{_libdir}/libgdrapi.so
 install -d $RPM_BUILD_ROOT%{_prefix}/include
 install -m 0755 gdrapi.h $RPM_BUILD_ROOT%{_prefix}/include/gdrapi.h
 install -Dpm 755 copybw $RPM_BUILD_ROOT%{_prefix}/bin/copybw
@@ -98,7 +99,7 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %{_prefix}/bin/copybw
 %{_prefix}/bin/validate
-%{_libdir}/libgdrapi.so
+%{_libdir}/libgdrapi.so*
 /etc/init.d/gdrcopy
 
 %files devel
