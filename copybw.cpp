@@ -21,6 +21,7 @@
  */
 
 #include <stdlib.h>
+#include <getopt.h>
 #include <memory.h>
 #include <stdio.h>
 #include <math.h>
@@ -36,17 +37,81 @@ using namespace std;
 #define OUT cout
 //#define OUT TESTSTACK
 
-// manually tuned...
-const int num_write_iters = 5000;
-const int num_read_iters  = 100;
-const size_t _size = 4*32*1024;
+//#define MYCLOCK CLOCK_REALTIME
+//#define MYCLOCK CLOCK_RAW_MONOTONIC
+#define MYCLOCK CLOCK_MONOTONIC
 
-main()
+// manually tuned...
+const int num_write_iters = 10000;
+const int num_read_iters  = 100;
+
+main(int argc, char *argv[])
 {
+    size_t _size = 128*1024;
+    size_t copy_size = 0;
+    size_t copy_offset = 0;
+    int dev_id = 0;
+
+    while(1) {        
+        int c;
+        c = getopt(argc, argv, "s:d:o:c:h");
+        if (c == -1)
+            break;
+
+        switch (c) {
+        case 's':
+            _size = strtol(optarg, NULL, 0);
+            break;
+        case 'c':
+            copy_size = strtol(optarg, NULL, 0);
+            break;
+        case 'o':
+            copy_offset = strtol(optarg, NULL, 0);
+            break;
+        case 'd':
+            dev_id = strtol(optarg, NULL, 0);
+            break;
+        case 'h':
+            printf("syntax: %s -s <buf size> -c <copy size> -o <copy offset> -d <gpu dev id> -h\n");
+            exit(EXIT_FAILURE);
+            break;
+        default:
+            printf("ERROR: invalid option\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+    
+    if (!copy_size)
+        copy_size = _size;
+
+    if (copy_offset % sizeof(uint32_t) != 0) {
+        printf("ERROR: offset must be multiple of 4 bytes\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (copy_offset + copy_size > _size) {
+        printf("ERROR: offset + copy size run past the end of the buffer\n");
+        exit(EXIT_FAILURE);
+    }
+
+    size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    int n_devices = 0;
+    ASSERTRT(cudaGetDeviceCount(&n_devices));
+
+    cudaDeviceProp prop;
+    for (int n=0; n<n_devices; ++n) {
+        ASSERTRT(cudaGetDeviceProperties(&prop,n));
+        OUT << "GPU id:" << n << " name:" << prop.name 
+            << " PCI domain: " << prop.pciDomainID 
+            << " bus: " << prop.pciBusID 
+            << " device: " << prop.pciDeviceID << endl;
+    }
+    OUT << "selecting device " << dev_id << endl;
+    ASSERTRT(cudaSetDevice(dev_id));
+
     void *dummy;
     ASSERTRT(cudaMalloc(&dummy, 0));
-
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     OUT << "testing size: " << _size << endl;
     OUT << "rounded size: " << size << endl;
@@ -92,36 +157,35 @@ main()
         uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
         OUT << "user-space pointer:" << buf_ptr << endl;
 
-//#define MYCLOCK CLOCK_REALTIME
-//#define MYCLOCK CLOCK_RAW_MONOTONIC
-#define MYCLOCK CLOCK_MONOTONIC
-
-        cout << "BAR writing test..." << endl;
+        // copy to BAR benchmark
+        cout << "BAR writing test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_write_iters << endl;
         struct timespec beg, end;
         clock_gettime(MYCLOCK, &beg);
         for (int iter=0; iter<num_write_iters; ++iter)
-            gdr_copy_to_bar(buf_ptr, init_buf, _size);
+            gdr_copy_to_bar(buf_ptr + copy_offset/4, init_buf, copy_size);
         clock_gettime(MYCLOCK, &end);
 
         double woMBps;
         {
-            double byte_count = (double) _size * num_write_iters;
+            double byte_count = (double) copy_size * num_write_iters;
             double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
             double Bps = byte_count / dt_ms * 1e3;
             woMBps = Bps / 1024.0 / 1024.0;
             cout << "BAR1 write BW: " << woMBps << "MB/s" << endl;
         }
-        compare_buf(init_buf, buf_ptr, _size);
 
-        cout << "BAR reading test..." << endl;
+        compare_buf(init_buf, buf_ptr + copy_offset/4, copy_size);
+
+        // copy from BAR benchmark
+        cout << "BAR reading test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_read_iters << endl;
         clock_gettime(MYCLOCK, &beg);
         for (int iter=0; iter<num_read_iters; ++iter)
-            gdr_copy_from_bar(init_buf, buf_ptr, size);
+            gdr_copy_from_bar(init_buf, buf_ptr + copy_offset/4, copy_size);
         clock_gettime(MYCLOCK, &end);
 
         double roMBps;
         {
-            double byte_count = (double) _size * num_read_iters;
+            double byte_count = (double) copy_size * num_read_iters;
             double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
             double Bps = byte_count / dt_ms * 1e3;
             roMBps = Bps / 1024.0 / 1024.0;
