@@ -157,6 +157,7 @@ closing gdrdrv
 ```
 
 or on the other one:
+```shell
 drossetti@drossetti-hsw0 16:52 (1181) gdrcopy>GDRCOPY_ENABLE_LOGGING=1 GDRCOPY_LOG_LEVEL=0 LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH numactl -N 1 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
 GPU id:0 name:Tesla K40m PCI domain: 0 bus: 2 device: 0
 GPU id:1 name:Tesla K80 PCI domain: 0 bus: 132 device: 0
