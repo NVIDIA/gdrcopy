@@ -1,5 +1,5 @@
 PREFIX ?= /usr/local
-DESTLIB ?= /usr/local/lib64
+DESTLIB ?= $(PREFIX)/lib64
 CUDA ?= /usr/local/cuda
 
 # todo: autodetect target platform
@@ -56,6 +56,7 @@ lib_install:
 	@ echo "installing in $(PREFIX)..." && \
 	install -D -v -m u=rw,g=rw,o=r $(LIB_SONAME) -t $(DESTLIB) && \
 	install -D -v -m u=rw,g=rw,o=r $(LIB_BASENAME) -t $(DESTLIB) && \
+	install -D -v -m u=rw,g=rw,o=r $(LIB_DYNAMIC) -t $(DESTLIB) && \
 	install -D -v -m u=rw,g=rw,o=r gdrapi.h -t $(PREFIX)/include/
 
 #static
@@ -65,6 +66,7 @@ $(LIBOBJS): CFLAGS+=-fPIC
 $(LIB): $(LIBOBJS)
 	$(CC) -shared -Wl,-soname,$(LIB_SONAME) -o $@ $^
 	ldconfig -n $(PWD)
+	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME)
 	ln -sf $(LIB_SONAME) $(LIB_BASENAME)
 
 # special-cased to finely tune the arch option
