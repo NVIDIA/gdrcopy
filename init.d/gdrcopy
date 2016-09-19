@@ -1,14 +1,16 @@
 #!/bin/bash
 #
 # Startup/shutdown script for GDRcopy driver
-# chkconfig: 2345 80 20
-# description: Startup/shutdown script for GDRcopy driver
+# chkconfig: 2345 20 80
+# description: Startup/shutdown script for GDRcopy kernel-mode driver
 
 ### BEGIN INIT INFO
+# Provides:       gdrcopy
+# Required-Start:
+# Required-Stop:
 # Default-Start: 2 3 4 5
 # Default-Stop: 0 1 6
-# Short-Description: Setup gdrcopy
-#
+# Description: GDRcopy kernel-mode driver init script
 ### END INIT INFO
 
 # Source function library.
