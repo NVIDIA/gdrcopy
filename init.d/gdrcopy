@@ -35,6 +35,19 @@ log_msg()
     logger -i "$modname: $@"
 }
 
+function req_modules_loaded() {
+    local RC
+    local reqmods="nvidia"
+    for mod in $reqmods; do
+        if ! is_module $mod; then
+            echo "module $mod is not loaded"
+            RC=1
+            break
+        fi
+    done
+    return $RC
+}
+
 # Create /dev nodes for device
 function createnodes() {
     local module=$1
@@ -77,6 +90,12 @@ load_module()
 
 # Start daemon
 function start() {
+
+    echo -n $"Checking required modules: "
+    req_modules_loaded && success || failure
+    RETVAL=$?
+    echo
+    [ "$RETVAL" = 0 ] || exit $RETVAL
 
     if is_module $DRIVER ; then
         echo "module already loaded"
