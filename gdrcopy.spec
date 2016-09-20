@@ -59,7 +59,7 @@ ls
 ## %configure
 export KVER=%{KVERSION}
 echo $KVER
-make %{?_smp_mflags} CUDA=%{CUDA} KVER=$KVER all
+make %{?_smp_mflags} CUDA=%{CUDA} KVER=%{KVERSION} all
 
 
 %install
