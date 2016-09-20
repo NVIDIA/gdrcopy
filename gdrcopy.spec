@@ -65,12 +65,9 @@ make %{?_smp_mflags} CUDA=%{CUDA} KVER=%{KVERSION} all
 %install
 %{__mkdir_p} $RPM_BUILD_ROOT%{_libdir}
 %{__mkdir_p} $RPM_BUILD_ROOT%{_prefix}/include
-
 %{__make} PREFIX=$RPM_BUILD_ROOT%{_prefix} DESTLIB=$RPM_BUILD_ROOT%{_libdir} lib_install
-#install -d $RPM_BUILD_ROOT%{_libdir}
-#install -Dpm 0755 libgdrapi.so $RPM_BUILD_ROOT%{_libdir}/libgdrapi.so
 install -d $RPM_BUILD_ROOT%{_prefix}/include
-install -m 0755 gdrapi.h $RPM_BUILD_ROOT%{_prefix}/include/gdrapi.h
+#install -m 0755 gdrapi.h $RPM_BUILD_ROOT%{_prefix}/include/gdrapi.h
 install -Dpm 755 copybw $RPM_BUILD_ROOT%{_prefix}/bin/copybw
 install -Dpm 755 validate $RPM_BUILD_ROOT%{_prefix}/bin/validate
 
@@ -85,27 +82,40 @@ install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT
 
 
 %post
-
-/sbin/chkconfig --add gdrcopy
-
 /sbin/depmod -a
 %{MODPROBE} -rq gdrdrv||:
 %{MODPROBE} gdrdrv||:
 
+if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
+   true
+fi              
+
+/sbin/chkconfig --add gdrcopy
+
+%preun
+%{MODPROBE} -rq gdrcopy
+if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
+   true
+fi              
+
 
 %clean
-rm -rf $RPM_BUILD_ROOT
+rm -rf $RPM_BUILD_DIR/%{name}-%{version}
+[ "x$RPM_BUILD_ROOT" != "x" ] && rm -rf $RPM_BUILD_ROOT
+
 
 %files
 %{_prefix}/bin/copybw
 %{_prefix}/bin/validate
-%{_libdir}/libgdrapi.so*
+%{_libdir}/libgdrapi.so.*
 /etc/init.d/gdrcopy
 
+
 %files devel
-## %{_libdir}/libmlx5.a
+%{_libdir}/libgdrapi.so
 %{_prefix}/include/gdrapi.h
 %doc README.md
+
 
 %files %{kmod}
 %defattr(-,root,root,-)
