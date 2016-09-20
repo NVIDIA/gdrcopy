@@ -47,16 +47,11 @@ NVIDIA GPUDirect RDMA technology.
 Kernel-mode driver for GDRCopy.
 
 %prep
-echo "prepping"
-ls
 %setup
-ls
 
 
 %build
 echo "building"
-ls
-## %configure
 export KVER=%{KVERSION}
 echo $KVER
 make %{?_smp_mflags} CUDA=%{CUDA} KVER=%{KVERSION} all
