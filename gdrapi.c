@@ -98,7 +98,7 @@ static void gdr_msg(enum gdrcopy_msg_level lvl, const char* fmt, ...)
 }
 
 #define gdr_dbg(FMT, ARGS...)  gdr_msg(GDRCOPY_MSG_DEBUG, "DBG:  " FMT, ## ARGS)
-#define gdr_dbgc(C, FMT, ARGS...)  do { static gdr_dbg_cnt=(C); if (gdr_dbg_cnt) { gdr_dbg(FMT, ## ARGS); --gdr_dbg_cnt; }} while (0)
+#define gdr_dbgc(C, FMT, ARGS...)  do { static int gdr_dbg_cnt=(C); if (gdr_dbg_cnt) { gdr_dbg(FMT, ## ARGS); --gdr_dbg_cnt; }} while (0)
 #define gdr_info(FMT, ARGS...) gdr_msg(GDRCOPY_MSG_INFO,  "INFO: " FMT, ## ARGS)
 #define gdr_warn(FMT, ARGS...) gdr_msg(GDRCOPY_MSG_WARN,  "WARN: " FMT, ## ARGS)
 #define gdr_err(FMT, ARGS...)  gdr_msg(GDRCOPY_MSG_ERROR, "ERR:  " FMT, ## ARGS)
@@ -310,7 +310,7 @@ static int has_avx = 0;
 static int has_avx2 = 0;
 static int has_smx = 0;
 
-static int gdr_init_cpu_flags()
+static void gdr_init_cpu_flags()
 {
 #ifdef GDRAPI_X86
     unsigned int info_type = 0x00000001;

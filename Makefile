@@ -1,4 +1,5 @@
 PREFIX ?= /usr/local
+DESTLIB ?= $(PREFIX)/lib64
 CUDA ?= /usr/local/cuda
 
 # todo: autodetect target platform
@@ -21,7 +22,12 @@ LIBS     := -lcudart -lcuda -lpthread -ldl
 #CXX := nvcc
 
 #LIB := libgdrapi.a
-LIB := libgdrapi.so
+LIB_MAJOR_VER:=1
+LIB_VER:=$(LIB_MAJOR_VER).2
+LIB_BASENAME:=libgdrapi.so
+LIB_DYNAMIC=$(LIB_BASENAME).$(LIB_VER)
+LIB_SONAME=$(LIB_BASENAME).$(LIB_MAJOR_VER)
+LIB:=$(LIB_DYNAMIC)
 
 
 LIBSRCS := gdrapi.c
@@ -48,19 +54,20 @@ install: lib_install #drv_install
 
 lib_install:
 	@ echo "installing in $(PREFIX)..." && \
-	install -D -v -m u=rw,g=rw,o=r $(LIB) -t $(PREFIX)/lib/ && \
+	install -D -v -m u=rw,g=rw,o=r $(LIB_SONAME) -t $(DESTLIB) && \
+	install -D -v -m u=rw,g=rw,o=r $(LIB_BASENAME) -t $(DESTLIB) && \
+	install -D -v -m u=rw,g=rw,o=r $(LIB_DYNAMIC) -t $(DESTLIB) && \
 	install -D -v -m u=rw,g=rw,o=r gdrapi.h -t $(PREFIX)/include/
-
-drv_install:
-	$(MAKE) -C gdrdrv install
-
 
 #static
 #$(LIB): $(LIB)($(LIBOBJS))
 #dynamic
 $(LIBOBJS): CFLAGS+=-fPIC
-libgdrapi.so: $(LIBOBJS)
-	$(CC) -shared -o $@ $^
+$(LIB): $(LIBOBJS)
+	$(CC) -shared -Wl,-soname,$(LIB_SONAME) -o $@ $^
+	ldconfig -n $(PWD)
+	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME)
+	ln -sf $(LIB_SONAME) $(LIB_BASENAME)
 
 # special-cased to finely tune the arch option
 memcpy_avx.o: memcpy_avx.c
@@ -86,8 +93,13 @@ driver:
 	cd gdrdrv; \
 	$(MAKE) $(MAKE_PARAMS)
 
+drv_install:
+	cd gdrdrv; \
+	$(MAKE) install
+
+
 clean:
-	rm -f *.o $(EXES) lib*.{a,so} *~ core.* && \
+	rm -f *.o $(EXES) lib*.{a,so}* *~ core.* && \
 	$(MAKE) -C gdrdrv clean
 
 .PHONY: driver clean all lib exes lib_install install
