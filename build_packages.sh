@@ -31,7 +31,8 @@ tar czvf gdrcopy-$VERSION.tar.gz gdrcopy-$VERSION
 mkdir -p $tmpdir/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
 cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
 cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
-rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' --define 'CUDA /usr/local/cuda-7.5' $tmpdir/topdir/SPECS/gdrcopy.spec
+
+rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' --define 'CUDA /usr/local/cuda-7.5' --define "KVERSION $(uname -r)" $tmpdir/topdir/SPECS/gdrcopy.spec
 rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
 srpm=`ls -1 $tmpdir/topdir/SRPMS/`
 echo $srpm $rpms
