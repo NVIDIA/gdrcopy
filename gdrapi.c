@@ -260,11 +260,7 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
 {
     int ret = 0;
     int retcode = 0;
-    gdr_info_t info = {0,};
-
     size_t rounded_size = (size + PAGE_SIZE - 1) & PAGE_MASK;
-    off_t magic_off = (off_t)handle << PAGE_SHIFT;
-    void *mmio;
 
     retcode = munmap(va, rounded_size);
     if (-1 == retcode) {
@@ -308,7 +304,6 @@ static int has_sse2 = 0;
 static int has_sse4_1 = 0;
 static int has_avx = 0;
 static int has_avx2 = 0;
-static int has_smx = 0;
 
 static void gdr_init_cpu_flags()
 {

@@ -33,7 +33,7 @@ using namespace std;
 #include "common.hpp"
 
 
-main()
+int main(int argc, char *argv[])
 {
     void *dummy;
     ASSERTRT(cudaMalloc(&dummy, 0));
@@ -118,6 +118,7 @@ main()
     ASSERT_EQ(gdr_close(g), 0);
 
     ASSERTDRV(cuMemFree(d_A));
+    return 0;
 }
 
 /*
