@@ -54,10 +54,11 @@ install: lib_install #drv_install
 
 lib_install:
 	@ echo "installing in $(PREFIX)..." && \
-	install -D -v -m u=rw,g=rw,o=r $(LIB_SONAME) -t $(DESTLIB) && \
-	install -D -v -m u=rw,g=rw,o=r $(LIB_BASENAME) -t $(DESTLIB) && \
 	install -D -v -m u=rw,g=rw,o=r $(LIB_DYNAMIC) -t $(DESTLIB) && \
-	install -D -v -m u=rw,g=rw,o=r gdrapi.h -t $(PREFIX)/include/
+	install -D -v -m u=rw,g=rw,o=r gdrapi.h -t $(PREFIX)/include/; \
+	cd $(DESTLIB); \
+	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME); \
+	ln -sf $(LIB_SONAME) $(LIB_BASENAME);
 
 #static
 #$(LIB): $(LIB)($(LIBOBJS))
