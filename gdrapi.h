@@ -27,7 +27,7 @@
 #include <stddef.h>
 
 #define GPU_PAGE_SHIFT   16
-#define GPU_PAGE_SIZE    ((unsigned long)1 << GPU_PAGE_SHIFT)
+#define GPU_PAGE_SIZE    (1UL << GPU_PAGE_SHIFT)
 #define GPU_PAGE_OFFSET  (GPU_PAGE_SIZE-1)
 #define GPU_PAGE_MASK    (~GPU_PAGE_OFFSET)
 
@@ -48,10 +48,11 @@
 extern "C" {
 #endif
 
-// Initialize the library, e.g. by opening a connection to the kernel-mode
-// driver. Returns an handle to the library state object.
 struct gdr;
 typedef struct gdr *gdr_t;
+
+// Initialize the library, e.g. by opening a connection to the kernel-mode
+// driver. Returns an handle to the library state object.
 gdr_t gdr_open();
 
 // Destroy library state object, e.g. it closes the connection to kernel-mode
