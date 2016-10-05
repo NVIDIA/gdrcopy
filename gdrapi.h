@@ -23,7 +23,7 @@
 #ifndef __GDRAPI_H__
 #define __GDRAPI_H__
 
-#include <inttypes.h>
+#include <stdint.h> // for standard [u]intX_t types
 #include <stddef.h>
 
 #define GPU_PAGE_SHIFT   16
