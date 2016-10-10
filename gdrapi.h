@@ -26,6 +26,11 @@
 #include <stdint.h> // for standard [u]intX_t types
 #include <stddef.h>
 
+#define GDR_API_MAJOR_VERSION    1
+#define GDR_API_MINOR_VERSION    2
+#define GDR_API_VERSION          ((GDR_API_MAJOR_VERSION << 16) | GDR_API_MINOR_VERSION)
+
+
 #define GPU_PAGE_SHIFT   16
 #define GPU_PAGE_SIZE    (1UL << GPU_PAGE_SHIFT)
 #define GPU_PAGE_OFFSET  (GPU_PAGE_SIZE-1)
