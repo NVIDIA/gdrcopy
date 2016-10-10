@@ -617,8 +617,8 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
     }
 #else
     vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
-    gdr_dbg("calling io_remap_pfn_range() vma=%p vaddr=%lx pfn=%lx size=%zu page_prot=%016lx\n", 
-            vma, vaddr, pfn, size, vma->vm_page_prot.pgprot);
+    gdr_dbg("calling io_remap_pfn_range() vma=%p vaddr=%lx pfn=%lx size=%zu\n", 
+            vma, vaddr, pfn, size);
     if (io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
         gdr_err("error in remap_pfn_range()\n");
         ret = -EAGAIN;
