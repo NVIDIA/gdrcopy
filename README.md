@@ -10,9 +10,8 @@ While GPUDirect RDMA is meant for direct access to GPU memory from
 third-party devices, it is possible to use these same APIs to create
 perfectly valid CPU mappings of the GPU memory.
 
-The advantage of a CPU driven copy is the essencially zero latency
-involved in the copy process. This might be useful when low latencies
-are required.
+The advantage of a CPU driven copy is the very small overhead
+involved. That might be useful when low latencies are required.
 
 
 ## Disclaimer
@@ -55,6 +54,13 @@ The library comes with two tests:
 - validate, which is a simple application testing the APIs.
 - copybw, a minimal application which calculates the R/W bandwidth.
 
+
+## Restrictions
+
+This library only works with regular CUDA device memory, as returned by
+cudaMalloc.
+
+In particular, it does not work with CUDA managed memory.
 
 
 ## Requirements
