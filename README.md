@@ -18,7 +18,12 @@ are required.
 ## Disclaimer
 
 This is just for technology demonstration purposes. In particular this
-is not an NVIDIA-supported product.
+is not an NVIDIA-supported product. 
+
+For bugs or feature requests, feel free to [file an issue]
+(https://github.com/NVIDIA/gdrcopy/issues). Not guarantee is given that the
+team will follow up on any of those.
+
 
 The library relies on a small kernel-mode driver (gdrdrv) which has
 bug(s) and can even crash your machine.  In particular, there is a
