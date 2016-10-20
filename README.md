@@ -23,7 +23,7 @@ is not an NVIDIA-supported product.
 For bugs or feature requests, feel free to [file an issue]
 (https://github.com/NVIDIA/gdrcopy/issues). No guarantee is given that the
 team will follow up on any of those. 
-Alternatively, see section Bug filing below for the official bug filing procedure.
+Alternatively, see Bug filing(#bug-filing) section below for the official bug filing procedure.
 
 The library relies on a small kernel-mode driver (gdrdrv) which has
 bug(s) and can even crash your machine.  In particular, there is a
@@ -41,7 +41,7 @@ A simple by-product of it is a copy library with the following characteristics:
 - very low overhead, as it is driven by the CPU. As a reference, currently a 
   cudaMemcpy can incur in a 6-7us overhead.
 
-- An initial memory "pinning" phase is required, which is potentially expensive,
+- An initial memory *pinning* phase is required, which is potentially expensive,
   10us-1ms depending on the buffer size.
 
 - Fast H-D, because of write-combining. H-D bandwidth is 6-8GB/s on Ivy
