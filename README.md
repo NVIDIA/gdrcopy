@@ -22,8 +22,8 @@ is not an NVIDIA-supported product.
 
 For bugs or feature requests, feel free to [file an issue]
 (https://github.com/NVIDIA/gdrcopy/issues). No guarantee is given that the
-team will follow up on any of those.
-
+team will follow up on any of those. 
+Alternatively, see section Bug filing below for the official bug filing procedure.
 
 The library relies on a small kernel-mode driver (gdrdrv) which has
 bug(s) and can even crash your machine.  In particular, there is a
@@ -188,6 +188,24 @@ unmapping buffer
 unpinning buffer
 closing gdrdrv
 ```
+
+
+## Bug filing
+
+For reporting issues you may be having using any of NVIDIA software or
+reporting suspected bugs we would recommend you use the bug filing system
+which is available to NVIDIA registered developers on the developer site.
+
+If you are not a member you can [sign
+up](https://developer.nvidia.com/accelerated-computing-developer).
+
+Once a member you can submit issues using [this
+form](https://developer.nvidia.com/nvbugs/cuda/add). Be sure to select
+GPUDirect in the "Relevant Area" field.
+
+You can later track their progress using the __My Bugs__ link on the left of
+this [view](https://developer.nvidia.com/user).
+
 
 ## TODO
 
