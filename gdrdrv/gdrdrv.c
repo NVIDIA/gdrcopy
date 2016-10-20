@@ -33,7 +33,12 @@
 #include <linux/list.h>
 #include <linux/mm.h>
 #include <linux/io.h>
-#include <asm/timex.h>
+#include <linux/timex.h>
+#include <linux/timer.h>
+
+#ifndef random_get_entropy
+#define random_get_entropy()	get_cycles()
+#endif
 
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_32)
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
@@ -43,25 +48,91 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
     new_prot = __pgprot(pgprot_val(new_prot) | _PAGE_PWT);
     return new_prot;
 }
+#define get_tsc_khz() cpu_khz // tsc_khz
+#elif defined(CONFIG_PPC64)
+static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
+{
+    return pgprot_writecombine(old_prot);
+}
+#define get_tsc_khz() (get_cycles()/1000) // dirty hack
 #else
-#error "X86_64/32 is required"
+#error "X86_64/32 or PPC64 is required"
 #endif
 
 #include "gdrdrv.h"
 #include "nv-p2p.h"
 
+//-----------------------------------------------------------------------------
+
+#ifndef NVIDIA_P2P_MAJOR_VERSION_MASK
+#define NVIDIA_P2P_MAJOR_VERSION_MASK   0xffff0000
+#endif
+#ifndef NVIDIA_P2P_MINOR_VERSION_MASK
+#define NVIDIA_P2P_MINOR_VERSION_MASK   0x0000ffff
+#endif
+
+#ifndef NVIDIA_P2P_MAJOR_VERSION
+#define NVIDIA_P2P_MAJOR_VERSION(v) \
+    (((v) & NVIDIA_P2P_MAJOR_VERSION_MASK) >> 16)
+#endif
+
+#ifndef NVIDIA_P2P_MINOR_VERSION
+#define NVIDIA_P2P_MINOR_VERSION(v) \
+    (((v) & NVIDIA_P2P_MINOR_VERSION_MASK))
+#endif
+
+#ifndef NVIDIA_P2P_MAJOR_VERSION_MATCHES
+#define NVIDIA_P2P_MAJOR_VERSION_MATCHES(p, v) \
+    (NVIDIA_P2P_MAJOR_VERSION((p)->version) == NVIDIA_P2P_MAJOR_VERSION(v))
+#endif
+
+#ifndef NVIDIA_P2P_VERSION_COMPATIBLE
+#define NVIDIA_P2P_VERSION_COMPATIBLE(p, v)             \
+    (NVIDIA_P2P_MAJOR_VERSION_MATCHES(p, v) &&          \
+    (NVIDIA_P2P_MINOR_VERSION((p)->version) >= NVIDIA_P2P_MINOR_VERSION(v)))
+#endif
+
+#ifndef NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE
+#define NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE(p) \
+    NVIDIA_P2P_VERSION_COMPATIBLE(p, NVIDIA_P2P_PAGE_TABLE_VERSION)
+#endif
+
+//-----------------------------------------------------------------------------
+
+#define DEVNAME "gdrdrv"
+
+#define gdr_msg(KRNLVL, FMT, ARGS...) printk(KRNLVL DEVNAME ":" FMT, ## ARGS)
+//#define gdr_msg(KRNLVL, FMT, ARGS...) printk_ratelimited(KRNLVL DEVNAME ":" FMT, ## ARGS)
+
+static int dbg_enabled = 0;
+#define gdr_dbg(FMT, ARGS...)                               \
+    do {                                                    \
+        if (dbg_enabled)                                    \
+            gdr_msg(KERN_DEBUG, FMT, ## ARGS);              \
+    } while(0)
+
+static int info_enabled = 0;
+#define gdr_info(FMT, ARGS...)                               \
+    do {                                                     \
+        if (info_enabled)                                    \
+            gdr_msg(KERN_INFO, FMT, ## ARGS);                \
+    } while(0)
+
+#define gdr_err(FMT, ARGS...)                               \
+    gdr_msg(KERN_DEBUG, FMT, ## ARGS)
+
+//-----------------------------------------------------------------------------
+
 MODULE_AUTHOR("drossetti@nvidia.com");
 MODULE_LICENSE("MIT");
 MODULE_DESCRIPTION("GDRCopy kernel-mode driver");
 MODULE_VERSION("1.1");
+module_param(dbg_enabled, int, 0000);
+MODULE_PARM_DESC(dbg_enabled, "enable debug tracing");
+module_param(info_enabled, int, 0000);
+MODULE_PARM_DESC(info_enabled, "enable info tracing");
 
-#define DEVNAME "gdrdrv"
-
-//#define gdr_dbg(FMT, ARGS...)  printk(KERN_DEBUG DEVNAME ":" FMT, ## ARGS)
-#define gdr_dbg(FMT, ARGS...) do { } while(0)
-#define gdr_info(FMT, ARGS...) printk(KERN_DEBUG DEVNAME ":" FMT, ## ARGS)
-//#define gdr_info(FMT, ARGS...) do { } while(0)
-#define gdr_err(FMT, ARGS...)  printk(KERN_DEBUG DEVNAME ":" FMT, ## ARGS)
+//-----------------------------------------------------------------------------
 
 #define GPU_PAGE_SHIFT   16
 #define GPU_PAGE_SIZE    ((u64)1 << GPU_PAGE_SHIFT)
@@ -76,7 +147,7 @@ MODULE_VERSION("1.1");
 #define MIN(a,b) ((a) < (b) ? a : b)
 #endif
 
-//-----------------------------------------------------------------------------
+
 // compatibility with old Linux kernels
 
 #ifndef ACCESS_ONCE
@@ -185,7 +256,6 @@ static gdr_mr_t *gdr_mr_from_handle(gdr_info_t *info, gdr_hnd_t handle)
 {
     gdr_mr_t *mr = NULL;
     struct list_head *p;
-    gdr_dbg("closing\n");
 
     list_for_each(p, &info->mr_list) {
         mr = list_entry(p, gdr_mr_t, node);
@@ -274,7 +344,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     mr->mapped_size  = rounded_size;
     mr->page_table   = NULL;
     mr->cb_flag      = 0;
-    mr->handle       = get_cycles() & GDR_HANDLE_MASK; // this is a hack, we need something really unique and randomized
+    mr->handle       = random_get_entropy() & GDR_HANDLE_MASK; // this is a hack, we need something really unique and randomized
 
     gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x)\n",
              mr->va, mr->mapped_size, mr->p2p_token, mr->va_space);
@@ -290,7 +360,13 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     }
     mr->page_table = page_table;
     mr->tm_cycles = tb - ta;
-    mr->tsc_khz = cpu_khz; // tsc_khz
+    mr->tsc_khz = get_tsc_khz();
+
+    // check version before accessing page table
+    if (!NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE(page_table)) {
+        gdr_err("incompatible page table version 0x%08x\n", page_table->version);
+        goto out;
+    }
 
     switch(page_table->page_size) {
     case NVIDIA_P2P_PAGE_SIZE_4KB:
@@ -512,8 +588,20 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
     int ret = 0;
     unsigned long pfn;
 
-    gdr_info("mmaping phys mem addr=0x%lx size=%zu at user virt addr=0x%lx\n", 
+    gdr_dbg("mmaping phys mem addr=0x%lx size=%zu at user virt addr=0x%lx\n", 
              paddr, size, vaddr);
+
+    // in case the original user address was not properly host page-aligned
+    if (0 != (paddr & (PAGE_SIZE-1))) {
+        gdr_err("paddr=%lx, original mr address was not host page-aligned\n", paddr);
+        ret = -EINVAL;
+        goto out;
+    }
+    if (0 != (vaddr & (PAGE_SIZE-1))) {
+        gdr_err("vaddr=%lx, trying to map to non page-aligned vaddr\n", vaddr);
+        ret = -EINVAL;
+        goto out;
+    }
 
     pfn = paddr >> PAGE_SHIFT;
     gdr_dbg("pfn=0x%lx\n", pfn);
@@ -523,17 +611,22 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
     vma->vm_flags |= VM_RESERVED;
     vma->vm_flags |= VM_IO;
     if (remap_page_range(vma, vaddr, paddr, size, vma->vm_page_prot)) {
-        gdr_err("error in remap_pfn_range()\n");
+        gdr_err("error in remap_page_range()\n");
         ret = -EAGAIN;
+        goto out;
     }
 #else
     vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
-    if (remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
+    gdr_dbg("calling io_remap_pfn_range() vma=%p vaddr=%lx pfn=%lx size=%zu\n", 
+            vma, vaddr, pfn, size);
+    if (io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
         gdr_err("error in remap_pfn_range()\n");
         ret = -EAGAIN;
+        goto out;
     }
 #endif
 
+out:
     return ret;
 }
 
@@ -548,6 +641,9 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     gdr_hnd_t handle;
     gdr_mr_t *mr = NULL;
     u64 offset;
+    int p = 0;
+    unsigned long vaddr, prev_page_paddr;
+    int phys_contiguous = 1;
 
     gdr_info("mmap start=0x%lx size=%zu off=0x%lx\n", vma->vm_start, size, vma->vm_pgoff);
 
@@ -558,73 +654,101 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         goto out;
     }
     offset = mr->offset;
-    if (!mr->cb_flag && mr->page_table) {
-#if 0   // old implementation, left here in case of problems
-        // this one only handles mapping of a single 64KB GPU page
+    if (mr->cb_flag) {
+        gdr_dbg("mr has been invalidated\n");
+        ret = -EINVAL;
+        goto out;
+    }
+    if (!mr->page_table) {
+        gdr_dbg("invalid mr state\n");
+        ret = -EINVAL;
+        goto out;
+    }
+    if (mr->page_table->entries <= 0) {
+        gdr_dbg("invalid entries in page table\n");
+        ret = -EINVAL;
+        goto out;
+    }
+    if (offset) {
+        gdr_dbg("offset != 0 is not supported\n");
+        ret = -EINVAL;
+        goto out;
+    }    
 
-        //size_t n_pages = mr->page_table->entries;
-        // simple implementation, mapping only 1st page
-        struct nvidia_p2p_page *page = mr->page_table->pages[0];
+    p = 0;
+    vaddr = vma->vm_start;
+    prev_page_paddr = mr->page_table->pages[0]->physical_address;
+    phys_contiguous = 1;
+    for(p = 1; p < mr->page_table->entries; ++p) {
+        struct nvidia_p2p_page *page = mr->page_table->pages[p];
         unsigned long page_paddr = page->physical_address;
-        unsigned long paddr = page_paddr + offset;
-        // cannot map beyond 1st page
-        if (mr->offset + size > GPU_PAGE_SIZE) {
-            gdr_err("mmap size goes beyond 1st gpu page\n");
-            ret = -EINVAL;
-            goto out;
+        if (prev_page_paddr + GPU_PAGE_SIZE != page_paddr) {
+            gdr_dbg("page table entry %d is non-contiguous with previous\n", p);
+            phys_contiguous = 0;
+            break;
         }
-        // in case the original user address was not properly host page-aligned
-        if (0 != (paddr & (PAGE_SIZE-1))) {
-            gdr_err("paddr=%lx, original mr address was not host page-aligned\n", paddr);
-            ret = -EINVAL;
-            goto out;
-        }
-        ret = gdrdrv_mmap_phys_mem_wcomb(vma, vma->vm_start, paddr, size);
+        prev_page_paddr = page_paddr;
+    }
+
+    if (phys_contiguous) {
+        // offset not supported
+        size_t len = GPU_PAGE_SIZE * mr->page_table->entries;
+        unsigned long page0_paddr = mr->page_table->pages[0]->physical_address;
+        gdr_dbg("offset=%llx len=%zu vaddr+offset=%llx paddr+offset=%llx\n", 
+                offset, len, vaddr+offset, page0_paddr + offset);
+        ret = gdrdrv_mmap_phys_mem_wcomb(vma, 
+                                         vaddr + offset, 
+                                         page0_paddr + offset, 
+                                         len);
         if (ret) {
             gdr_err("mmap error\n");
             goto out;
         }
-        offset = 0;
-#else
-        int p = 0;
-        unsigned long vaddr = vma->vm_start;
+    } else {
+        if (offset > GPU_PAGE_SIZE) {
+            gdr_dbg("offset > GPU_PAGE_SIZE-offset is not supported\n");
+            ret = -EINVAL;
+            goto out;
+        }    
+
+        // If not contiguous, map individual GPU pages separately.
+        // In this case, write-combining performance can be really bad, not 
+        // sure why.
         while(size && p < mr->page_table->entries) {
             struct nvidia_p2p_page *page = mr->page_table->pages[p];
             unsigned long page_paddr = page->physical_address;
-            size_t page_size = MIN(GPU_PAGE_SIZE-offset, size);
+            size_t len = MIN(GPU_PAGE_SIZE-offset, size);
 
-            gdr_dbg("offset=%llx page_i=%d page_size=%zu vaddr+offset=%llx\n", offset, p, page_size, vaddr+offset);
+            gdr_dbg("mapping page_i=%d offset=%llx len=%zu vaddr=%lx\n", 
+                    p, offset, len, vaddr);
 
             if (offset > GPU_PAGE_SIZE) {
+                gdr_dbg("skipping a whole GPU page\n");
                 ++p;
                 offset -= GPU_PAGE_SIZE;
                 vaddr += GPU_PAGE_SIZE;
                 continue;
             }
+
             ret = gdrdrv_mmap_phys_mem_wcomb(vma, 
-                                             vaddr + offset, 
+                                             vaddr, 
                                              page_paddr + offset, 
-                                             page_size);
+                                             len);
             if (ret) {
                 gdr_err("mmap error\n");
                 goto out;
             }
 
-            vaddr += page_size;
-            size -= page_size;
+            vaddr += len;
+            size -= len;
             offset = 0;
             ++p;
         }
-        
-        if (size)
-            gdr_err("size is too big!!!\n");
-#endif
-    } else {
-        gdr_err("mr is not ready\n");
-        ret = -EINVAL;
     }
 
 out:
+    // TBD: don't leave partial mappings on error
+
     return ret;
 }
 
@@ -656,7 +780,8 @@ static int __init gdrdrv_init(void)
     }
     if (gdrdrv_major == 0) gdrdrv_major = result; /* dynamic */
 
-    gdr_info("device registered with major number %d\n", gdrdrv_major);
+    gdr_msg(KERN_INFO, "device registered with major number %d\n", gdrdrv_major);
+    gdr_msg(KERN_INFO, "dbg traces %s, info traces %s", dbg_enabled ? "enabled" : "disabled", info_enabled ? "enabled" : "disabled");
 
     //gdrdrv_init_devices();/* fills to zero the device array */
 
@@ -667,13 +792,14 @@ static int __init gdrdrv_init(void)
 
 static void __exit gdrdrv_cleanup(void)
 {
-    gdr_info("unregistering major=%d\n", gdrdrv_major);
+    gdr_msg(KERN_INFO, "unregistering major number %d\n", gdrdrv_major);
 
     /* cleanup_module is never called if registering failed */
     unregister_chrdev(gdrdrv_major, DEVNAME);
 }
 
 //-----------------------------------------------------------------------------
+
 module_init(gdrdrv_init);
 module_exit(gdrdrv_cleanup);
 
