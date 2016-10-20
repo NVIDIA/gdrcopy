@@ -21,7 +21,7 @@ This is just for technology demonstration purposes. In particular this
 is not an NVIDIA-supported product. 
 
 For bugs or feature requests, feel free to [file an issue]
-(https://github.com/NVIDIA/gdrcopy/issues). Not guarantee is given that the
+(https://github.com/NVIDIA/gdrcopy/issues). No guarantee is given that the
 team will follow up on any of those.
 
 
