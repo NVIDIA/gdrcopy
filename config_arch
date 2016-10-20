@@ -1,0 +1,24 @@
+#!/bin/bash
+
+dir=$(mktemp -d)
+src=$dir/arch.c
+exe=$dir/arch
+cat <<EOF >$src
+#include <stdio.h>
+#include "gdrconfig.h"
+int main(int argc, char *argv[])
+{
+#ifdef GDRAPI_X86
+  printf("X86\n");
+#elif defined(GDRAPI_POWER)
+  printf("POWER\n");
+#else
+  printf("ERROR\n");
+#endif
+  return 0;
+}
+EOF
+
+gcc -I $PWD $src -o $exe
+$exe 
+rm -rf $dir

@@ -51,50 +51,59 @@ int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)
     if (s_int & 0x1f) { // src is not aligned to 256-bits
         __m256d r0,r1,r2,r3;
         // unroll 4
-        while (n >= 4*4*sizeof(double)) {
-            r0 = _mm256_loadu_pd((double *)(s+0*4*sizeof(double)));
-            r1 = _mm256_loadu_pd((double *)(s+1*4*sizeof(double)));
-            r2 = _mm256_loadu_pd((double *)(s+2*4*sizeof(double)));
-            r3 = _mm256_loadu_pd((double *)(s+3*4*sizeof(double)));
-            _mm256_stream_pd((double *)(d+0*4*sizeof(double)), r0);
-            _mm256_stream_pd((double *)(d+1*4*sizeof(double)), r1);
-            _mm256_stream_pd((double *)(d+2*4*sizeof(double)), r2);
-            _mm256_stream_pd((double *)(d+3*4*sizeof(double)), r3);
-            s += 4*4*sizeof(double);
-            d += 4*4*sizeof(double);
-            n -= 4*4*sizeof(double);
+        while (n >= 4*sizeof(__m256d)) {
+            r0 = _mm256_loadu_pd((double *)(s+0*sizeof(__m256d)));
+            r1 = _mm256_loadu_pd((double *)(s+1*sizeof(__m256d)));
+            r2 = _mm256_loadu_pd((double *)(s+2*sizeof(__m256d)));
+            r3 = _mm256_loadu_pd((double *)(s+3*sizeof(__m256d)));
+            _mm256_stream_pd((double *)(d+0*sizeof(__m256d)), r0);
+            _mm256_stream_pd((double *)(d+1*sizeof(__m256d)), r1);
+            _mm256_stream_pd((double *)(d+2*sizeof(__m256d)), r2);
+            _mm256_stream_pd((double *)(d+3*sizeof(__m256d)), r3);
+            s += 4*sizeof(__m256d);
+            d += 4*sizeof(__m256d);
+            n -= 4*sizeof(__m256d);
         }
-        while (n >= 4*sizeof(double)) {
+        while (n >= sizeof(__m256d)) {
             r0 = _mm256_loadu_pd((double *)(s));
             _mm256_stream_pd((double *)(d), r0);
-            s += 4*sizeof(double);
-            d += 4*sizeof(double);
-            n -= 4*sizeof(double);
+            s += sizeof(__m256d);
+            d += sizeof(__m256d);
+            n -= sizeof(__m256d);
         }
     } else { // or it IS aligned
-        __m256d r0,r1,r2,r3;
-        // unroll 4
-        while (n >= 4*4*sizeof(double)) {
-            r0 = _mm256_load_pd((double *)(s+0*4*sizeof(double)));
-            r1 = _mm256_load_pd((double *)(s+1*4*sizeof(double)));
-            r2 = _mm256_load_pd((double *)(s+2*4*sizeof(double)));
-            r3 = _mm256_load_pd((double *)(s+3*4*sizeof(double)));
-            _mm256_stream_pd((double *)(d+0*4*sizeof(double)), r0);
-            _mm256_stream_pd((double *)(d+1*4*sizeof(double)), r1);
-            _mm256_stream_pd((double *)(d+2*4*sizeof(double)), r2);
-            _mm256_stream_pd((double *)(d+3*4*sizeof(double)), r3);
-            s += 4*4*sizeof(double);
-            d += 4*4*sizeof(double);
-            n -= 4*4*sizeof(double);
+        __m256d r0,r1,r2,r3,r4,r5,r6,r7;
+        // unroll 8
+        while (n >= 8*sizeof(__m256d)) {
+            r0 = _mm256_load_pd((double *)(s+0*sizeof(__m256d)));
+            r1 = _mm256_load_pd((double *)(s+1*sizeof(__m256d)));
+            r2 = _mm256_load_pd((double *)(s+2*sizeof(__m256d)));
+            r3 = _mm256_load_pd((double *)(s+3*sizeof(__m256d)));
+            r4 = _mm256_load_pd((double *)(s+4*sizeof(__m256d)));
+            r5 = _mm256_load_pd((double *)(s+5*sizeof(__m256d)));
+            r6 = _mm256_load_pd((double *)(s+6*sizeof(__m256d)));
+            r7 = _mm256_load_pd((double *)(s+7*sizeof(__m256d)));
+            _mm256_stream_pd((double *)(d+0*sizeof(__m256d)), r0);
+            _mm256_stream_pd((double *)(d+1*sizeof(__m256d)), r1);
+            _mm256_stream_pd((double *)(d+2*sizeof(__m256d)), r2);
+            _mm256_stream_pd((double *)(d+3*sizeof(__m256d)), r3);
+            _mm256_stream_pd((double *)(d+4*sizeof(__m256d)), r4);
+            _mm256_stream_pd((double *)(d+5*sizeof(__m256d)), r5);
+            _mm256_stream_pd((double *)(d+6*sizeof(__m256d)), r6);
+            _mm256_stream_pd((double *)(d+7*sizeof(__m256d)), r7);
+            s += 8*sizeof(__m256d);
+            d += 8*sizeof(__m256d);
+            n -= 8*sizeof(__m256d);
         }
-        while (n >= 4*sizeof(double)) {
+        while (n >= sizeof(__m256d)) {
             r0 = _mm256_load_pd((double *)(s));
             _mm256_stream_pd((double *)(d), r0);
-            s += 4*sizeof(double);
-            d += 4*sizeof(double);
-            n -= 4*sizeof(double);
+            s += sizeof(__m256d);
+            d += sizeof(__m256d);
+            n -= sizeof(__m256d);
         }            
     }
+    _mm_sfence();
     if (n)
         memcpy(d, s, n);
 #else
@@ -125,48 +134,48 @@ int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)
     if (s_int & 0x1f) { // src is not aligned to 256-bits
         __m256d r0,r1,r2,r3;
         // unroll 4
-        while (n >= 4*4*sizeof(double)) {
-            r0 = _mm256_loadu_pd((double *)(s+0*4*sizeof(double)));
-            r1 = _mm256_loadu_pd((double *)(s+1*4*sizeof(double)));
-            r2 = _mm256_loadu_pd((double *)(s+2*4*sizeof(double)));
-            r3 = _mm256_loadu_pd((double *)(s+3*4*sizeof(double)));
-            _mm256_store_pd((double *)(d+0*4*sizeof(double)), r0);
-            _mm256_store_pd((double *)(d+1*4*sizeof(double)), r1);
-            _mm256_store_pd((double *)(d+2*4*sizeof(double)), r2);
-            _mm256_store_pd((double *)(d+3*4*sizeof(double)), r3);
-            s += 4*4*sizeof(double);
-            d += 4*4*sizeof(double);
-            n -= 4*4*sizeof(double);
+        while (n >= 4*sizeof(__m256d)) {
+            r0 = _mm256_loadu_pd((double *)(s+0*sizeof(__m256d)));
+            r1 = _mm256_loadu_pd((double *)(s+1*sizeof(__m256d)));
+            r2 = _mm256_loadu_pd((double *)(s+2*sizeof(__m256d)));
+            r3 = _mm256_loadu_pd((double *)(s+3*sizeof(__m256d)));
+            _mm256_store_pd((double *)(d+0*sizeof(__m256d)), r0);
+            _mm256_store_pd((double *)(d+1*sizeof(__m256d)), r1);
+            _mm256_store_pd((double *)(d+2*sizeof(__m256d)), r2);
+            _mm256_store_pd((double *)(d+3*sizeof(__m256d)), r3);
+            s += 4*sizeof(__m256d);
+            d += 4*sizeof(__m256d);
+            n -= 4*sizeof(__m256d);
         }
-        while (n >= 4*sizeof(double)) {
+        while (n >= sizeof(__m256d)) {
             r0 = _mm256_loadu_pd((double *)(s));
             _mm256_store_pd((double *)(d), r0);
-            s += 4*sizeof(double);
-            d += 4*sizeof(double);
-            n -= 4*sizeof(double);
+            s += sizeof(__m256d);
+            d += sizeof(__m256d);
+            n -= sizeof(__m256d);
         }
     } else { // or it IS aligned
         __m256d r0,r1,r2,r3;
         // unroll 4
-        while (n >= 4*4*sizeof(double)) {
-            r0 = _mm256_load_pd((double *)(s+0*4*sizeof(double)));
-            r1 = _mm256_load_pd((double *)(s+1*4*sizeof(double)));
-            r2 = _mm256_load_pd((double *)(s+2*4*sizeof(double)));
-            r3 = _mm256_load_pd((double *)(s+3*4*sizeof(double)));
-            _mm256_store_pd((double *)(d+0*4*sizeof(double)), r0);
-            _mm256_store_pd((double *)(d+1*4*sizeof(double)), r1);
-            _mm256_store_pd((double *)(d+2*4*sizeof(double)), r2);
-            _mm256_store_pd((double *)(d+3*4*sizeof(double)), r3);
-            s += 4*4*sizeof(double);
-            d += 4*4*sizeof(double);
-            n -= 4*4*sizeof(double);
+        while (n >= 4*sizeof(__m256d)) {
+            r0 = _mm256_load_pd((double *)(s+0*sizeof(__m256d)));
+            r1 = _mm256_load_pd((double *)(s+1*sizeof(__m256d)));
+            r2 = _mm256_load_pd((double *)(s+2*sizeof(__m256d)));
+            r3 = _mm256_load_pd((double *)(s+3*sizeof(__m256d)));
+            _mm256_store_pd((double *)(d+0*sizeof(__m256d)), r0);
+            _mm256_store_pd((double *)(d+1*sizeof(__m256d)), r1);
+            _mm256_store_pd((double *)(d+2*sizeof(__m256d)), r2);
+            _mm256_store_pd((double *)(d+3*sizeof(__m256d)), r3);
+            s += 4*sizeof(__m256d);
+            d += 4*sizeof(__m256d);
+            n -= 4*sizeof(__m256d);
         }
-        while (n >= 4*sizeof(double)) {
+        while (n >= sizeof(__m256d)) {
             r0 = _mm256_load_pd((double *)(s));
             _mm256_store_pd((double *)(d), r0);
-            s += 4*sizeof(double);
-            d += 4*sizeof(double);
-            n -= 4*sizeof(double);
+            s += sizeof(__m256d);
+            d += sizeof(__m256d);
+            n -= sizeof(__m256d);
         }            
     }
     if (n)
@@ -176,6 +185,8 @@ int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)
 #endif
     return ret;
 }
+
+// add variant for _mm_stream_load_si256() / VMOVNTDQA
 
 /*
  * Local variables:

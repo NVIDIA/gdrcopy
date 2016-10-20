@@ -18,10 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-ifeq ($(src),)
-	src := $$PWD
-endif
-NVIDIA_SRC_DIR := $(shell $(src)/path_to_p2p_header.sh)
+NVIDIA_SRC_DIR ?= $(shell (find /usr/src/nvidia-* -name "nv-p2p.h"|xargs dirname))
 
 ifneq ($(KERNELRELEASE),)
 
@@ -30,27 +27,30 @@ kver_major:=$(shell echo $(KERNELRELEASE) | awk -F '.' '// { print $$2;}' )
 obj-m := nv-p2p-dummy.o
 obj-m += gdrdrv.o
 
-EXTRA_CFLAGS += -I $(NVIDIA_SRC_DIR)
+ccflags-y += -I$(NVIDIA_SRC_DIR)
 
 else
 
-KDIR ?= /lib/modules/$(shell uname -r)/build
+KVER ?= $(shell uname -r)
+MODULES_DIR := /lib/modules/$(KVER)
+KDIR := $(MODULES_DIR)/build
+MODULE_DESTDIR := $(MODULES_DIR)/extra/
+DEPMOD := /sbin/depmod
+
 REL := $(subst ., , $(subst -, , $(shell uname -r)))
 REL_MAJOR  := $(word 1,$(REL))
 REL_MEDIUM := $(word 2,$(REL))
 REL_MINOR  := $(word 3,$(REL))
 
-all: nvidia_src_dir default
+all: module
 
-nvidia_src_dir:
-	@ [ -e $(src)/path_to_p2p_header.sh ] || { echo "can't exec path_to_p2p_header.sh"; exit 1; }; \
-	echo "src dir: $(NVIDIA_SRC_DIR)"
-
-default:
-	@ $(MAKE) -C $(KDIR) M=$$PWD  modules
+module:
+	@ $(MAKE) -C $(KDIR) $(MAKE_PARAMS) M=$(PWD) modules
 
 install:
-	$(MAKE) -C $(KDIR) M=$$PWD  modules_install
+	[ -d $(DESTDIR)/$(MODULE_DESTDIR) ] || mkdir -p $(DESTDIR)/$(MODULE_DESTDIR)
+	cp $(PWD)/gdrdrv.ko $(DESTDIR)/$(MODULE_DESTDIR)
+	if [ ! -n "$(DESTDIR)" ]; then $(DEPMOD) -r -ae $(KVER); fi
 
 help:
 	$(MAKE) -C $(KDIR) M=$$PWD help

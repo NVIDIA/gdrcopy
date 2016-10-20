@@ -57,11 +57,13 @@ static void compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
 {
     int diff = 0;
     ASSERT_EQ(size % 4, 0U);
-    for(unsigned  w = 0; w<size/sizeof(uint32_t); ++w)
-        if (ref_buf[w] != buf[w]) {
-            printf("[%d/%d] %08x != %08x\n", w, w*sizeof(uint32_t), buf[w], ref_buf[w]);
-            ++diff;
-        }
+    for(unsigned  w = 0; w<size/sizeof(uint32_t); ++w) {
+		if (ref_buf[w] != buf[w]) { 
+			if (diff < 10)
+				printf("[word %d] %08x != %08x\n", w, buf[w], ref_buf[w]);
+			++diff;
+		}
+    }
     //OUT << "diff(s): " << diff << endl;
     //CHECK_EQ(diff, 0);
     if (diff) {
