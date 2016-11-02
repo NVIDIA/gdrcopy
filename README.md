@@ -126,7 +126,7 @@ closing gdrdrv
 ## NUMA effects
 
 Depending on the platform architecture, like where the GPU are placed in
-the PCIe topology, performance may suffer is the processor which is driving
+the PCIe topology, performance may suffer if the processor which is driving
 the copy is not the one which is hosting the GPU, for example in a
 multi-socket server.
 
