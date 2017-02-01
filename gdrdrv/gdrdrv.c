@@ -674,7 +674,16 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         ret = -EINVAL;
         goto out;
     }    
+    if (size + offset > GPU_PAGE_SIZE * mr->page_table->entries) {
+        gdr_dbg("size %zu too big for original\n", size);
+        ret = -EINVAL;
+        goto out;
+    }
+    if (size % PAGE_SIZE != 0) {
+        gdr_dbg("size is not multiple of PAGE_SIZE\n");
+    }
 
+    // check for physically contiguous IO range
     p = 0;
     vaddr = vma->vm_start;
     prev_page_paddr = mr->page_table->pages[0]->physical_address;
@@ -692,12 +701,12 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
 
     if (phys_contiguous) {
         // offset not supported
-        size_t len = GPU_PAGE_SIZE * mr->page_table->entries;
+        size_t len = MIN(size, GPU_PAGE_SIZE * mr->page_table->entries);
         unsigned long page0_paddr = mr->page_table->pages[0]->physical_address;
         gdr_dbg("offset=%llx len=%zu vaddr+offset=%llx paddr+offset=%llx\n", 
                 offset, len, vaddr+offset, page0_paddr + offset);
         ret = gdrdrv_mmap_phys_mem_wcomb(vma, 
-                                         vaddr + offset, 
+                                         vaddr, 
                                          page0_paddr + offset, 
                                          len);
         if (ret) {
