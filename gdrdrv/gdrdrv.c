@@ -675,7 +675,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         goto out;
     }    
     if (size + offset > GPU_PAGE_SIZE * mr->page_table->entries) {
-        gdr_dbg("size %d too big for original\n");
+        gdr_dbg("size %zu too big for original\n", size);
         ret = -EINVAL;
         goto out;
     }
