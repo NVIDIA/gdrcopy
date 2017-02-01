@@ -72,7 +72,7 @@ main(int argc, char *argv[])
             dev_id = strtol(optarg, NULL, 0);
             break;
         case 'h':
-            printf("syntax: %s -s <buf size> -c <copy size> -o <copy offset> -d <gpu dev id> -h\n");
+            printf("syntax: %s -s <buf size> -c <copy size> -o <copy offset> -d <gpu dev id> -h\n", argv[0]);
             exit(EXIT_FAILURE);
             break;
         default:
