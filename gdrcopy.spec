@@ -104,6 +104,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{_prefix}/bin/validate
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
+%{_libdir}/libgdrapi.so
 /etc/init.d/gdrcopy
 
 
