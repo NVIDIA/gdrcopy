@@ -16,7 +16,7 @@ Group:          System Environment/Libraries
 License:        MIT
 URL:            https://github.com/NVIDIA/gdrcopy
 Source0:        %{name}-%{version}.tar.gz
-BuildRequires:  gcc kernel-headers
+BuildRequires:  gcc
 Requires:       %{name}-%{kmod} 
 
 # to get rid of libcuda/libcudart
@@ -29,10 +29,12 @@ AutoReqProv:    no
 Summary: The development files
 Group: System Environment/Libraries
 Requires: %{name} = %{version}-%{release}
+AutoReqProv:    no
 
 %package %{kmod}
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
+BuildRequires:  gcc kernel-headers
 #Requires: %{name} = %{version}-%{release}
 
 %description

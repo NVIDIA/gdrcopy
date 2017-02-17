@@ -31,10 +31,10 @@
 #define GDR_API_VERSION          ((GDR_API_MAJOR_VERSION << 16) | GDR_API_MINOR_VERSION)
 
 
-#define GPU_PAGE_SHIFT   16
-#define GPU_PAGE_SIZE    (1UL << GPU_PAGE_SHIFT)
-#define GPU_PAGE_OFFSET  (GPU_PAGE_SIZE-1)
-#define GPU_PAGE_MASK    (~GPU_PAGE_OFFSET)
+#define GDR_GPU_PAGE_SHIFT   16
+#define GDR_GPU_PAGE_SIZE    (1UL << GDR_GPU_PAGE_SHIFT)
+#define GDR_GPU_PAGE_OFFSET  (GDR_GPU_PAGE_SIZE-1)
+#define GDR_GPU_PAGE_MASK    (~GDR_GPU_PAGE_OFFSET)
 
 /*
  * GDRCopy, a low-latency GPU memory copy library (and a kernel-mode

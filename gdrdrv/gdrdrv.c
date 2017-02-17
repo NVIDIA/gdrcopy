@@ -134,10 +134,12 @@ MODULE_PARM_DESC(info_enabled, "enable info tracing");
 
 //-----------------------------------------------------------------------------
 
-#define GPU_PAGE_SHIFT   16
-#define GPU_PAGE_SIZE    ((u64)1 << GPU_PAGE_SHIFT)
-#define GPU_PAGE_OFFSET  (GPU_PAGE_SIZE-1)
-#define GPU_PAGE_MASK    (~GPU_PAGE_OFFSET)
+#ifndef GDR_GPU_PAGE_SHIFT
+#define GDR_GPU_PAGE_SHIFT   16
+#define GDR_GPU_PAGE_SIZE    (1UL << GDR_GPU_PAGE_SHIFT)
+#define GDR_GPU_PAGE_OFFSET  (GDR_GPU_PAGE_SIZE-1)
+#define GDR_GPU_PAGE_MASK    (~GDR_GPU_PAGE_OFFSET)
+#endif
 
 #ifndef MAX
 #define MAX(a,b) ((a) > (b) ? a : b)
@@ -330,13 +332,13 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     memset(mr, 0, sizeof(*mr));
 
     // do proper alignment, as required by RM
-    page_virt_start  = params.addr & GPU_PAGE_MASK;
-    //page_virt_end    = (params.addr + params.size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    page_virt_start  = params.addr & GDR_GPU_PAGE_MASK;
+    //page_virt_end    = (params.addr + params.size + GDR_GPU_PAGE_SIZE - 1) & GDR_GPU_PAGE_MASK;
     page_virt_end    = params.addr + params.size - 1;
     rounded_size     = page_virt_end - page_virt_start + 1;
-    //rounded_size     = (params.addr & GPU_PAGE_OFFSET) + params.size;
+    //rounded_size     = (params.addr & GDR_GPU_PAGE_OFFSET) + params.size;
 
-    mr->offset       = params.addr & GPU_PAGE_OFFSET;
+    mr->offset       = params.addr & GDR_GPU_PAGE_OFFSET;
     mr->length       = params.size;
     mr->p2p_token    = params.p2p_token;
     mr->va_space     = params.va_space;
@@ -631,7 +633,7 @@ out:
 }
 
 //-----------------------------------------------------------------------------
-// BUG: should obtain GPU_PAGE_SIZE from page_table!!!
+// BUG: should obtain GDR_GPU_PAGE_SIZE from page_table!!!
 
 static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
 {
@@ -682,7 +684,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     for(p = 1; p < mr->page_table->entries; ++p) {
         struct nvidia_p2p_page *page = mr->page_table->pages[p];
         unsigned long page_paddr = page->physical_address;
-        if (prev_page_paddr + GPU_PAGE_SIZE != page_paddr) {
+        if (prev_page_paddr + GDR_GPU_PAGE_SIZE != page_paddr) {
             gdr_dbg("page table entry %d is non-contiguous with previous\n", p);
             phys_contiguous = 0;
             break;
@@ -692,7 +694,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
 
     if (phys_contiguous) {
         // offset not supported
-        size_t len = GPU_PAGE_SIZE * mr->page_table->entries;
+        size_t len = GDR_GPU_PAGE_SIZE * mr->page_table->entries;
         unsigned long page0_paddr = mr->page_table->pages[0]->physical_address;
         gdr_dbg("offset=%llx len=%zu vaddr+offset=%llx paddr+offset=%llx\n", 
                 offset, len, vaddr+offset, page0_paddr + offset);
@@ -705,8 +707,8 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
             goto out;
         }
     } else {
-        if (offset > GPU_PAGE_SIZE) {
-            gdr_dbg("offset > GPU_PAGE_SIZE-offset is not supported\n");
+        if (offset > GDR_GPU_PAGE_SIZE) {
+            gdr_dbg("offset > GDR_GPU_PAGE_SIZE-offset is not supported\n");
             ret = -EINVAL;
             goto out;
         }    
@@ -717,16 +719,16 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         while(size && p < mr->page_table->entries) {
             struct nvidia_p2p_page *page = mr->page_table->pages[p];
             unsigned long page_paddr = page->physical_address;
-            size_t len = MIN(GPU_PAGE_SIZE-offset, size);
+            size_t len = MIN(GDR_GPU_PAGE_SIZE-offset, size);
 
             gdr_dbg("mapping page_i=%d offset=%llx len=%zu vaddr=%lx\n", 
                     p, offset, len, vaddr);
 
-            if (offset > GPU_PAGE_SIZE) {
+            if (offset > GDR_GPU_PAGE_SIZE) {
                 gdr_dbg("skipping a whole GPU page\n");
                 ++p;
-                offset -= GPU_PAGE_SIZE;
-                vaddr += GPU_PAGE_SIZE;
+                offset -= GDR_GPU_PAGE_SIZE;
+                vaddr += GDR_GPU_PAGE_SIZE;
                 continue;
             }
 

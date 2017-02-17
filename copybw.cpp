@@ -94,7 +94,7 @@ main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    size_t size = (_size + GDR_GPU_PAGE_SIZE - 1) & GDR_GPU_PAGE_MASK;
 
     int n_devices = 0;
     ASSERTRT(cudaGetDeviceCount(&n_devices));

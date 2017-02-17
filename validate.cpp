@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
     ASSERTRT(cudaMalloc(&dummy, 0));
 
     const size_t _size = 256*1024+16; //32*1024+8;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = (_size + GDR_GPU_PAGE_SIZE - 1) & GDR_GPU_PAGE_MASK;
 
     printf("buffer size: %zu\n", size);
     CUdeviceptr d_A;
