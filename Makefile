@@ -37,7 +37,7 @@ endif
 
 LIBOBJS := $(LIBSRCS:.c=.o)
 
-SRCS := validate.cpp copybw.cpp
+SRCS := basic.cpp validate.cpp copybw.cpp
 EXES := $(SRCS:.cpp=)
 
 
@@ -82,7 +82,11 @@ memcpy_sse41.o: memcpy_sse41.c
 
 gdrapi.o: gdrapi.c gdrapi.h 
 validate.o: validate.cpp gdrapi.h common.hpp
+basic.o: basic.cpp gdrapi.h common.hpp
 copybw.o: copybw.cpp gdrapi.h common.hpp
+
+basic: basic.o $(LIB)
+	$(LINK.cc)  -o $@ $^ $(LIBS)
 
 validate: validate.o $(LIB)
 	$(LINK.cc)  -o $@ $^ $(LIBS)
