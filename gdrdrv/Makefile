@@ -49,7 +49,7 @@ module:
 
 install:
 	[ -d $(DESTDIR)/$(MODULE_DESTDIR) ] || mkdir -p $(DESTDIR)/$(MODULE_DESTDIR)
-	cp $(PWD)/gdrdrv.ko $(DESTDIR)/$(MODULE_DESTDIR)
+	cp gdrdrv.ko $(DESTDIR)/$(MODULE_DESTDIR)
 	if [ ! -n "$(DESTDIR)" ]; then $(DEPMOD) -r -ae $(KVER); fi
 
 help:
