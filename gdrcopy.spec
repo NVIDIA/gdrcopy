@@ -64,6 +64,7 @@ make %{?_smp_mflags} CUDA=%{CUDA} KVER=%{KVERSION} all
 install -d $RPM_BUILD_ROOT%{_prefix}/include
 #install -m 0755 gdrapi.h $RPM_BUILD_ROOT%{_prefix}/include/gdrapi.h
 install -Dpm 755 copybw $RPM_BUILD_ROOT%{_prefix}/bin/copybw
+install -Dpm 755 basic $RPM_BUILD_ROOT%{_prefix}/bin/basic
 install -Dpm 755 validate $RPM_BUILD_ROOT%{_prefix}/bin/validate
 
 # Install gdrdrv service script
@@ -101,6 +102,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %files
 %{_prefix}/bin/copybw
+%{_prefix}/bin/basic
 %{_prefix}/bin/validate
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
@@ -120,6 +122,8 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Mon Feb 13 2017 Davide Rossetti <davide.rossetti@gmail.com> 1.2-2
+- package libgdrcopy.so as well
+- add basic test
 * Thu Sep 15 2016 Davide Rossetti <davide.rossetti@gmail.com> 1.2-1
 - First version of RPM spec
-
