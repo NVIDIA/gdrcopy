@@ -19,13 +19,17 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-THIS_DIR=$(dirname $0)
+# Verify root caps
+if [[ $EUID -ne 0 ]]; then
+    echo "This script must be run as root" 1>&2
+    exit 1
+fi
 
 # remove driver
-grep gdrdrv /proc/devices >/dev/null && sudo /sbin/rmmod gdrdrv
+grep gdrdrv /proc/devices >/dev/null && /sbin/rmmod gdrdrv
 
 # insert driver
-sudo /sbin/insmod gdrdrv/gdrdrv.ko dbg_enabled=0 info_enabled=0
+/sbin/insmod gdrdrv/gdrdrv.ko dbg_enabled=0 info_enabled=0
 
 # create device inodes
 major=`fgrep gdrdrv /proc/devices | cut -b 1-4`
@@ -33,9 +37,9 @@ echo "INFO: driver major is $major"
 
 # remove old inodes just in case
 if [ -e /dev/gdrdrv ]; then
-    sudo rm /dev/gdrdrv
+    rm /dev/gdrdrv
 fi
 
 echo "INFO: creating /dev/gdrdrv inode"
-sudo mknod /dev/gdrdrv c $major 0
-sudo chmod a+w+r /dev/gdrdrv
+mknod /dev/gdrdrv c $major 0
+chmod a+w+r /dev/gdrdrv
