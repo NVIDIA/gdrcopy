@@ -44,6 +44,7 @@ int main(int argc, char *argv[])
     printf("buffer size: %zu\n", size);
     CUdeviceptr d_A;
     ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     //OUT << "device ptr: " << hex << d_A << dec << endl;
 
     unsigned int flag = 1;
