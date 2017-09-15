@@ -1,6 +1,12 @@
+#!/bin/bash
+
 set -x
 
 make clean
+
+if [ "X$CUDA" == "X" ]; then
+    echo "CUDA is not defined"; exit 1
+fi
 
 VERSION=`grep Version: *.spec | cut -d : -f 2 | sed -e 's@\s@@g'`
 RELEASE=`grep "define _release" *.spec | cut -d" " -f"4"| sed -r -e 's/}//'`
@@ -32,7 +38,7 @@ mkdir -p $tmpdir/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
 cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
 cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
 
-rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' --define 'CUDA /usr/local/cuda-7.5' --define "KVERSION $(uname -r)" --define "_release 2" $tmpdir/topdir/SPECS/gdrcopy.spec
+rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' --define "CUDA $CUDA" --define "KVERSION $(uname -r)" --define "_release 2" $tmpdir/topdir/SPECS/gdrcopy.spec
 rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
 srpm=`ls -1 $tmpdir/topdir/SRPMS/`
 echo $srpm $rpms
