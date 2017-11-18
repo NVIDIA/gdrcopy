@@ -2,26 +2,18 @@ PREFIX ?= /usr/local
 DESTLIB ?= $(PREFIX)/lib64
 CUDA ?= /usr/local/cuda
 
-# todo: autodetect target platform
-#GDRAPI_ARCH := POWER
-#GDRAPI_ARCH := X86
-#GDRAPI_ARCH := $(shell echo POWER)
 GDRAPI_ARCH := $(shell ./config_arch)
 
-#CUDA_LIB := -L /home/drossetti/work/p4/userevents/sw/dev/gpu_drv/cuda_a/drivers/gpgpu/_out/Linux_amd64_debug/bin \
-#	    -L /home/drossetti/work/p4/userevents/sw/gpgpu/bin/x86_64_Linux_debug
 CUDA_LIB := -L $(CUDA)/lib64 -L $(CUDA)/lib -L /usr/lib64/nvidia -L /usr/lib/nvidia
-#CUDA_INC := -I /home/drossetti/work/p4/userevents/sw/dev/gpu_drv/cuda_a/drivers/gpgpu/cuda/inc
 CUDA_INC += -I $(CUDA)/include
 
 CPPFLAGS := $(CUDA_INC) -I gdrdrv/ -I $(CUDA)/include -D GDRAPI_ARCH=$(GDRAPI_ARCH)
 LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64
-CFLAGS   += -O2
-CXXFLAGS += -O2
+COMMONCFLAGS := -O2
+CFLAGS   += $(COMMONCFLAGS)
+CXXFLAGS += $(COMMONCFLAGS)
 LIBS     := -lcudart -lcuda -lpthread -ldl
-#CXX := nvcc
 
-#LIB := libgdrapi.a
 LIB_MAJOR_VER:=1
 LIB_VER:=$(LIB_MAJOR_VER).2
 LIB_BASENAME:=libgdrapi.so
