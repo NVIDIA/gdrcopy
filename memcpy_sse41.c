@@ -85,7 +85,7 @@ int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes)
     } else { // or it IS aligned
         __m128i r0,r1,r2,r3,r4,r5,r6,r7;
         // unroll 8
-        while (n >= 4*sizeof(__m128i)) {
+        while (n >= 8*sizeof(__m128i)) {
             r0 = _mm_stream_load_si128 ((__m128i *)(s+0*sizeof(__m128i)));
             r1 = _mm_stream_load_si128 ((__m128i *)(s+1*sizeof(__m128i)));
             r2 = _mm_stream_load_si128 ((__m128i *)(s+2*sizeof(__m128i)));
