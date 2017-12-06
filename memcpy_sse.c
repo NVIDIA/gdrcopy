@@ -95,9 +95,13 @@ int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)
             n -= 4*sizeof(float);
         }            
     }
-    _mm_sfence();
+
     if (n)
         memcpy(d, s, n);
+
+    // fencing is needed even for plain memcpy(), due to performance
+    // being hit by delayed flushing of WC buffers
+    _mm_sfence();
 #else
 #error "this file should be compiled with -msse"
 #endif
@@ -170,8 +174,13 @@ int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)
             n -= 4*sizeof(float);
         }            
     }
+
     if (n)
         memcpy(d, s, n);
+
+    // fencing is needed because of the use of non-temporal stores
+    _mm_sfence();
+
 #else
 #error "this file should be compiled with -msse"
 #endif

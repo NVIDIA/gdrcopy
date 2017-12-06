@@ -114,9 +114,14 @@ int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes)
             n -= sizeof(__m128i);
         }
     }
-    _mm_sfence();
+
     if (n)
         memcpy(d, s, n);
+
+    // fencing is needed even for plain memcpy(), due to performance
+    // being hit by delayed flushing of WC buffers
+    _mm_sfence();
+
 #else
 #error "this file should be compiled with -msse4.1"
 #endif

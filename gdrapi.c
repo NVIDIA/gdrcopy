@@ -350,9 +350,15 @@ int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)
             memcpy_uncached_store_sse(bar_ptr, h_ptr, size);
             break;
         }
+
         // fall through
         gdr_dbgc(1, "using plain implementation of gdr_copy_to_bar\n");
         memcpy(bar_ptr, h_ptr, size);
+
+        // fencing is needed even for plain memcpy(), due to performance
+        // being hit by delayed flushing of WC buffers
+        _mm_sfence();
+
     } while (0);
 
     return 0;
@@ -381,9 +387,14 @@ int gdr_copy_from_bar(void *h_ptr, const void *bar_ptr, size_t size)
             memcpy_cached_store_sse(h_ptr, bar_ptr, size);
             break;
         }
+
         // fall through
         gdr_dbgc(1, "using plain implementation of gdr_copy_from_bar\n");
         memcpy(h_ptr, bar_ptr, size);
+
+        // note: fencing is not needed because plain stores are used
+        //_mm_sfence();
+
     } while (0);
 
     return 0;
