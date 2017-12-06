@@ -1,4 +1,4 @@
-%{!?_release: %define _release 1}
+%{!?_release: %define _release 2}
 %{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?KVERSION: %define KVERSION %(uname -r)}
 %global krelver %(echo -n %{KVERSION} | sed -e 's/-/_/g')
@@ -9,7 +9,7 @@
 
 
 Name:           gdrcopy
-Version:        1.2
+Version:        1.3
 Release:        %{_release}%{?dist}
 Summary:        GDRcopy library and companion kernel-mode driver    
 Group:          System Environment/Libraries
