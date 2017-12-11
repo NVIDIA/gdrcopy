@@ -32,6 +32,8 @@
 // implementation of copy from BAR using MOVNTDQA 
 // suggested by Nicholas Wilt <nwilt@amazon.com>
 
+// src is WC MMIO of GPU BAR
+// dest is host memory
 int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes)
 {
     int ret = 0;
@@ -118,8 +120,8 @@ int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes)
     if (n)
         memcpy(d, s, n);
 
-    // fencing is needed even for plain memcpy(), due to performance
-    // being hit by delayed flushing of WC buffers
+    // fencing because of NT stores
+    // potential optimization: issue only when NT stores are actually emitted
     _mm_sfence();
 
 #else

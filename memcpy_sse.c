@@ -178,7 +178,8 @@ int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)
     if (n)
         memcpy(d, s, n);
 
-    // fencing is needed because of the use of non-temporal stores
+    // fencing because of NT stores
+    // potential optimization: issue only when NT stores are actually emitted
     _mm_sfence();
 
 #else
