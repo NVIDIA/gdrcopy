@@ -392,7 +392,8 @@ int gdr_copy_from_bar(void *h_ptr, const void *bar_ptr, size_t size)
         gdr_dbgc(1, "using plain implementation of gdr_copy_from_bar\n");
         memcpy(h_ptr, bar_ptr, size);
 
-        // note: fencing is not needed because plain stores are used
+        // note: fencing is not needed assuming the memcpy() implementation
+        // has all the required write fences
         //_mm_sfence();
 
     } while (0);
