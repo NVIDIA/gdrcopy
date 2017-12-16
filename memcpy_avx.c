@@ -103,9 +103,14 @@ int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)
             n -= sizeof(__m256d);
         }            
     }
-    _mm_sfence();
+
     if (n)
         memcpy(d, s, n);
+
+    // fencing is needed even for plain memcpy(), due to performance
+    // being hit by delayed flushing of WC buffers
+    _mm_sfence();
+
 #else
 #error "this file should be compiled with -mavx"
 #endif
@@ -180,6 +185,10 @@ int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)
     }
     if (n)
         memcpy(d, s, n);
+
+    // fencing is needed because of the use of non-temporal stores
+    _mm_sfence();
+
 #else
 #error "this file should be compiled with -mavx"
 #endif
