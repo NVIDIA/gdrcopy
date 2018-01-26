@@ -108,12 +108,14 @@ int main(int argc, char *argv[])
         compare_buf(init_buf, copy_buf, size - extra_off);
 
         extra_off = 11;
-        printf("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
+        printf("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
         gdr_copy_to_bar((char*)buf_ptr + extra_off, init_buf, size);
         gdr_copy_from_bar(copy_buf, (char*)buf_ptr + extra_off, size);
         compare_buf(init_buf, copy_buf, size);
 
+        printf("unampping\n");
         ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+        printf("unpinning\n");
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     } END_CHECK;
     ASSERT_EQ(gdr_close(g), 0);
