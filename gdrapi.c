@@ -287,21 +287,17 @@ extern int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes);
-
 static inline void wc_store_fence(void) { _mm_sfence(); }
+#endif // GDRAPI_X86
 
-#elif defined(GDRAPI_POWER)
-
-static inline void wc_store_fence(void) { asm volatile("sync") ; }
-
-#else // GDRAPI_X86
+#if defined(GDRAPI_POWER)
 static int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
 static int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
 static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
-static inline void wc_store_fence(void) { }
-#endif // GDRAPI_X86
+static inline void wc_store_fence(void) { asm volatile("sync") ; }
+#endif
 
 static int first_time = 1;
 static int has_sse = 0;
