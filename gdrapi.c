@@ -287,12 +287,20 @@ extern int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes);
+
+static inline void wc_store_fence(void) { _mm_sfence(); }
+
+#elif defined(GDRAPI_POWER)
+
+static inline void wc_store_fence(void) { asm volatile("sync") ; }
+
 #else // GDRAPI_X86
 static int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
 static int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
 static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
+static inline void wc_store_fence(void) { }
 #endif // GDRAPI_X86
 
 static int first_time = 1;
@@ -357,7 +365,7 @@ int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)
 
         // fencing is needed even for plain memcpy(), due to performance
         // being hit by delayed flushing of WC buffers
-        _mm_sfence();
+        wc_store_fence();
 
     } while (0);
 
@@ -393,7 +401,7 @@ int gdr_copy_from_bar(void *h_ptr, const void *bar_ptr, size_t size)
         memcpy(h_ptr, bar_ptr, size);
 
         // note: fencing is not needed because plain stores are used
-        //_mm_sfence();
+        //wc_store_fence();
 
     } while (0);
 
