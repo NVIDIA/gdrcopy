@@ -19,9 +19,9 @@ involved. That might be useful when low latencies are required.
 This is just for technology demonstration purposes. In particular this
 is not an NVIDIA-supported product. 
 
-For bugs or feature requests, feel free to [file an issue]
-(https://github.com/NVIDIA/gdrcopy/issues). No guarantee is given that the
-team will follow up on any of those. 
+For bugs or feature requests, feel free to
+[file an issue](https://github.com/NVIDIA/gdrcopy/issues). 
+No guarantee is given that the team will follow up on any of those. 
 Alternatively, see [Bug filing](#bug-filing) section below for the official bug filing procedure.
 
 The library relies on a small kernel-mode driver (gdrdrv) which has
