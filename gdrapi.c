@@ -39,6 +39,7 @@
 #include <sys/ioctl.h>
 #include <time.h>
 #include <asm/types.h>
+#include <assert.h>
 
 #include "gdrapi.h"
 #include "gdrdrv.h"
@@ -335,6 +336,40 @@ static void gdr_init_cpu_flags()
 
 // note: more than one implementation may be compiled in
 
+static void unroll8_memcpy(void *bar_ptr, const void *h_ptr, size_t size)
+{
+    const uint64_t *r = (const uint64_t *)h_ptr;
+    uint64_t *w = (uint64_t *)bar_ptr;
+    size_t nw = size / sizeof(*r);
+    assert(size % sizeof(*r) == 0);
+
+    while (nw) {
+        if (0 == (nw & 3)) {
+            uint64_t r0 = r[0];
+            uint64_t r1 = r[1];
+            uint64_t r2 = r[2];
+            uint64_t r3 = r[3];
+            w[0] = r0;
+            w[1] = r1;
+            w[2] = r2;
+            w[3] = r3;
+            r += 4;
+            w += 4;
+            nw -= 4;
+        } else if (0 == (nw & 1)) {
+            uint64_t r0 = r[0];
+            uint64_t r1 = r[1];
+            w[0] = r0;
+            w[1] = r1;
+            r += 2;
+            w += 2;
+            nw -= 2;
+        } else {
+            *w++ = *w++;
+            --nw;
+        }
+    }
+}
 
 int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)
 {
@@ -354,10 +389,14 @@ int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)
             memcpy_uncached_store_sse(bar_ptr, h_ptr, size);
             break;
         }
-
         // fall through
-        gdr_dbgc(1, "using plain implementation of gdr_copy_to_bar\n");
-        memcpy(bar_ptr, h_ptr, size);
+        if (size % 8) {
+            gdr_dbgc(1, "using plain memcpy for gdr_copy_to_bar\n");
+            memcpy(bar_ptr, h_ptr, size);
+        } else {
+            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_bar\n");
+            unroll8_memcpy(bar_ptr, h_ptr, size);
+        }
 
         // fencing is needed even for plain memcpy(), due to performance
         // being hit by delayed flushing of WC buffers
@@ -393,7 +432,7 @@ int gdr_copy_from_bar(void *h_ptr, const void *bar_ptr, size_t size)
         }
 
         // fall through
-        gdr_dbgc(1, "using plain implementation of gdr_copy_from_bar\n");
+        gdr_dbgc(1, "using plain memcpy in gdr_copy_from_bar\n");
         memcpy(h_ptr, bar_ptr, size);
 
         // note: fencing is not needed because plain stores are used
