@@ -393,8 +393,8 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     {
         int i;
         gdr_dbg("page table entries: %d\n", page_table->entries);
-        for (i=0; i<page_table->entries; ++i) {
-            gdr_dbg("page[%d]=0x%016llx\n", i, page_table->pages[i]->physical_address);
+        for (i=0; i<MIN(20,page_table->entries); ++i) {
+            gdr_dbg("page[%d]=0x%016llx%s\n", i, page_table->pages[i]->physical_address, (i>19)?"and counting":"");
         }
     }
 
