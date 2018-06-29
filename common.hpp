@@ -28,7 +28,7 @@
             if (!(x))                                                   \
                 {                                                       \
                     fprintf(stdout, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
-                    /*exit(EXIT_FAILURE);*/                                 \
+                    exit(EXIT_FAILURE);                                 \
                 }                                                       \
         } while (0)
 
