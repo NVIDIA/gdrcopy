@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
     uint32_t *copy_buf = new uint32_t[size];
 
     init_hbuf_walking_bit(init_buf, size);
-    memset(copy_buf, 0, sizeof(*copy_buf) * sizeof(uint32_t));
+    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -86,19 +86,21 @@ int main(int argc, char *argv[])
         ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
         //ASSERTDRV(cuCtxSynchronize());
         compare_buf(init_buf, copy_buf, size);
+        memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
         printf("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
         gdr_copy_to_bar(buf_ptr, init_buf, size);
         ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
         //ASSERTDRV(cuCtxSynchronize());
         compare_buf(init_buf, copy_buf, size);
-        fflush(stdout);
+        memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
         printf("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
         gdr_copy_to_bar(buf_ptr, init_buf, size);
         gdr_copy_from_bar(copy_buf, buf_ptr, size);
         //ASSERTDRV(cuCtxSynchronize());
         compare_buf(init_buf, copy_buf, size);
+        memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
         int extra_dwords = 5;
         int extra_off = extra_dwords * sizeof(uint32_t);
@@ -106,6 +108,7 @@ int main(int argc, char *argv[])
         gdr_copy_to_bar(buf_ptr + extra_dwords, init_buf, size - extra_off);
         gdr_copy_from_bar(copy_buf, buf_ptr + extra_dwords, size - extra_off);
         compare_buf(init_buf, copy_buf, size - extra_off);
+        memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
         extra_off = 11;
         printf("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
