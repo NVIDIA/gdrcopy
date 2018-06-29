@@ -86,6 +86,9 @@ validate: validate.o $(LIB)
 copybw: copybw.o $(LIB)
 	$(LINK.cc)  -o $@ $^ $(LIBS)
 
+attr: attr.o $(LIB)
+	$(LINK.cc)  -o $@ $^ $(LIBS)
+
 driver:
 	cd gdrdrv; \
 	$(MAKE) $(MAKE_PARAMS)
