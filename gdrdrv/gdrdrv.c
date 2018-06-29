@@ -591,6 +591,10 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
     gdr_dbg("mmaping phys mem addr=0x%lx size=%zu at user virt addr=0x%lx\n", 
              paddr, size, vaddr);
 
+    if (!size) {
+        gdr_dbg("size == 0\n");
+        goto out;
+    }
     // in case the original user address was not properly host page-aligned
     if (0 != (paddr & (PAGE_SIZE-1))) {
         gdr_err("paddr=%lx, original mr address was not host page-aligned\n", paddr);
@@ -602,10 +606,7 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
         ret = -EINVAL;
         goto out;
     }
-
     pfn = paddr >> PAGE_SHIFT;
-    gdr_dbg("pfn=0x%lx\n", pfn);
-
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
     vma->vm_pgoff = pfn;
     vma->vm_flags |= VM_RESERVED;
@@ -617,8 +618,8 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
     }
 #else
     vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
-    gdr_dbg("calling io_remap_pfn_range() vma=%p vaddr=%lx pfn=%lx size=%zu\n", 
-            vma, vaddr, pfn, size);
+    //gdr_dbg("calling io_remap_pfn_range() pfn=%lx vma=%p vaddr=%lx pfn=%lx size=%zu\n", 
+    //        pfn, vma, vaddr, pfn, size);
     if (io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
         gdr_err("error in remap_pfn_range()\n");
         ret = -EAGAIN;
@@ -642,7 +643,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     gdr_mr_t *mr = NULL;
     u64 offset;
     int p = 0;
-    unsigned long vaddr, prev_page_paddr;
+    unsigned long vaddr;
     int phys_contiguous = 1;
 
     gdr_info("mmap start=0x%lx size=%zu off=0x%lx\n", vma->vm_start, size, vma->vm_pgoff);
@@ -683,80 +684,61 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         gdr_dbg("size is not multiple of PAGE_SIZE\n");
     }
 
-    // check for physically contiguous IO range
+    // check for physically contiguous IO ranges
     p = 0;
     vaddr = vma->vm_start;
-    prev_page_paddr = mr->page_table->pages[0]->physical_address;
-    phys_contiguous = 1;
-    for(p = 1; p < mr->page_table->entries; ++p) {
-        struct nvidia_p2p_page *page = mr->page_table->pages[p];
-        unsigned long page_paddr = page->physical_address;
-        if (prev_page_paddr + GPU_PAGE_SIZE != page_paddr) {
-            gdr_dbg("page table entry %d is non-contiguous with previous\n", p);
-            phys_contiguous = 0;
-            break;
-        }
-        prev_page_paddr = page_paddr;
-    }
+    do {
+        unsigned long paddr = mr->page_table->pages[p]->physical_address;
+        unsigned nentries = 1;
+        size_t len;
+        gdr_dbg("range start with p=%d vaddr=%lx page_paddr=%lx\n", p, vaddr, paddr);
 
-    if (phys_contiguous) {
-        // offset not supported
-        size_t len = MIN(size, GPU_PAGE_SIZE * mr->page_table->entries);
-        unsigned long page0_paddr = mr->page_table->pages[0]->physical_address;
-        gdr_dbg("offset=%llx len=%zu vaddr+offset=%llx paddr+offset=%llx\n", 
-                offset, len, vaddr+offset, page0_paddr + offset);
-        ret = gdrdrv_mmap_phys_mem_wcomb(vma, 
-                                         vaddr, 
-                                         page0_paddr + offset, 
+        ++p;
+        // check p-1 and p for continuity
+        {
+            unsigned long prev_page_paddr = mr->page_table->pages[p-1]->physical_address;
+            phys_contiguous = 1;
+            for(; p < mr->page_table->entries; ++p) {
+                struct nvidia_p2p_page *page = mr->page_table->pages[p];
+                unsigned long cur_page_paddr = page->physical_address;
+                //gdr_dbg("p=%d prev_page_paddr=%lx cur_page_paddr=%lx\n",
+                //        p, prev_page_paddr, cur_page_paddr);
+                if (prev_page_paddr + GPU_PAGE_SIZE != cur_page_paddr) {
+                    gdr_dbg("non-contig p=%d prev_page_paddr=%lx cur_page_paddr=%lx\n",
+                            p, prev_page_paddr, cur_page_paddr);
+                    phys_contiguous = 0;
+                    break;
+                }
+                prev_page_paddr = cur_page_paddr;
+                ++nentries;
+            }
+        }
+        // offset not supported, see check above
+        len = MIN(size, GPU_PAGE_SIZE * nentries);
+        // phys range is [paddr, paddr+len-1]
+        gdr_dbg("mapping p=%u entries=%d offset=%llx len=%zu vaddr=%lx paddr=%lx\n", 
+                p, nentries, offset, len, vaddr, paddr);
+#if 1
+        ret = gdrdrv_mmap_phys_mem_wcomb(vma,
+                                         vaddr,
+                                         paddr,
                                          len);
         if (ret) {
-            gdr_err("mmap error\n");
+            gdr_err("error %d in gdrdrv_mmap_phys_mem_wcomb\n", ret);
             goto out;
         }
-    } else {
-        if (offset > GPU_PAGE_SIZE) {
-            gdr_dbg("offset > GPU_PAGE_SIZE-offset is not supported\n");
-            ret = -EINVAL;
-            goto out;
-        }    
+#endif
+        vaddr += len;
+        size -= len;
+        offset = 0;
+    } while(size && p < mr->page_table->entries);
 
-        // If not contiguous, map individual GPU pages separately.
-        // In this case, write-combining performance can be really bad, not 
-        // sure why.
-        while(size && p < mr->page_table->entries) {
-            struct nvidia_p2p_page *page = mr->page_table->pages[p];
-            unsigned long page_paddr = page->physical_address;
-            size_t len = MIN(GPU_PAGE_SIZE-offset, size);
-
-            gdr_dbg("mapping page_i=%d offset=%llx len=%zu vaddr=%lx\n", 
-                    p, offset, len, vaddr);
-
-            if (offset > GPU_PAGE_SIZE) {
-                gdr_dbg("skipping a whole GPU page\n");
-                ++p;
-                offset -= GPU_PAGE_SIZE;
-                vaddr += GPU_PAGE_SIZE;
-                continue;
-            }
-
-            ret = gdrdrv_mmap_phys_mem_wcomb(vma, 
-                                             vaddr, 
-                                             page_paddr + offset, 
-                                             len);
-            if (ret) {
-                gdr_err("mmap error\n");
-                goto out;
-            }
-
-            vaddr += len;
-            size -= len;
-            offset = 0;
-            ++p;
-        }
+    if (vaddr != vma->vm_end) {
+        gdr_err("vaddr=%lx != vm_end=%lx\n", vaddr, vma->vm_end);
+        ret = -EINVAL;
     }
-
 out:
-    // TBD: don't leave partial mappings on error
+    // error should take care of partial mappings
 
     return ret;
 }
