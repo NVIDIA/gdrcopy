@@ -52,6 +52,9 @@ lib_install:
 	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME); \
 	ln -sf $(LIB_SONAME) $(LIB_BASENAME);
 
+kernels.o: kernels.cu
+	nvcc -c -o $@ $<
+
 #static
 #$(LIB): $(LIB)($(LIBOBJS))
 #dynamic
@@ -76,6 +79,7 @@ gdrapi.o: gdrapi.c gdrapi.h
 validate.o: validate.cpp gdrapi.h common.hpp
 basic.o: basic.cpp gdrapi.h common.hpp
 copybw.o: copybw.cpp gdrapi.h common.hpp
+kill.o: kill.cpp  gdrapi.h common.hpp
 
 basic: basic.o $(LIB)
 	$(LINK.cc)  -o $@ $^ $(LIBS)
@@ -84,6 +88,9 @@ validate: validate.o $(LIB)
 	$(LINK.cc)  -o $@ $^ $(LIBS)
 
 copybw: copybw.o $(LIB)
+	$(LINK.cc)  -o $@ $^ $(LIBS)
+
+kill: kill.o kernels.o $(LIB)
 	$(LINK.cc)  -o $@ $^ $(LIBS)
 
 driver:
