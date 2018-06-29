@@ -42,8 +42,8 @@ using namespace std;
 #define MYCLOCK CLOCK_MONOTONIC
 
 // manually tuned...
-const int num_write_iters = 10000;
-const int num_read_iters  = 100;
+int num_write_iters = 10000;
+int num_read_iters  = 100;
 
 main(int argc, char *argv[])
 {
@@ -54,7 +54,7 @@ main(int argc, char *argv[])
 
     while(1) {        
         int c;
-        c = getopt(argc, argv, "s:d:o:c:h");
+        c = getopt(argc, argv, "s:d:o:c:w:r:h");
         if (c == -1)
             break;
 
@@ -71,8 +71,14 @@ main(int argc, char *argv[])
         case 'd':
             dev_id = strtol(optarg, NULL, 0);
             break;
+        case 'w':
+            num_write_iters = strtol(optarg, NULL, 0);
+            break;
+        case 'r':
+            num_read_iters = strtol(optarg, NULL, 0);
+            break;
         case 'h':
-            printf("syntax: %s -s <buf size> -c <copy size> -o <copy offset> -d <gpu dev id> -h\n", argv[0]);
+            printf("syntax: %s -s <buf size> -c <copy size> -o <copy offset> -d <gpu dev id> -w <write iters> -r <read iters> -h\n", argv[0]);
             exit(EXIT_FAILURE);
             break;
         default:
