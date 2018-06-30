@@ -644,7 +644,6 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     u64 offset;
     int p = 0;
     unsigned long vaddr;
-    int phys_contiguous = 1;
 
     gdr_info("mmap start=0x%lx size=%zu off=0x%lx\n", vma->vm_start, size, vma->vm_pgoff);
 
@@ -697,7 +696,6 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         // check p-1 and p for continuity
         {
             unsigned long prev_page_paddr = mr->page_table->pages[p-1]->physical_address;
-            phys_contiguous = 1;
             for(; p < mr->page_table->entries; ++p) {
                 struct nvidia_p2p_page *page = mr->page_table->pages[p];
                 unsigned long cur_page_paddr = page->physical_address;
@@ -706,7 +704,6 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
                 if (prev_page_paddr + GPU_PAGE_SIZE != cur_page_paddr) {
                     gdr_dbg("non-contig p=%d prev_page_paddr=%lx cur_page_paddr=%lx\n",
                             p, prev_page_paddr, cur_page_paddr);
-                    phys_contiguous = 0;
                     break;
                 }
                 prev_page_paddr = cur_page_paddr;
