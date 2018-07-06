@@ -418,8 +418,8 @@ out:
     }
 
     if (ret && mr) {
-        kfree(mr);
         memset(mr, 0, sizeof(*mr));
+        kfree(mr);
         mr = NULL;
     }
 
