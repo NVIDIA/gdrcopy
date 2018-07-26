@@ -439,21 +439,28 @@ int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)
             memcpy_uncached_store_sse(bar_ptr, h_ptr, size);
             break;
         }
-        // fall through
+#ifdef GDRAPI_POWER
+        // on POWER, compiler memcpy is not optimal for MMIO
+        // 64bit stores are not better than 32bit ones, so we prefer the latter
+        if (0 && is_aligned(size, 8) && ptr_is_aligned(bar_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
+            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_bar\n");
+            unroll8_memcpy(bar_ptr, h_ptr, size);
+            break;
+        }
         if (is_aligned(size, 4) && ptr_is_aligned(bar_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_to_bar\n");
             unroll4_memcpy(bar_ptr, h_ptr, size);
-        } else {
-            gdr_dbgc(1, "using plain memcpy for gdr_copy_to_bar\n");
-            memcpy(bar_ptr, h_ptr, size);
+            break;
         }
-
-        // fencing is needed even for plain memcpy(), due to performance
-        // being hit by delayed flushing of WC buffers
-        wc_store_fence();
-
+#endif
+        gdr_dbgc(1, "using plain memcpy for gdr_copy_to_bar\n");
+        memcpy(bar_ptr, h_ptr, size);
     } while (0);
 
+    // fencing is needed even for plain memcpy(), due to performance
+    // being hit by delayed flushing of WC buffers
+    wc_store_fence();
+    
     return 0;
 }
 
@@ -480,19 +487,27 @@ int gdr_copy_from_bar(void *h_ptr, const void *bar_ptr, size_t size)
             memcpy_cached_store_sse(h_ptr, bar_ptr, size);
             break;
         }
-
-        // fall through
+#ifdef GDRAPI_POWER
+        // on POWER, compiler memcpy is not optimal for MMIO
+        // 64bit loads have 2x the BW of 32bit ones
+        if (is_aligned(size, 8) && ptr_is_aligned(bar_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
+            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_from_bar\n");
+            unroll8_memcpy(h_ptr, bar_ptr, size);
+            break;
+        }
         if (is_aligned(size, 4) && ptr_is_aligned(bar_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_from_bar\n");
             unroll4_memcpy(h_ptr, bar_ptr, size);
-        } else {
-            gdr_dbgc(1, "using plain memcpy for gdr_copy_from_bar\n");
-            memcpy(h_ptr, bar_ptr, size);
+            break;
         }
-        // note: fencing is not needed because plain stores are used
-        //wc_store_fence();
+#endif
+        gdr_dbgc(1, "using plain memcpy for gdr_copy_from_bar\n");
+        memcpy(h_ptr, bar_ptr, size);
 
     } while (0);
+    
+    // note: fencing is not needed because plain stores are used
+    //wc_store_fence();
 
     return 0;
 }
