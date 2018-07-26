@@ -9,7 +9,7 @@
 
 
 Name:           gdrcopy
-Version:        1.3
+Version:        1.4
 Release:        %{_release}%{?dist}
 Summary:        GDRcopy library and companion kernel-mode driver    
 Group:          System Environment/Libraries
