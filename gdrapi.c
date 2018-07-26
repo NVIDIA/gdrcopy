@@ -289,6 +289,10 @@ extern int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes
 extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes);
 static inline void wc_store_fence(void) { _mm_sfence(); }
+#define PREFERS_STORE_UNROLL4 0
+#define PREFERS_STORE_UNROLL8 0
+#define PREFERS_LOAD_UNROLL4  0
+#define PREFERS_LOAD_UNROLL8  0
 #endif // GDRAPI_X86
 
 #if defined(GDRAPI_POWER)
@@ -298,6 +302,10 @@ static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes
 static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
 static inline void wc_store_fence(void) { asm volatile("sync") ; }
+#define PREFERS_STORE_UNROLL4 1
+#define PREFERS_STORE_UNROLL8 0
+#define PREFERS_LOAD_UNROLL4  0
+#define PREFERS_LOAD_UNROLL8  1
 #endif // GDRAPI_POWER
 
 static int first_time = 1;
@@ -429,6 +437,7 @@ int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)
 
     do {
         // pick the most performing implementation compatible with the platform we are running on
+        // NOTE: write fences are included in functions below
         if (has_avx) {
             gdr_dbgc(1, "using AVX implementation of gdr_copy_to_bar\n");
             memcpy_uncached_store_avx(bar_ptr, h_ptr, size);
@@ -439,27 +448,28 @@ int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)
             memcpy_uncached_store_sse(bar_ptr, h_ptr, size);
             break;
         }
-#ifdef GDRAPI_POWER
+
         // on POWER, compiler memcpy is not optimal for MMIO
         // 64bit stores are not better than 32bit ones, so we prefer the latter
-        if (0 && is_aligned(size, 8) && ptr_is_aligned(bar_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
+        // NOTE: if preferred but not aligned, a better implementation would still try to
+        // use byte sized stores to align bar_ptr and h_ptr to next word
+        if (PREFERS_STORE_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(bar_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
             gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_bar\n");
             unroll8_memcpy(bar_ptr, h_ptr, size);
             break;
-        }
-        if (is_aligned(size, 4) && ptr_is_aligned(bar_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
+        } else if (PREFERS_STORE_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(bar_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_to_bar\n");
             unroll4_memcpy(bar_ptr, h_ptr, size);
             break;
+        } else {
+            gdr_dbgc(1, "using plain memcpy for gdr_copy_to_bar\n");
+            memcpy(bar_ptr, h_ptr, size);
         }
-#endif
-        gdr_dbgc(1, "using plain memcpy for gdr_copy_to_bar\n");
-        memcpy(bar_ptr, h_ptr, size);
-    } while (0);
 
-    // fencing is needed even for plain memcpy(), due to performance
-    // being hit by delayed flushing of WC buffers
-    wc_store_fence();
+        // fencing is needed even for plain memcpy(), due to performance
+        // being hit by delayed flushing of WC buffers
+        wc_store_fence();
+    } while (0);
     
     return 0;
 }
@@ -487,28 +497,25 @@ int gdr_copy_from_bar(void *h_ptr, const void *bar_ptr, size_t size)
             memcpy_cached_store_sse(h_ptr, bar_ptr, size);
             break;
         }
-#ifdef GDRAPI_POWER
+
         // on POWER, compiler memcpy is not optimal for MMIO
         // 64bit loads have 2x the BW of 32bit ones
-        if (is_aligned(size, 8) && ptr_is_aligned(bar_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
+        if (PREFERS_LOAD_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(bar_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
             gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_from_bar\n");
             unroll8_memcpy(h_ptr, bar_ptr, size);
             break;
-        }
-        if (is_aligned(size, 4) && ptr_is_aligned(bar_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
+        } else if (PREFERS_LOAD_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(bar_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_from_bar\n");
             unroll4_memcpy(h_ptr, bar_ptr, size);
             break;
+        } else {
+            gdr_dbgc(1, "using plain memcpy for gdr_copy_from_bar\n");
+            memcpy(h_ptr, bar_ptr, size);
         }
-#endif
-        gdr_dbgc(1, "using plain memcpy for gdr_copy_from_bar\n");
-        memcpy(h_ptr, bar_ptr, size);
-
+        // note: fencing is not needed because plain stores are used
+        //wc_store_fence();
     } while (0);
     
-    // note: fencing is not needed because plain stores are used
-    //wc_store_fence();
-
     return 0;
 }
 
