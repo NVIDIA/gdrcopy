@@ -365,10 +365,60 @@ static void unroll8_memcpy(void *bar_ptr, const void *h_ptr, size_t size)
             w += 2;
             nw -= 2;
         } else {
-            *w++ = *w++;
+            w[0] = r[0];
+            ++w;
+            ++r;
             --nw;
         }
     }
+}
+
+static void unroll4_memcpy(void *bar_ptr, const void *h_ptr, size_t size)
+{
+    const uint32_t *r = (const uint32_t *)h_ptr;
+    uint32_t *w = (uint32_t *)bar_ptr;
+    size_t nw = size / sizeof(*r);
+    assert(size % sizeof(*r) == 0);
+
+    while (nw) {
+        if (0 == (nw & 3)) {
+            uint32_t r0 = r[0];
+            uint32_t r1 = r[1];
+            uint32_t r2 = r[2];
+            uint32_t r3 = r[3];
+            w[0] = r0;
+            w[1] = r1;
+            w[2] = r2;
+            w[3] = r3;
+            r += 4;
+            w += 4;
+            nw -= 4;
+        } else if (0 == (nw & 1)) {
+            uint32_t r0 = r[0];
+            uint32_t r1 = r[1];
+            w[0] = r0;
+            w[1] = r1;
+            r += 2;
+            w += 2;
+            nw -= 2;
+        } else {
+            w[0] = r[0];
+            ++w;
+            ++r;
+            --nw;
+        }
+    }
+}
+
+static inline int is_aligned(unsigned long value, unsigned powof2)
+{
+    return  ((value & (powof2-1)) == 0);
+}
+
+static inline int ptr_is_aligned(const void *ptr, unsigned powof2)
+{
+    unsigned long addr = (unsigned long)ptr;
+    return  is_aligned(addr, powof2);
 }
 
 int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)
@@ -390,12 +440,12 @@ int gdr_copy_to_bar(void *bar_ptr, const void *h_ptr, size_t size)
             break;
         }
         // fall through
-        if (size % 8) {
+        if (is_aligned(size, 4) && ptr_is_aligned(bar_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
+            gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_to_bar\n");
+            unroll4_memcpy(bar_ptr, h_ptr, size);
+        } else {
             gdr_dbgc(1, "using plain memcpy for gdr_copy_to_bar\n");
             memcpy(bar_ptr, h_ptr, size);
-        } else {
-            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_bar\n");
-            unroll8_memcpy(bar_ptr, h_ptr, size);
         }
 
         // fencing is needed even for plain memcpy(), due to performance
@@ -432,9 +482,13 @@ int gdr_copy_from_bar(void *h_ptr, const void *bar_ptr, size_t size)
         }
 
         // fall through
-        gdr_dbgc(1, "using plain memcpy in gdr_copy_from_bar\n");
-        memcpy(h_ptr, bar_ptr, size);
-
+        if (is_aligned(size, 4) && ptr_is_aligned(bar_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
+            gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_from_bar\n");
+            unroll4_memcpy(h_ptr, bar_ptr, size);
+        } else {
+            gdr_dbgc(1, "using plain memcpy for gdr_copy_from_bar\n");
+            memcpy(h_ptr, bar_ptr, size);
+        }
         // note: fencing is not needed because plain stores are used
         //wc_store_fence();
 
