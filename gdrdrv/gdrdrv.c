@@ -185,6 +185,35 @@ typedef struct gdr_info gdr_info_t;
 
 static int gdrdrv_major = 0;
 //static gdr_mr_t *mr = NULL;
+static int gdrdrv_is_p9 = -1;
+
+static inline int gdrdrv_cpu_can_cache_gpu_mappings(void)
+{
+    return !!gdrdrv_is_p9;
+}
+
+//-----------------------------------------------------------------------------
+
+static void gdrdrv_detect_gpu(void)
+{
+    if (gdrdrv_is_p9 == -1) {
+#if defined(CONFIG_PPC64) && defined(NVIDIA_P2P_RSYNC_REG_INFO_VERSION)
+        nvidia_p2p_rsync_reg_info_t *reg_info;
+        int retcode = nvidia_p2p_get_rsync_registers(&reg_info);
+        if (retcode) {
+            gdr_err("error %d getting rsync info\n", retcode);
+            gdrdrv_is_p9 = 0;
+            return;
+        }
+        BUG_ON(NULL == reg_info);
+        nvidia_p2p_put_rsync_registers(reg_info);
+        gdr_info("enabling use of CPU cached mappings\n");
+        gdrdrv_is_p9 = 1;
+#else
+        gdrdrv_is_p9 = 0;
+#endif
+    }
+}
 
 //-----------------------------------------------------------------------------
 
@@ -617,7 +646,8 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
         goto out;
     }
 #else
-    vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
+    if (!gdrdrv_cpu_can_cache_gpu_mappings())
+        vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
     //gdr_dbg("calling io_remap_pfn_range() pfn=%lx vma=%p vaddr=%lx pfn=%lx size=%zu\n", 
     //        pfn, vma, vaddr, pfn, size);
     if (io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
@@ -771,7 +801,7 @@ static int __init gdrdrv_init(void)
     gdr_msg(KERN_INFO, "device registered with major number %d\n", gdrdrv_major);
     gdr_msg(KERN_INFO, "dbg traces %s, info traces %s", dbg_enabled ? "enabled" : "disabled", info_enabled ? "enabled" : "disabled");
 
-    //gdrdrv_init_devices();/* fills to zero the device array */
+    gdrdrv_detect_gpu();
 
     return 0;
 }
