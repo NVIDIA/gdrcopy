@@ -92,6 +92,30 @@ int nvidia_p2p_free_page_table(struct nvidia_p2p_page_table *page_table)
 }
 EXPORT_SYMBOL(nvidia_p2p_free_page_table);
 
+int nvidia_p2p_get_rsync_registers(nvidia_p2p_rsync_reg_info_t **reg_info)
+{
+    return -EINVAL;
+}
+EXPORT_SYMBOL(nvidia_p2p_get_rsync_registers);
+
+void nvidia_p2p_put_rsync_registers(nvidia_p2p_rsync_reg_info_t *reg_info)
+{
+}
+EXPORT_SYMBOL(nvidia_p2p_put_rsync_registers);
+
+int nvidia_p2p_register_rsync_driver(nvidia_p2p_rsync_driver_t *driver,
+                                     void *data)
+{
+    return -EINVAL;
+}
+EXPORT_SYMBOL(nvidia_p2p_register_rsync_driver);
+
+void nvidia_p2p_unregister_rsync_driver(nvidia_p2p_rsync_driver_t *driver,
+                                        void *data)
+{
+}
+EXPORT_SYMBOL(nvidia_p2p_unregister_rsync_driver);
+
 static int __init nv_p2p_dummy_init(void)
 {
     return 0;
