@@ -122,6 +122,10 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Thu Jul 26 2018 Davide Rossetti <davide.rossetti@gmail.com> 1.4-2
+- bumped minor version
+* Fri Jun 29 2018 Davide Rossetti <davide.rossetti@gmail.com> 1.3-2
+- a few bug fixes
 * Mon Feb 13 2017 Davide Rossetti <davide.rossetti@gmail.com> 1.2-2
 - package libgdrcopy.so as well
 - add basic test
