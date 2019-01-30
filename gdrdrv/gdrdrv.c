@@ -49,6 +49,14 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
     return new_prot;
 }
 #define get_tsc_khz() cpu_khz // tsc_khz
+static inline int gdr_pfn_is_ram(unsigned long pfn)
+{
+    // page_is_ram is GPL-only. Regardless there are no x86_64
+    // platforms supporting coherent GPU mappings, so we would not use
+    // this function anyway.
+    return 0;
+}
+
 #elif defined(CONFIG_PPC64)
 #include <asm/reg.h>
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
@@ -56,6 +64,13 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
     return pgprot_writecombine(old_prot);
 }
 #define get_tsc_khz() (get_cycles()/1000) // dirty hack
+static inline int gdr_pfn_is_ram(unsigned long pfn)
+{
+    // catch platforms, e.g. POWER8, POWER9 with GPUs not attached via NVLink,
+    // where GPU memory is non-coherent
+    return page_is_ram(pfn);
+}
+
 #else
 #error "X86_64/32 or PPC64 is required"
 #endif
@@ -618,10 +633,12 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
         goto out;
     }
 #else
-    if (!gdrdrv_cpu_can_cache_gpu_mappings)
+    if (gdrdrv_cpu_can_cache_gpu_mappings && gdr_pfn_is_ram(pfn)) {
+        // by default, vm_page_prot should be set to create cached mappings
+    } else {
+        // override prot to create non-coherent WC mappings
         vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
-    //gdr_dbg("calling io_remap_pfn_range() pfn=%lx vma=%p vaddr=%lx pfn=%lx size=%zu\n", 
-    //        pfn, vma, vaddr, pfn, size);
+    }
     if (io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
         gdr_err("error in remap_pfn_range()\n");
         ret = -EAGAIN;
