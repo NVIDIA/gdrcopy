@@ -790,7 +790,7 @@ static int __init gdrdrv_init(void)
     gdr_msg(KERN_INFO, "device registered with major number %d\n", gdrdrv_major);
     gdr_msg(KERN_INFO, "dbg traces %s, info traces %s", dbg_enabled ? "enabled" : "disabled", info_enabled ? "enabled" : "disabled");
 
-#if defined(CONFIG_PPC64)
+#if defined(CONFIG_PPC64) && defined(PVR_POWER9)
     if (pvr_version_is(PVR_POWER9)) {
         // Approximating CPU-GPU coherence with CPU model
         // This might break in the future
