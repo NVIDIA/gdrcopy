@@ -606,7 +606,7 @@ static long gdrdrv_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 
 /*----------------------------------------------------------------------------*/
 
-static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long vaddr, unsigned long paddr, size_t size)
+static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr, unsigned long paddr, size_t size, int is_wcomb)
 {
     int ret = 0;
     unsigned long pfn;
@@ -640,11 +640,11 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
         goto out;
     }
 #else
-    if (gdrdrv_cpu_can_cache_gpu_mappings && gdr_pfn_is_ram(pfn)) {
-        // by default, vm_page_prot should be set to create cached mappings
-    } else {
+    if (is_wcomb) {
         // override prot to create non-coherent WC mappings
         vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
+    } else {
+        // by default, vm_page_prot should be set to create cached mappings
     }
     if (io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
         gdr_err("error in remap_pfn_range()\n");
@@ -716,6 +716,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         unsigned long paddr = mr->page_table->pages[p]->physical_address;
         unsigned nentries = 1;
         size_t len;
+        int is_wcomb;
         gdr_dbg("range start with p=%d vaddr=%lx page_paddr=%lx\n", p, vaddr, paddr);
 
         ++p;
@@ -741,16 +742,16 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         // phys range is [paddr, paddr+len-1]
         gdr_dbg("mapping p=%u entries=%d offset=%llx len=%zu vaddr=%lx paddr=%lx\n", 
                 p, nentries, offset, len, vaddr, paddr);
-#if 1
-        ret = gdrdrv_mmap_phys_mem_wcomb(vma,
-                                         vaddr,
-                                         paddr,
-                                         len);
+        is_wcomb = 1;
+        if (gdr_pfn_is_ram(paddr >> PAGE_SHIFT)) {
+            WARN_ON_ONCE(!gdrdrv_cpu_can_cache_gpu_mappings);
+            is_wcomb = 0;
+        } 
+        ret = gdrdrv_remap_gpu_mem(vma, vaddr, paddr, len, is_wcomb);
         if (ret) {
-            gdr_err("error %d in gdrdrv_mmap_phys_mem_wcomb\n", ret);
+            gdr_err("error %d in gdrdrv_remap_gpu_mem\n", ret);
             goto out;
         }
-#endif
         vaddr += len;
         size -= len;
         offset = 0;
