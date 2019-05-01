@@ -189,6 +189,7 @@ struct gdr_mr {
     u32 page_size;
     u64 va;
     u64 mapped_size;
+    enum { GDR_MR_NONE, GDR_MR_WC, GDR_MR_CACHING } cpu_mapping_type;
     nvidia_p2p_page_table_t *page_table;
     int cb_flag;
     cycles_t tm_cycles;
@@ -365,6 +366,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     mr->va_space     = params.va_space;
     mr->va           = page_virt_start;
     mr->mapped_size  = rounded_size;
+    mr->cpu_mapping_type = GDR_MR_NONE;
     mr->page_table   = NULL;
     mr->cb_flag      = 0;
     mr->handle       = random_get_entropy() & GDR_HANDLE_MASK; // this is a hack, we need something really unique and randomized
@@ -547,7 +549,8 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
     params.page_size   = mr->page_size;
     params.tm_cycles   = mr->tm_cycles;
     params.tsc_khz     = mr->tsc_khz;
-
+    params.mapped      = (mr->cpu_mapping_type == GDR_MR_NONE) ? 0 : 1;
+    params.wc_mapping  = (mr->cpu_mapping_type == GDR_MR_WC  ) ? 1 : 0;
     if (copy_to_user(_params, &params, sizeof(params))) {
         gdr_err("copy_to_user failed on user pointer %p\n", _params);
         ret = -EFAULT;
@@ -708,7 +711,8 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     if (size % PAGE_SIZE != 0) {
         gdr_dbg("size is not multiple of PAGE_SIZE\n");
     }
-
+    // let's assume this mapping is not WC
+    mr->cpu_mapping_type = GDR_MR_CACHING;
     // check for physically contiguous IO ranges
     p = 0;
     vaddr = vma->vm_start;
@@ -717,6 +721,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         unsigned nentries = 1;
         size_t len;
         int is_wcomb;
+
         gdr_dbg("range start with p=%d vaddr=%lx page_paddr=%lx\n", p, vaddr, paddr);
 
         ++p;
@@ -742,11 +747,14 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         // phys range is [paddr, paddr+len-1]
         gdr_dbg("mapping p=%u entries=%d offset=%llx len=%zu vaddr=%lx paddr=%lx\n", 
                 p, nentries, offset, len, vaddr, paddr);
-        is_wcomb = 1;
         if (gdr_pfn_is_ram(paddr >> PAGE_SHIFT)) {
             WARN_ON_ONCE(!gdrdrv_cpu_can_cache_gpu_mappings);
             is_wcomb = 0;
-        } 
+        } else {
+            is_wcomb = 1;
+            // flagging the whole mr as a WC mapping if at least one chunk is WC
+            mr->cpu_mapping_type = GDR_MR_WC;
+        }
         ret = gdrdrv_remap_gpu_mem(vma, vaddr, paddr, len, is_wcomb);
         if (ret) {
             gdr_err("error %d in gdrdrv_remap_gpu_mem\n", ret);
