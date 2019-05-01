@@ -68,7 +68,14 @@ static inline int gdr_pfn_is_ram(unsigned long pfn)
 {
     // catch platforms, e.g. POWER8, POWER9 with GPUs not attached via NVLink,
     // where GPU memory is non-coherent
+#if 0
+    // unfortunately this module is MIT, and page_is_ram is GPL-only.
     return page_is_ram(pfn);
+#else
+    unsigned long start = pfn << PAGE_SHIFT;
+    unsigned long mask_47bits = (1UL<<47)-1;
+    return 0 == (start & ~mask_47bits);
+#endif
 }
 
 #else
