@@ -153,6 +153,8 @@ main(int argc, char *argv[])
         OUT << "info.va: " << hex << info.va << dec << endl;
         OUT << "info.mapped_size: " << info.mapped_size << endl;
         OUT << "info.page_size: " << info.page_size << endl;
+        OUT << "info.mapped: " << info.mapped << endl;
+        OUT << "info.wc_mapping: " << info.wc_mapping << endl;
 
         // remember that mappings start on a 64KB boundary, so let's
         // calculate the offset from the head of the mapping to the

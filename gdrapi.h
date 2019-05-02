@@ -95,6 +95,8 @@ struct gdr_info {
     uint32_t page_size;
     uint64_t tm_cycles;
     uint32_t cycles_per_ms;
+    uint32_t mapped;
+    uint32_t wc_mapping;
 };
 typedef struct gdr_info gdr_info_t;
 int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_t *info);

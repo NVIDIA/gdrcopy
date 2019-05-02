@@ -68,12 +68,16 @@ int main(int argc, char *argv[])
         BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
         ASSERT_NEQ(mh, 0U);
 
+        gdr_info_t info;
+        ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+        ASSERT(!info.mapped);
+
         void *bar_ptr  = NULL;
         ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
         //OUT << "bar_ptr: " << bar_ptr << endl;
 
-        gdr_info_t info;
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+        ASSERT(info.mapped);
         int off = d_ptr - info.va;
         cout << "off: " << off << endl;
 
