@@ -247,9 +247,9 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
                 strerror(__errno), __errno, rounded_size, (long long unsigned)magic_off, handle);
         ret = __errno;
     }
-
-    *ptr_va = mmio;
-
+    if (!ret) {
+        *ptr_va = mmio;
+    }
     return ret;
 }
 
