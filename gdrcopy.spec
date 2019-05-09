@@ -19,11 +19,8 @@ Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  gcc kernel-headers
 Requires:       %{name}-%{kmod} 
 
-# to get rid of libcuda/libcudart
-AutoReqProv:    no
-# alternatives, not working on RH6 
-#%filter_from_provides /libcuda\\.so.*$/d
-#%global __provides_exclude ^libcuda\\.so.*$
+%filter_from_requires /libcuda.so/d ; /libcudart.so/d ; /libgdrapi.so/d
+%filter_setup
 
 %package devel
 Summary: The development files
