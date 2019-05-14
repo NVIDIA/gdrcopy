@@ -68,9 +68,12 @@ gdr_t gdr_open();
 // gdr_unmap on all mappings before calling gdr_close.
 int gdr_close(gdr_t g);
 
+typedef struct gdr_mh_s {
+  unsigned long h;
+} gdr_mh_t;
+
 // Map device memory buffer on GPU BAR1, returning an handle.
 // Memory is still not accessible to user-space.
-typedef uint32_t gdr_mh_t;
 int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token, uint32_t va_space, gdr_mh_t *handle);
 
 // Unmap the handle. 

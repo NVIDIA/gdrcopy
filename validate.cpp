@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
         // tokens are optional in CUDA 6.0
         // wave out the test if GPUDirectRDMA is not enabled
         BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
-        ASSERT_NEQ(mh, 0U);
+        ASSERT_NEQ(mh, null_mh);
 
         gdr_info_t info;
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);

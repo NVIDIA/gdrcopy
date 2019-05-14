@@ -100,11 +100,24 @@ static void gdr_msg(enum gdrcopy_msg_level lvl, const char* fmt, ...)
 #define gdr_warn(FMT, ARGS...) gdr_msg(GDRCOPY_MSG_WARN,  "WARN: " FMT, ## ARGS)
 #define gdr_err(FMT, ARGS...)  gdr_msg(GDRCOPY_MSG_ERROR, "ERR:  " FMT, ## ARGS)
 
+typedef struct { 
+    gdr_hnd_t handle;
+    unsigned mapped:1;
+    unsigned wc_mapping:1;
+} gdr_memh_t;
+
+static gdr_memh_t *to_memh(gdr_mh_t mh) {
+    return (gdr_memh_t *)mh.h;
+}
+
+static gdr_mh_t from_memh(gdr_memh_t *memh) {
+    gdr_mh_t mh;
+    mh.h = (unsigned long)memh;
+    return mh;
+}
+
 // check GDR HaNDle size
-
-COMPILE_TIME_ASSERT(sizeof(gdr_hnd_t)==sizeof(gdr_mh_t));
-
-
+//COMPILE_TIME_ASSERT(sizeof(gdr_hnd_t)==sizeof(gdr_mh_t));
 
 struct gdr {
     int fd;
@@ -152,6 +165,15 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     int ret = 0;
     int retcode;
 
+    if (!handle) {
+        return EINVAL;
+    }
+
+    gdr_memh_t *mh = calloc(1, sizeof(gdr_memh_t));
+    if (!mh) {
+        return ENOMEM;
+    }
+
     struct GDRDRV_IOC_PIN_BUFFER_PARAMS params;
     params.addr = addr;
     params.size = size;
@@ -163,9 +185,11 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     if (0 != retcode) {
         ret = errno;
         gdr_err("ioctl error (errno=%d)\n", ret);
+        goto err;
     }
-    *handle = params.handle;
-
+    mh->handle = params.handle;
+    *handle = from_memh(mh);
+ err:
     return ret;
 }
 
@@ -173,16 +197,16 @@ int gdr_unpin_buffer(gdr_t g, gdr_mh_t handle)
 {
     int ret = 0;
     int retcode;
+    gdr_memh_t *mh = to_memh(handle);
 
     struct GDRDRV_IOC_UNPIN_BUFFER_PARAMS params;
-    params.handle = handle;
-
+    params.handle = mh->handle;
     retcode = ioctl(g->fd, GDRDRV_IOC_UNPIN_BUFFER, &params);
     if (0 != retcode) {
         ret = errno;
         gdr_err("ioctl error (errno=%d)\n", ret);
     }
-
+    
     return ret;
 }
 
@@ -190,17 +214,17 @@ int gdr_get_callback_flag(gdr_t g, gdr_mh_t handle, int *flag)
 {
     int ret = 0;
     int retcode;
+    gdr_memh_t *mh = to_memh(handle);
 
     struct GDRDRV_IOC_GET_CB_FLAG_PARAMS params;
-    params.handle = handle;
-
+    params.handle = mh->handle;
     retcode = ioctl(g->fd, GDRDRV_IOC_GET_CB_FLAG, &params);
     if (0 != retcode) {
         ret = errno;
         gdr_err("ioctl error (errno=%d)\n", ret);
-    } else
+    } else {
         *flag = params.flag;
-
+    }
     return ret;
 }
 
@@ -208,9 +232,10 @@ int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_t *info)
 {
     int ret = 0;
     int retcode;
+    gdr_memh_t *mh = to_memh(handle);
 
     struct GDRDRV_IOC_GET_INFO_PARAMS params;
-    params.handle = handle;
+    params.handle = mh->handle;
 
     retcode = ioctl(g->fd, GDRDRV_IOC_GET_INFO, &params);
     if (0 != retcode) {
@@ -232,26 +257,38 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
 {
     int ret = 0;
     gdr_info_t info = {0,};
+    gdr_memh_t *mh = to_memh(handle);
 
-    ret = gdr_get_info(g, handle, &info);
-    if (ret) {
-        return ret;
+    if (mh->mapped) {
+        gdr_err("mh is mapped already\n");
+        return EAGAIN;
     }
     size_t rounded_size = (size + PAGE_SIZE - 1) & PAGE_MASK;
-    off_t magic_off = (off_t)handle << PAGE_SHIFT;
-    void *mmio;
-
-    mmio = mmap(NULL, rounded_size, PROT_READ|PROT_WRITE, MAP_SHARED, g->fd, magic_off);
+    off_t magic_off = (off_t)mh->handle << PAGE_SHIFT;
+    void *mmio = mmap(NULL, rounded_size, PROT_READ|PROT_WRITE, MAP_SHARED, g->fd, magic_off);
     if (mmio == MAP_FAILED) {
         int __errno = errno;
         mmio = NULL;
         gdr_err("can't mmap BAR, error=%s(%d) rounded_size=%zu offset=%llx handle=%x\n",
                 strerror(__errno), __errno, rounded_size, (long long unsigned)magic_off, handle);
         ret = __errno;
+        goto err;
     }
-    if (!ret) {
-        *ptr_va = mmio;
+    *ptr_va = mmio;
+    ret = gdr_get_info(g, handle, &info);
+    if (ret) {
+        gdr_err("error %d from get_info, munmapping before exiting\n", ret);
+        munmap(mmio, rounded_size);
+        goto err;
     }
+    mh->mapped = info.mapped;
+    if (!mh->mapped) {
+        gdr_err("mh should have been mapped at this point\n");
+        abort();
+    }
+    mh->wc_mapping = info.wc_mapping;
+    gdr_dbg("wc_mapping=%d\n", mh->wc_mapping);
+ err:
     return ret;
 }
 
@@ -260,15 +297,23 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
     int ret = 0;
     int retcode = 0;
     size_t rounded_size = (size + PAGE_SIZE - 1) & PAGE_MASK;
+    gdr_memh_t *mh = to_memh(handle);
 
+    if (!mh->mapped) {
+        gdr_err("mh is not mapped yet\n");
+        return EINVAL;
+    }
     retcode = munmap(va, rounded_size);
     if (-1 == retcode) {
         int __errno = errno;
         gdr_err("can't unmap BAR, error=%s(%d) rounded_size=%zu\n",
                 strerror(__errno), __errno, rounded_size);
         ret = __errno;
+        goto err;
     }
-
+    mh->mapped = 0;
+    mh->wc_mapping = 0;
+ err:
     return ret;
 }
 
