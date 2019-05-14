@@ -58,14 +58,15 @@ int main(int argc, char *argv[])
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
 
-    gdr_mh_t mh;
+    gdr_mh_t mh = {0};
+    if (mh == null_mh) puts("miao");
     BEGIN_CHECK {
         CUdeviceptr d_ptr = d_A;
 
         // tokens are optional in CUDA 6.0
         // wave out the test if GPUDirectRDMA is not enabled
         BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
-        ASSERT_NEQ(mh, 0U);
+        ASSERT_NEQ(mh, null_mh);
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     } END_CHECK;
     ASSERT_EQ(gdr_close(g), 0);

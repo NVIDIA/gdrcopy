@@ -46,9 +46,15 @@
             ASSERT(cudaSuccess == result);     \
         } while (0)
 
+static inline bool operator==(const gdr_mh_t &a, const gdr_mh_t &b) {
+    return a.h == b.h;
+}
+
+static const gdr_mh_t null_mh = {0};
+
 #define ASSERT_EQ(P, V) ASSERT((P) == (V))
 #define CHECK_EQ(P, V) ASSERT((P) == (V))
-#define ASSERT_NEQ(P, V) ASSERT((P) != (V))
+#define ASSERT_NEQ(P, V) ASSERT(!((P) == (V)))
 #define BREAK_IF_NEQ(P, V) if((P) != (V)) break
 #define BEGIN_CHECK do
 #define END_CHECK while(0)
