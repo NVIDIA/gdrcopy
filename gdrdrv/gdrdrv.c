@@ -35,6 +35,7 @@
 #include <linux/io.h>
 #include <linux/timex.h>
 #include <linux/timer.h>
+#include <linux/sched/mm.h>
 
 #ifndef random_get_entropy
 #define random_get_entropy()	get_cycles()
@@ -194,9 +195,46 @@ struct gdr_mr {
     int cb_flag;
     cycles_t tm_cycles;
     unsigned int tsc_khz;
+    struct vm_area_struct *vma;
+    struct address_space *mapping;
 };
 typedef struct gdr_mr gdr_mr_t;
 
+static int gdr_mr_is_mapped(gdr_mr_t *mr )
+{
+    return mr->cpu_mapping_type != GDR_MR_NONE;
+}
+
+static int gdr_mr_is_wc_mapping(gdr_mr_t *mr )
+{
+    return (mr->cpu_mapping_type == GDR_MR_WC  ) ? 1 : 0;
+}
+
+static void gdrdrv_zap_vma(struct address_space *mapping, struct vm_area_struct *vma)
+{
+    // BUG: this needs to be called from the same process, i.e. it
+    // does not store the original mm.
+#if 0
+	struct mm_struct *mm;
+	mm = get_task_mm(current);
+    down_write(&mm->mmap_sem);
+    // this API is not exported to modules
+    zap_page_range(vma, vma->vm_start, vma->vm_end - vma->vm_start);
+    up_write(&mm->mmap_sem);
+	mmput(mm);
+#else
+    unmap_mapping_range(mapping, vma->vm_start, vma->vm_end - vma->vm_start, 0);
+#endif
+}
+
+static void gdr_mr_destroy_all_mappings(gdr_mr_t *mr)
+{
+    // there is a single mapping at the moment
+    if (mr->vma)
+        gdrdrv_zap_vma(mr->mapping, mr->vma);
+}
+
+//-----------------------------------------------------------------------------
 
 struct gdr_info {
     // simple low-performance linked-list implementation
@@ -218,7 +256,7 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     int ret = 0;
     gdr_info_t *info = NULL;
 
-    gdr_dbg("minor=%d\n", minor);
+    gdr_dbg("minor=%d filep=%p\n", minor, filp);
     if(minor >= 1) {
         gdr_err("device minor number too big!\n");
         ret = -ENXIO;
@@ -252,22 +290,30 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
 
     gdr_dbg("closing\n");
 
-    // BUG: do proper locking here
+    mutex_lock(&info->lock);
     list_for_each_safe(p, n, &info->mr_list) {
         mr = list_entry(p, gdr_mr_t, node);
-        gdr_info("freeing MR=%p\n", mr);
+        gdr_info("freeing MR=%px\n", mr);
+        if (gdr_mr_is_mapped(mr)) {
+            mutex_unlock(&info->lock);
+            gdr_mr_destroy_all_mappings(mr);
+            mutex_lock(&info->lock);
+        }
         if (!ACCESS_ONCE(mr->cb_flag)) {
+            mutex_unlock(&info->lock);
+            // this may call the invalidation cb, e.g. on L4T
             retcode = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, mr->page_table);
             if (retcode) {
                 gdr_err("error while calling put_pages\n");
             }
+            mutex_lock(&info->lock);
         }
-        mutex_lock(&info->lock);
         list_del(&mr->node);
-        mutex_unlock(&info->lock);
-        memset(mr, 0, sizeof(*mr));
-        kfree(mr);
+        //memset(mr, 0, sizeof(*mr));
+        kzfree(mr);
     }
+    mutex_unlock(&info->lock);
+
     kfree(info);
     filp->private_data = NULL;
 
@@ -276,7 +322,7 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
 
 //-----------------------------------------------------------------------------
 
-static gdr_mr_t *gdr_mr_from_handle(gdr_info_t *info, gdr_hnd_t handle)
+static gdr_mr_t *gdr_mr_from_handle_unlocked(gdr_info_t *info, gdr_hnd_t handle)
 {
     gdr_mr_t *mr = NULL;
     struct list_head *p;
@@ -290,9 +336,18 @@ static gdr_mr_t *gdr_mr_from_handle(gdr_info_t *info, gdr_hnd_t handle)
     return mr;
 }
 
+static gdr_mr_t *gdr_mr_from_handle(gdr_info_t *info, gdr_hnd_t handle)
+{
+    gdr_mr_t *mr;
+    mutex_lock(&info->lock);
+    mr = gdr_mr_from_handle_unlocked(info, handle);
+    mutex_unlock(&info->lock);
+    return mr;
+}
+
 //-----------------------------------------------------------------------------
-// off is page aligned, because of the kernel interface
-// could abuse lower bits for other purposes
+// off is host page aligned, because of the kernel interface
+// could abuse extra available bits for other purposes
 
 static gdr_hnd_t gdrdrv_handle_from_off(unsigned long off)
 {
@@ -307,14 +362,15 @@ static void gdrdrv_get_pages_free_callback(void *data)
     gdr_mr_t *mr = data;
     nvidia_p2p_page_table_t *page_table = NULL;
     gdr_info("free callback\n");
-    // DR: can't take the info->lock here due to potential AB-BA
+    // can't take the info->lock here due to potential AB-BA
     // deadlock with internal NV driver lock(s)
     ACCESS_ONCE(mr->cb_flag) = 1;
-    wmb();
+    smp_wmb();
     page_table = xchg(&mr->page_table, NULL);
     if (page_table) {
         nvidia_p2p_free_page_table(page_table);
-        barrier();
+        if (gdr_mr_is_mapped(mr))
+            gdr_mr_destroy_all_mappings(mr);
     } else {
         gdr_err("ERROR: free callback, page_table is NULL\n");
     }
@@ -469,12 +525,24 @@ static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
         return -EFAULT;
     }
 
-    mr = gdr_mr_from_handle(info, params.handle);
+    // someone might try to traverse the list and/or to do something
+    // to the mr at the same time, so let's lock here
+    mutex_lock(&info->lock);
+    mr = gdr_mr_from_handle_unlocked(info, params.handle);
     if (NULL == mr) {
         gdr_err("unexpected handle %x while unmapping buffer\n", params.handle);
-        return -EINVAL;
+        ret = -EINVAL;
+    } else {
+        if (gdr_mr_is_mapped(mr)) {
+            gdr_err("trying to unpin mapped mr %px\n", mr);
+            ret = -EBUSY;
+        } else {
+            list_del(&mr->node);
+        }
     }
-
+    mutex_unlock(&info->lock);
+    if (ret)
+        goto out;
     if (!mr->cb_flag) {
         gdr_info("invoking nvidia_p2p_put_pages(va=0x%llx p2p_tok=%llx va_tok=%x)\n",
                  mr->va, mr->p2p_token, mr->va_space);
@@ -487,12 +555,9 @@ static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
         // not returning an error here because further clean-up is
         // needed anyway
     }
-    mutex_lock(&info->lock);
-    list_del(&mr->node);
-    mutex_unlock(&info->lock);
-    memset(mr, 0, sizeof(*mr));
-    kfree(mr);
-
+    //memset(mr, 0, sizeof(*mr));
+    kzfree(mr);
+ out:
     return ret;
 }
 
@@ -508,11 +573,11 @@ static int gdrdrv_get_cb_flag(gdr_info_t *info, void __user *_params)
         gdr_err("copy_from_user failed on user pointer %p\n", _params);
         return -EFAULT;
     }
-
     mr = gdr_mr_from_handle(info, params.handle);
     if (NULL == mr) {
         gdr_err("unexpected handle %x in get_cb_flag\n", params.handle);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto out;
     }
 
     params.flag = !!mr->cb_flag;
@@ -521,7 +586,7 @@ static int gdrdrv_get_cb_flag(gdr_info_t *info, void __user *_params)
         gdr_err("copy_to_user failed on user pointer %p\n", _params);
         ret = -EFAULT;
     }
-
+ out:
     return ret;
 }
 
@@ -535,13 +600,15 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
 
     if (copy_from_user(&params, _params, sizeof(params))) {
         gdr_err("copy_from_user failed on user pointer %p\n", _params);
-        return -EFAULT;
+        ret = -EFAULT;
+        goto out;
     }
 
     mr = gdr_mr_from_handle(info, params.handle);
     if (NULL == mr) {
         gdr_err("unexpected handle %x in get_cb_flag\n", params.handle);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto out;
     }
 
     params.va          = mr->va;
@@ -549,13 +616,13 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
     params.page_size   = mr->page_size;
     params.tm_cycles   = mr->tm_cycles;
     params.tsc_khz     = mr->tsc_khz;
-    params.mapped      = (mr->cpu_mapping_type == GDR_MR_NONE) ? 0 : 1;
-    params.wc_mapping  = (mr->cpu_mapping_type == GDR_MR_WC  ) ? 1 : 0;
+    params.mapped      = gdr_mr_is_mapped(mr);
+    params.wc_mapping  = gdr_mr_is_wc_mapping(mr);
     if (copy_to_user(_params, &params, sizeof(params))) {
         gdr_err("copy_to_user failed on user pointer %p\n", _params);
         ret = -EFAULT;
     }
-
+ out:
     return ret;
 }
 
@@ -606,6 +673,23 @@ static long gdrdrv_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
     return gdrdrv_ioctl(0, filp, cmd, arg);
 }
 #endif
+
+/*----------------------------------------------------------------------------*/
+
+void gdrdrv_vma_close(struct vm_area_struct *vma)
+{
+    gdr_mr_t *mr = (gdr_mr_t *)vma->vm_private_data;
+    gdr_dbg("closing vma=%px vm_file=%px vm_private_data=%px mr=%px mr->vma=%px\n", vma, vma->vm_file, vma->vm_private_data, mr, mr->vma);
+    // TODO: handle multiple vma's
+    mr->vma = NULL;
+    mr->cpu_mapping_type = GDR_MR_NONE;
+}
+
+/*----------------------------------------------------------------------------*/
+
+static const struct vm_operations_struct gdrdrv_vm_ops = {
+    .close = gdrdrv_vma_close,
+};
 
 /*----------------------------------------------------------------------------*/
 
@@ -674,15 +758,22 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     int p = 0;
     unsigned long vaddr;
 
-    gdr_info("mmap start=0x%lx size=%zu off=0x%lx\n", vma->vm_start, size, vma->vm_pgoff);
+    gdr_info("mmap vma=%px start=0x%lx size=%zu off=0x%lx\n", vma, vma->vm_start, size, vma->vm_pgoff);
 
     handle = gdrdrv_handle_from_off(vma->vm_pgoff);
     mr = gdr_mr_from_handle(info, handle);
+    // BUG: mr needs locking
     if (!mr) {
+        gdr_dbg("cannot find handle in mr_list\n");
         ret = -EINVAL;
         goto out;
     }
     offset = mr->offset;
+    if (gdr_mr_is_mapped(mr)) {
+        gdr_dbg("mr has been mapped already\n");
+        ret = -EINVAL;
+        goto out;
+    }
     if (mr->cb_flag) {
         gdr_dbg("mr has been invalidated\n");
         ret = -EINVAL;
@@ -703,8 +794,13 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         ret = -EINVAL;
         goto out;
     }    
+    if (offset > GPU_PAGE_SIZE * mr->page_table->entries) {
+        gdr_dbg("offset %llu too big\n", offset);
+        ret = -EINVAL;
+        goto out;
+    }
     if (size + offset > GPU_PAGE_SIZE * mr->page_table->entries) {
-        gdr_dbg("size %zu too big for original\n", size);
+        gdr_dbg("size %zu too big\n", size);
         ret = -EINVAL;
         goto out;
     }
@@ -712,11 +808,15 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         gdr_dbg("size is not multiple of PAGE_SIZE\n");
     }
     // let's assume this mapping is not WC
+    // this also works as the mapped flag for this mr
     mr->cpu_mapping_type = GDR_MR_CACHING;
-    // check for physically contiguous IO ranges
+    vma->vm_ops = &gdrdrv_vm_ops;
+    gdr_dbg("overwriting vma->vm_private_data=%px with mr=%px\n", vma->vm_private_data, mr);
+    vma->vm_private_data = mr;
     p = 0;
     vaddr = vma->vm_start;
     do {
+        // map individual physically contiguous IO ranges
         unsigned long paddr = mr->page_table->pages[p]->physical_address;
         unsigned nentries = 1;
         size_t len;
@@ -725,7 +825,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         gdr_dbg("range start with p=%d vaddr=%lx page_paddr=%lx\n", p, vaddr, paddr);
 
         ++p;
-        // check p-1 and p for continuity
+        // check p-1 and p for contiguity
         {
             unsigned long prev_page_paddr = mr->page_table->pages[p-1]->physical_address;
             for(; p < mr->page_table->entries; ++p) {
@@ -769,9 +869,18 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         gdr_err("vaddr=%lx != vm_end=%lx\n", vaddr, vma->vm_end);
         ret = -EINVAL;
     }
-out:
-    // error should take care of partial mappings
 
+out:
+    if (ret) {
+        mr->vma = NULL;
+        mr->mapping = NULL;
+        mr->cpu_mapping_type = GDR_MR_NONE;
+        // TODO: tear down stale partial mappings
+    } else {
+        mr->vma = vma;
+        mr->mapping = filp->f_mapping;
+        gdr_dbg("mr vma=%px mapping=%px\n", mr->vma, mr->mapping);
+    }
     return ret;
 }
 
