@@ -496,7 +496,7 @@ int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size)
             break;
         }
 
-        // on POWER, compiler memcpy is not optimal for MMIO
+        // on POWER, compiler/libc memcpy is not optimal for MMIO
         // 64bit stores are not better than 32bit ones, so we prefer the latter
         // NOTE: if preferred but not aligned, a better implementation would still try to
         // use byte sized stores to align map_d_ptr and h_ptr to next word
@@ -509,7 +509,7 @@ int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size)
             unroll4_memcpy(map_d_ptr, h_ptr, size);
             break;
         } else {
-            gdr_dbgc(1, "using plain memcpy for gdr_copy_to_bar\n");
+            gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_to_bar\n");
             memcpy(map_d_ptr, h_ptr, size);
         }
 
@@ -556,9 +556,10 @@ int gdr_copy_from_bar(void *h_ptr, const void *map_d_ptr, size_t size)
             unroll4_memcpy(h_ptr, map_d_ptr, size);
             break;
         } else {
-            gdr_dbgc(1, "using plain memcpy for gdr_copy_from_bar\n");
+            gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_from_bar\n");
             memcpy(h_ptr, map_d_ptr, size);
         }
+
         // note: fencing is not needed because plain stores are used
         // if non-temporal stores were used on x86, a proper fence would be needed instead
         // wc_store_fence();
