@@ -59,7 +59,8 @@ int main(int argc, char *argv[])
     ASSERT_NEQ(g, (void*)0);
 
     gdr_mh_t mh = {0};
-    if (mh == null_mh) puts("miao");
+    ASSERT(mh == null_mh);
+
     BEGIN_CHECK {
         CUdeviceptr d_ptr = d_A;
 
