@@ -68,6 +68,7 @@ gdr_t gdr_open();
 // gdr_unmap on all mappings before calling gdr_close.
 int gdr_close(gdr_t g);
 
+// The handle to a GPU memory mapping
 typedef struct gdr_mh_s {
   unsigned long h;
 } gdr_mh_t;
