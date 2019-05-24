@@ -48,17 +48,17 @@ AC_ARG_ENABLE(
 AS_IF(
 	[test "x$enable_test" = "xyes"], [
 	AC_MSG_NOTICE([Test is enabled])
-	AC_CHECK_LIB([cuda], [cuMemAlloc], [], [AC_MSG_ERROR([libcuda not found])])
-	AC_CHECK_LIB([cudart], [cudaMalloc], [], [AC_MSG_ERROR([libcudart not found])])
-	AC_CHECK_HEADER([cuda.h], [], [AC_MSG_ERROR([cuda.h not found])])
-	AC_CHECK_HEADER([cuda_runtime_api.h], [], [AC_MSG_ERROR([cuda_runtime_api.h not found])])
+	AC_CHECK_LIB([cuda], [cuMemAlloc], [], [AC_MSG_FAILURE([libcuda not found])])
+	AC_CHECK_LIB([cudart], [cudaMalloc], [], [AC_MSG_FAILURE([libcudart not found])])
+	AC_CHECK_HEADER([cuda.h], [], [AC_MSG_FAILURE([cuda.h not found])])
+	AC_CHECK_HEADER([cuda_runtime_api.h], [], [AC_MSG_FAILURE([cuda_runtime_api.h not found])])
 ], [
 	AC_MSG_NOTICE([Test is disabled])
 ])
 AM_CONDITIONAL(TEST_ENABLE, test "x$enable_test" = "xyes")
 
 # Checks for header files.
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h malloc.h memory.h netdb.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h], [], [AC_MSG_ERROR([Some of the above required headers are not found])])
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h malloc.h memory.h netdb.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h], [], [AC_MSG_FAILURE([Some of the above required headers are not found])])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_INLINE
@@ -71,6 +71,40 @@ AC_TYPE_UINT64_T
 AC_FUNC_MALLOC
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([clock_gettime memset munmap strerror strtol])
+
+AC_LANG(C)
+AC_RUN_IFELSE([
+	AC_LANG_PROGRAM([], [
+#if defined __GNUC__
+return 0;
+#else
+return 1;
+#endif // __GNUC__
+	])
+], [], [AC_MSG_FAILURE([Compiler not supported])])
+
+AC_RUN_IFELSE([
+	AC_LANG_PROGRAM([], [
+#if defined(__powerpc__)
+return 0;
+#else
+return 1;
+#endif
+	])
+], [arch="ppc"], [
+AC_RUN_IFELSE([
+	AC_LANG_PROGRAM([], [
+#if defined(__i386__) || defined(__x86_64__) || defined(__X86__)
+return 0;
+#else
+return 1;
+#endif
+	])
+], [arch="x86"], [AC_MSG_FAILURE(["Compiling on an unsupported architecture])]
+)])
+
+AM_CONDITIONAL(ARCH_PPC, test "x$arch" = "xppc")
+AM_CONDITIONAL(ARCH_X86, test "x$arch" = "xx86")
 
 AC_CONFIG_FILES([Makefile src/Makefile tests/Makefile])
 AC_OUTPUT
