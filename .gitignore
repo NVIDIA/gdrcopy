@@ -21,3 +21,6 @@
 *.app
 
 *~
+
+# Editor files
+*.swp
