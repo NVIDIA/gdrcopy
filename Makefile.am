@@ -4,5 +4,5 @@ AM_CPPFLAGS  = -I$(srcdir)/include
 
 include_HEADERS = include/gdrapi.h
 
-SUBDIRS = src
+SUBDIRS = src tests
 
