@@ -20,8 +20,9 @@ AC_PREREQ([2.69])
 AC_INIT([gdrcopy], [project_version], [gpudirect@github.com])
 AC_CONFIG_SRCDIR([src/gdrapi.c])
 AC_CONFIG_AUX_DIR(config)
-AM_INIT_AUTOMAKE([1.10 -Wall foreign subdir-objects])
 AC_CONFIG_MACRO_DIRS([config/m4])
+AM_INIT_AUTOMAKE([1.10 -Wall foreign tar-ustar silent-rules subdir-objects])
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 # Checks for programs.
 AM_PROG_AR
@@ -37,18 +38,27 @@ LT_INIT
 
 AC_SUBST(VERSION_INFO, [version_info])
 
-# Checks for libraries.
-# FIXME: Replace `main' with a function in `-lcuda':
-#AC_CHECK_LIB([cuda], [main])
-# FIXME: Replace `main' with a function in `-lcudart':
-#AC_CHECK_LIB([cudart], [main])
-# FIXME: Replace `main' with a function in `-ldl':
-#AC_CHECK_LIB([dl], [main])
-# FIXME: Replace `main' with a function in `-lpthread':
-#AC_CHECK_LIB([pthread], [main])
+AC_ARG_ENABLE(
+	[test],
+	[AC_HELP_STRING([--enable-test],
+					[Build test programs (default=no)])],
+	[enable_test=$enableval],
+	[enable_test=no])
+
+AS_IF(
+	[test "x$enable_test" = "xyes"], [
+	AC_MSG_NOTICE([Test is enabled])
+	AC_CHECK_LIB([cuda], [cuMemAlloc], [], [AC_MSG_ERROR([libcuda not found])])
+	AC_CHECK_LIB([cudart], [cudaMalloc], [], [AC_MSG_ERROR([libcudart not found])])
+	AC_CHECK_HEADER([cuda.h], [], [AC_MSG_ERROR([cuda.h not found])])
+	AC_CHECK_HEADER([cuda_runtime_api.h], [], [AC_MSG_ERROR([cuda_runtime_api.h not found])])
+], [
+	AC_MSG_NOTICE([Test is disabled])
+])
+AM_CONDITIONAL(TEST_ENABLE, test "x$enable_test" = "xyes")
 
 # Checks for header files.
-#AC_CHECK_HEADERS([arpa/inet.h fcntl.h malloc.h memory.h netdb.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h malloc.h memory.h netdb.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h], [], [AC_MSG_ERROR([Some of the above required headers are not found])])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_INLINE
