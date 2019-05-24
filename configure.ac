@@ -3,8 +3,10 @@
 
 AC_PREREQ([2.69])
 AC_INIT([gdrcopy], [1.0], [gpudirect@github.com])
-AM_INIT_AUTOMAKE([-Wall foreign])
-AC_CONFIG_MACRO_DIRS([m4])
+AC_CONFIG_SRCDIR([src/gdrapi.c])
+AC_CONFIG_AUX_DIR(config)
+AM_INIT_AUTOMAKE([1.10 -Wall foreign subdir-objects])
+AC_CONFIG_MACRO_DIRS([config/m4])
 
 # Checks for programs.
 AM_PROG_AR
@@ -43,5 +45,5 @@ AC_FUNC_MALLOC
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([clock_gettime memset munmap strerror strtol])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
