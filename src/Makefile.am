@@ -20,3 +20,5 @@ noinst_LTLIBRARIES += libmemcpy_sse41.la
 libmemcpy_sse41_la_SOURCES = memcpy_sse41.c
 libmemcpy_sse41_la_CFLAGS = -msse4.1
 endif
+
+SUBDIRS = gdrdrv

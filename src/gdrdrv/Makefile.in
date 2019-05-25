@@ -18,6 +18,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+VPATH := @srcdir@
+LN_S = @LN_S@
 NVIDIA_SRC_DIR ?= $(shell find /usr/src/nvidia-* -name "nv-p2p.h"|head -1|xargs dirname || echo "NVIDIA_DRIVER_MISSING")
 
 ifneq ($(KERNELRELEASE),)
@@ -46,7 +48,9 @@ all: module
 
 module:
 	@ echo "Picking NVIDIA driver sources from NVIDIA_SRC_DIR=$(NVIDIA_SRC_DIR). If that does not meet your expectation, you might have a stale driver still around and that might cause problems."
-	@ $(MAKE) -C $(KDIR) $(MAKE_PARAMS) M=$(PWD) modules
+	@ $(LN_S) $(VPATH)/*.c . > /dev/null 2>&1 || echo "*.c exist, ignore"
+	@ $(LN_S) $(VPATH)/*.h . > /dev/null 2>&1 || echo "*.h exist, ignore"
+	@ $(MAKE) -C $(KDIR) M=$(PWD) modules
 
 install:
 	[ -d $(DESTDIR)/$(MODULE_DESTDIR) ] || mkdir -p $(DESTDIR)/$(MODULE_DESTDIR)

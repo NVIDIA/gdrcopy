@@ -106,5 +106,5 @@ return 1;
 AM_CONDITIONAL(ARCH_PPC, test "x$arch" = "xppc")
 AM_CONDITIONAL(ARCH_X86, test "x$arch" = "xx86")
 
-AC_CONFIG_FILES([Makefile src/Makefile tests/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile src/gdrdrv/Makefile tests/Makefile])
 AC_OUTPUT
