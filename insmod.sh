@@ -19,13 +19,17 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-THIS_DIR=$(dirname $0)
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <path-to-build-top-dir>"
+    exit 1;
+fi
+DIR=$1
 
 # remove driver
 grep gdrdrv /proc/devices >/dev/null && sudo /sbin/rmmod gdrdrv
 
 # insert driver
-sudo /sbin/insmod gdrdrv/gdrdrv.ko dbg_enabled=0 info_enabled=0
+sudo /sbin/insmod ${DIR}/src/gdrdrv/gdrdrv.ko dbg_enabled=0 info_enabled=0
 
 # create device inodes
 major=`fgrep gdrdrv /proc/devices | cut -b 1-4`
