@@ -57,6 +57,26 @@ AS_IF(
 ])
 AM_CONDITIONAL(TEST_ENABLE, test "x$enable_test" = "xyes")
 
+AC_ARG_ENABLE(
+	[driver],
+	[AC_HELP_STRING([--enable-driver],
+					[Build the gdrdrv driver and install at the specified path (usage: --enable-driver=<path>)])],
+	[enable_driver=$enableval],
+	[enable_driver=yes])
+AS_IF(
+	[test "x$enable_driver" != "xno"], [
+	AC_MSG_NOTICE([gdrdrv is enabled])
+	AS_IF(
+		[test "x$enable_driver" = "xyes"],
+		[driver_path=$libdir],
+		[driver_path=$enable_driver]
+	)
+	AC_SUBST(DRIVER_PATH, $driver_path)
+], [
+	AC_MSG_NOTICE([gdrdrv is disabled])
+])
+AM_CONDITIONAL(DRIVER_ENABLE, test "x$enable_driver" != "xno")
+
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h malloc.h memory.h netdb.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h], [], [AC_MSG_FAILURE([Some of the above required headers are not found])])
 

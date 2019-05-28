@@ -21,4 +21,6 @@ libmemcpy_sse41_la_SOURCES = memcpy_sse41.c
 libmemcpy_sse41_la_CFLAGS = -msse4.1
 endif
 
+if DRIVER_ENABLE
 SUBDIRS = gdrdrv
+endif
