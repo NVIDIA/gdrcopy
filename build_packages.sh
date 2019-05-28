@@ -1,5 +1,4 @@
 #!/bin/bash
-set -x
 
 ex()
 {
@@ -9,7 +8,7 @@ ex()
     fi
 }
 
-make clean
+set -x
 
 if [ "X$CUDA" == "X" ]; then
     echo "CUDA is not defined"; exit 1
@@ -35,7 +34,7 @@ cwd=$PWD
 
 mkdir -p $tmpdir/gdrcopy
 rm -rf $tmpdir/gdrcopy/*
-cp -r *.* gdrdrv LICENSE config_arch Makefile $tmpdir/gdrcopy/
+cp -r *.* include src tests LICENSE config_arch Makefile $tmpdir/gdrcopy/
 rm -f $tmpdir/gdrcopy-$VERSION.tar.gz
 cd $tmpdir
 mv gdrcopy gdrcopy-$VERSION

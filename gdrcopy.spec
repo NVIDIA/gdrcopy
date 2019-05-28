@@ -52,30 +52,20 @@ Kernel-mode driver for GDRCopy.
 
 %build
 echo "building"
-export KVER=%{KVERSION}
-echo $KVER
-make %{?_smp_mflags} CUDA=%{CUDA} KVER=%{KVERSION} all
+./autogen.sh
+mkdir build
+cd build
+../configure --enable-test --prefix=$RPM_BUILD_ROOT%{_prefix} --libdir=$RPM_BUILD_ROOT%{_libdir} --enable-driver=$RPM_BUILD_ROOT%{driver_install_dir}
+make -j8
 
 
 %install
-%{__mkdir_p} $RPM_BUILD_ROOT%{_libdir}
-%{__mkdir_p} $RPM_BUILD_ROOT%{_prefix}/include
-%{__make} PREFIX=$RPM_BUILD_ROOT%{_prefix} DESTLIB=$RPM_BUILD_ROOT%{_libdir} lib_install
-install -d $RPM_BUILD_ROOT%{_prefix}/include
-#install -m 0755 gdrapi.h $RPM_BUILD_ROOT%{_prefix}/include/gdrapi.h
-install -Dpm 755 copybw $RPM_BUILD_ROOT%{_prefix}/bin/copybw
-install -Dpm 755 basic $RPM_BUILD_ROOT%{_prefix}/bin/basic
-install -Dpm 755 validate $RPM_BUILD_ROOT%{_prefix}/bin/validate
+cd build
+make install
 
 # Install gdrdrv service script
 install -d $RPM_BUILD_ROOT/etc/init.d
 install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
-
-
-%{__mkdir_p} $RPM_BUILD_ROOT%{driver_install_dir}
-%{__cp} $RPM_BUILD_DIR/%buildsubdir/gdrdrv/gdrdrv.ko $RPM_BUILD_ROOT%{driver_install_dir}
-
-
 
 %post
 /sbin/depmod -a
@@ -104,9 +94,11 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{_prefix}/bin/copybw
 %{_prefix}/bin/basic
 %{_prefix}/bin/validate
-%{_libdir}/libgdrapi.so.?.?
+%{_libdir}/libgdrapi.so.?.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so
+%{_libdir}/libgdrapi.a
+%{_libdir}/libgdrapi.la
 /etc/init.d/gdrcopy
 
 

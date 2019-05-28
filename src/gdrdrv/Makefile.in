@@ -18,8 +18,14 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-VPATH := @srcdir@
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+
+VPATH = @srcdir@
+DRIVER_PATH = @DRIVER_PATH@
 LN_S = @LN_S@
+MKDIR_P = @MKDIR_P@
+
 NVIDIA_SRC_DIR ?= $(shell find /usr/src/nvidia-* -name "nv-p2p.h"|head -1|xargs dirname || echo "NVIDIA_DRIVER_MISSING")
 
 ifneq ($(KERNELRELEASE),)
@@ -53,9 +59,9 @@ module:
 	@ $(MAKE) -C $(KDIR) M=$(PWD) modules
 
 install:
-	[ -d $(DESTDIR)/$(MODULE_DESTDIR) ] || mkdir -p $(DESTDIR)/$(MODULE_DESTDIR)
-	cp gdrdrv.ko $(DESTDIR)/$(MODULE_DESTDIR)
-	if [ ! -n "$(DESTDIR)" ]; then $(DEPMOD) -r -ae $(KVER); fi
+	@ $(MKDIR_P) $(DRIVER_PATH)
+	@ cp gdrdrv.ko $(DRIVER_PATH)
+	@ if [ ! -n "$(DRIVER_PATH)" ]; then $(DEPMOD) -r -ae $(KVER); fi
 
 help:
 	$(MAKE) -C $(KDIR) M=$$PWD help
