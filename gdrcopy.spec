@@ -55,7 +55,7 @@ echo "building"
 ./autogen.sh
 mkdir build
 cd build
-../configure --enable-test --prefix=$RPM_BUILD_ROOT%{_prefix} --libdir=$RPM_BUILD_ROOT%{_libdir} --enable-driver=$RPM_BUILD_ROOT%{driver_install_dir}
+../configure --enable-test --prefix=$RPM_BUILD_ROOT%{_prefix} --libdir=$RPM_BUILD_ROOT%{_libdir} --enable-driver=$RPM_BUILD_ROOT%{driver_install_dir} LDFLAGS="-L${CUDA}/lib64" CFLAGS="-I${CUDA}/include" CXXFLAGS="-I${CUDA}/include"
 make -j8
 
 

@@ -1,5 +1,6 @@
 AM_CPPFLAGS  = -I$(srcdir)
 AM_CPPFLAGS += -I$(srcdir)/gdrdrv
+AM_CPPFLAGS += -I$(srcdir)/../include
 
 lib_LTLIBRARIES = libgdrapi.la
 libgdrapi_la_SOURCES = gdrapi.c 
