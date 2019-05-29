@@ -21,6 +21,7 @@ AC_INIT([gdrcopy], [project_version], [gpudirect@github.com])
 AC_CONFIG_SRCDIR([src/gdrapi.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIRS([config/m4])
+AC_CANONICAL_TARGET
 AM_INIT_AUTOMAKE([1.10 -Wall foreign tar-ustar silent-rules subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
@@ -28,7 +29,7 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AM_PROG_AR
 AC_PROG_AWK
 AC_PROG_CXX
-AC_PROG_CC
+AC_PROG_CC([gcc])
 AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
@@ -92,36 +93,11 @@ AC_FUNC_MALLOC
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([clock_gettime memset munmap strerror strtol])
 
-AC_LANG(C)
-AC_RUN_IFELSE([
-	AC_LANG_PROGRAM([], [
-#if defined __GNUC__
-return 0;
-#else
-return 1;
-#endif // __GNUC__
-	])
-], [], [AC_MSG_FAILURE([Compiler not supported])])
-
-AC_RUN_IFELSE([
-	AC_LANG_PROGRAM([], [
-#if defined(__powerpc__)
-return 0;
-#else
-return 1;
-#endif
-	])
-], [arch="ppc"], [
-AC_RUN_IFELSE([
-	AC_LANG_PROGRAM([], [
-#if defined(__i386__) || defined(__x86_64__) || defined(__X86__)
-return 0;
-#else
-return 1;
-#endif
-	])
-], [arch="x86"], [AC_MSG_FAILURE(["Compiling on an unsupported architecture])]
-)])
+AS_IF(
+    [expr match "x$target_cpu" "xpowerpc"], [arch=ppc],
+    [expr match "x$target_cpu" "xx86"], [arch=x86],
+    [AC_MSG_FAILURE([Compiling on unsupported platform!])]
+)
 
 AM_CONDITIONAL(ARCH_PPC, test "x$arch" = "xppc")
 AM_CONDITIONAL(ARCH_X86, test "x$arch" = "xx86")
