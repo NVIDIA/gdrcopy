@@ -89,7 +89,6 @@ AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
 
 # Checks for library functions.
-AC_FUNC_MALLOC
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([clock_gettime memset munmap strerror strtol])
 

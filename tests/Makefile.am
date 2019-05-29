@@ -9,5 +9,5 @@ bin_PROGRAMS += copybw
 copybw_SOURCES = copybw.cpp
 
 bin_PROGRAMS += validate
-validate_SOURCES = copybw.cpp
+validate_SOURCES = validate.cpp
 
