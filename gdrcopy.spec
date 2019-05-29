@@ -1,6 +1,7 @@
 %{!?_release: %define _release 2}
 %{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?KVERSION: %define KVERSION %(uname -r)}
+%global debug_package %{nil}
 %global krelver %(echo -n %{KVERSION} | sed -e 's/-/_/g')
 %define MODPROBE %(if ( /sbin/modprobe -c | grep -q '^allow_unsupported_modules  *0'); then echo -n "/sbin/modprobe --allow-unsupported-modules"; else echo -n "/sbin/modprobe"; fi )
 %define driver_install_dir /lib/modules/%{KVERSION}/extra
@@ -55,13 +56,13 @@ echo "building"
 ./autogen.sh
 mkdir build
 cd build
-../configure --enable-test --prefix=$RPM_BUILD_ROOT%{_prefix} --libdir=$RPM_BUILD_ROOT%{_libdir} --enable-driver=$RPM_BUILD_ROOT%{driver_install_dir} LDFLAGS="-L${CUDA}/lib64" CFLAGS="-I${CUDA}/include" CXXFLAGS="-I${CUDA}/include"
-make -j8
+../configure DESTDIR=$RPM_BUILD_ROOT --enable-test --prefix=%{_prefix} --libdir=%{_libdir} --enable-driver=$RPM_BUILD_ROOT%{driver_install_dir} LDFLAGS="-L${CUDA}/lib64" CFLAGS="-I${CUDA}/include" CXXFLAGS="-I${CUDA}/include"
+make
 
 
 %install
 cd build
-make install
+make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix}
 
 # Install gdrdrv service script
 install -d $RPM_BUILD_ROOT/etc/init.d
