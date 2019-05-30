@@ -22,7 +22,7 @@ AC_CONFIG_SRCDIR([src/gdrapi.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIRS([config/m4])
 AC_CANONICAL_TARGET
-AM_INIT_AUTOMAKE([1.10 -Wall foreign tar-ustar silent-rules subdir-objects])
+AM_INIT_AUTOMAKE([1.15 -Wall foreign tar-ustar silent-rules subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 # Checks for programs.
