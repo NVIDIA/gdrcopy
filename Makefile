@@ -29,7 +29,7 @@ endif
 
 LIBOBJS := $(LIBSRCS:.c=.o)
 
-SRCS := basic.cpp validate.cpp copybw.cpp
+SRCS := basic.cpp validate.cpp copybw.cpp test_invalidation.cpp
 EXES := $(SRCS:.cpp=)
 
 
@@ -76,6 +76,7 @@ gdrapi.o: gdrapi.c gdrapi.h
 validate.o: validate.cpp gdrapi.h common.hpp
 basic.o: basic.cpp gdrapi.h common.hpp
 copybw.o: copybw.cpp gdrapi.h common.hpp
+test_invalidation.o: test_invalidation.cpp gdrapi.h common.hpp
 
 basic: basic.o $(LIB)
 	$(LINK.cc)  -o $@ $^ $(LIBS)
@@ -85,6 +86,9 @@ validate: validate.o $(LIB)
 
 copybw: copybw.o $(LIB)
 	$(LINK.cc)  -o $@ $^ $(LIBS)
+
+test_invalidation: test_invalidation.o $(LIB)
+	$(LINK.cc)  -o $@ $^ -lcheck -lcudart -lcuda -lpthread -lrt -lsubunit
 
 driver:
 	cd gdrdrv; \
