@@ -56,13 +56,20 @@
 static void compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
 {
     int diff = 0;
-    ASSERT_EQ(size % 4, 0U);
+    if (size % 4 != 0U) {
+        printf("warning: buffer size is not dword aligned\n");
+        size -= (size % 4);
+    }
     for(unsigned  w = 0; w<size/sizeof(uint32_t); ++w) {
-		if (ref_buf[w] != buf[w]) { 
-			if (diff < 10)
-				printf("[word %d] %08x != %08x\n", w, buf[w], ref_buf[w]);
-			++diff;
-		}
+        if (ref_buf[w] != buf[w]) {
+            if (!diff) {
+                printf("%10.10s %8.8s %8.8s\n", "word", "content", "expected");
+            }
+            if (diff < 10) {
+                printf("%10d %08x %08x\n", w, buf[w], ref_buf[w]);
+            }
+            ++diff;
+        }
     }
     //OUT << "diff(s): " << diff << endl;
     //CHECK_EQ(diff, 0);

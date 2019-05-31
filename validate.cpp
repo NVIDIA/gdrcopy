@@ -110,11 +110,12 @@ int main(int argc, char *argv[])
         compare_buf(init_buf, copy_buf, size - extra_off);
         memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
+        // check for access to misaligned address
         extra_off = 11;
         printf("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
-        gdr_copy_to_bar((char*)buf_ptr + extra_off, init_buf, size);
-        gdr_copy_from_bar(copy_buf, (char*)buf_ptr + extra_off, size);
-        compare_buf(init_buf, copy_buf, size);
+        gdr_copy_to_bar((char*)buf_ptr + extra_off, init_buf, size - extra_off);
+        gdr_copy_from_bar(copy_buf, (char*)buf_ptr + extra_off, size - extra_off);
+        compare_buf(init_buf, copy_buf, size - extra_off);
 
         printf("unampping\n");
         ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
