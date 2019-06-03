@@ -223,7 +223,7 @@ static void gdrdrv_zap_vma(struct address_space *mapping, struct vm_area_struct 
     up_write(&mm->mmap_sem);
 	mmput(mm);
 #else
-    unmap_mapping_range(mapping, vma->vm_start, vma->vm_end - vma->vm_start, 0);
+    unmap_mapping_range(mapping, vma->vm_pgoff << PAGE_SHIFT, vma->vm_end - vma->vm_start, 0);
 #endif
 }
 
