@@ -20,6 +20,8 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include <stdarg.h>
+#include <ctype.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <memory.h>
@@ -37,18 +39,34 @@ using namespace std;
 #include "gdrapi.h"
 #include "common.hpp"
 
+static bool _print_dbg_msg = false;
+
+static void print_dbg(const char* fmt, ...)
+{
+    if (_print_dbg_msg) {
+        va_list ap;
+        va_start(ap, fmt);
+        vfprintf(stderr, fmt, ap);
+    }
+}
+
+
 volatile bool expecting_exception_signal = false;
 
 void exception_signal_handle(int sig)
 {
-    if (expecting_exception_signal)
+    if (expecting_exception_signal) {
+        print_dbg("Get signal %d as expected\n", sig);
         exit(EXIT_SUCCESS);
+    }
     ck_abort_msg("Unexpectedly get exception signal");
 }
 
 START_TEST(invalidation_access_after_cumemfree)
 {
     expecting_exception_signal = false;
+
+    print_dbg("Start invalidation_access_after_cumemfree\n");
 
     struct sigaction act;
     act.sa_handler = exception_signal_handle;
@@ -78,44 +96,50 @@ START_TEST(invalidation_access_after_cumemfree)
     ASSERT_NEQ(g, (void*)0);
 
     gdr_mh_t mh;
-    BEGIN_CHECK {
-        CUdeviceptr d_ptr = d_A;
+    CUdeviceptr d_ptr = d_A;
 
-        // tokens are optional in CUDA 6.0
-        // wave out the test if GPUDirectRDMA is not enabled
-        BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
-        ASSERT_NEQ(mh, null_mh);
+    // tokens are optional in CUDA 6.0
+    // wave out the test if GPUDirectRDMA is not enabled
+    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_NEQ(mh, null_mh);
 
-        void *bar_ptr  = NULL;
-        ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
+    print_dbg("Mapping bar1\n");
+    void *bar_ptr  = NULL;
+    ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
 
-        gdr_info_t info;
-        ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-        int off = d_ptr - info.va;
+    gdr_info_t info;
+    ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+    int off = d_ptr - info.va;
 
-        volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
+    volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
 
-        // Write data
-        buf_ptr[0] = mydata;
+    // Write data
+    print_dbg("Writing %d into buf_ptr[0]\n", mydata);
+    buf_ptr[0] = mydata;
 
-        ASSERTDRV(cuMemFree(d_A));
-        
-        expecting_exception_signal = true;
-        int data_from_buf_ptr = buf_ptr[0];
-        expecting_exception_signal = false;
+    print_dbg("Calling cuMemFree\n");
+    ASSERTDRV(cuMemFree(d_A));
+    
+    print_dbg("Trying to read buf_ptr[0] after cuMemFree\n");
+    expecting_exception_signal = true;
+    int data_from_buf_ptr = buf_ptr[0];
+    expecting_exception_signal = false;
 
-        ck_assert_msg(data_from_buf_ptr != mydata, "Got the same data after cuMemFree!!");
-        
-        ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
-        ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
-    } END_CHECK;
+    ck_assert_msg(data_from_buf_ptr != mydata, "Got the same data after cuMemFree!!");
+    
+    ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+    ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
+
+    print_dbg("End invalidation_access_after_cumemfree\n");
 }
 END_TEST
 
 START_TEST(invalidation_two_mappings)
 {
     expecting_exception_signal = false;
+
+    print_dbg("Start invalidation_two_mappings\n");
 
     srand(time(NULL));
 
@@ -142,54 +166,63 @@ START_TEST(invalidation_two_mappings)
     ASSERT_NEQ(g, (void*)0);
 
     gdr_mh_t mh[2];
-    BEGIN_CHECK {
-        volatile int *buf_ptr[2];
-        void *bar_ptr[2];
 
-        for (int i = 0; i < 2; ++i) {
-            CUdeviceptr d_ptr = d_A[i];
+    volatile int *buf_ptr[2];
+    void *bar_ptr[2];
 
-            // tokens are optional in CUDA 6.0
-            // wave out the test if GPUDirectRDMA is not enabled
-            BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh[i]), 0);
-            ASSERT_NEQ(mh[i], null_mh);
+    print_dbg("Mapping bar1\n");
+    for (int i = 0; i < 2; ++i) {
+        CUdeviceptr d_ptr = d_A[i];
 
-            bar_ptr[i] = NULL;
-            ASSERT_EQ(gdr_map(g, mh[i], &bar_ptr[i], size), 0);
+        // tokens are optional in CUDA 6.0
+        // wave out the test if GPUDirectRDMA is not enabled
+        ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh[i]), 0);
+        ASSERT_NEQ(mh[i], null_mh);
 
-            gdr_info_t info;
-            ASSERT_EQ(gdr_get_info(g, mh[i], &info), 0);
-            int off = d_ptr - info.va;
+        bar_ptr[i] = NULL;
+        ASSERT_EQ(gdr_map(g, mh[i], &bar_ptr[i], size), 0);
 
-            buf_ptr[i] = (volatile int *)((char *)bar_ptr[i] + off);
-        }
+        gdr_info_t info;
+        ASSERT_EQ(gdr_get_info(g, mh[i], &info), 0);
+        int off = d_ptr - info.va;
+
+        buf_ptr[i] = (volatile int *)((char *)bar_ptr[i] + off);
+    }
 
 
-        // Write data
-        buf_ptr[0][0] = mydata;
-        buf_ptr[1][0] = mydata + 1;
+    // Write data
+    print_dbg("Writing data to both mappings %d and %d respectively\n", mydata, mydata + 1);
+    buf_ptr[0][0] = mydata;
+    buf_ptr[1][0] = mydata + 1;
 
-        ck_assert_int_eq(buf_ptr[0][0], mydata);
-        ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
+    print_dbg("Validating that we can read the data back\n");
+    ck_assert_int_eq(buf_ptr[0][0], mydata);
+    ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
 
-        ASSERTDRV(cuMemFree(d_A[0]));
+    print_dbg("cuMemFree and thus destroying the first mapping\n");
+    ASSERTDRV(cuMemFree(d_A[0]));
 
-        ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
+    print_dbg("Trying to read and validate the data from the second mapping after the first mapping has been destroyed\n");
+    ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
 
-        ASSERTDRV(cuMemFree(d_A[1]));
-        
-        for (int i = 0; i < 2; ++i) {
-            ASSERT_EQ(gdr_unmap(g, mh[i], bar_ptr[i], size), 0);
-            ASSERT_EQ(gdr_unpin_buffer(g, mh[i]), 0);
-        }
-    } END_CHECK;
+    ASSERTDRV(cuMemFree(d_A[1]));
+    
+    for (int i = 0; i < 2; ++i) {
+        ASSERT_EQ(gdr_unmap(g, mh[i], bar_ptr[i], size), 0);
+        ASSERT_EQ(gdr_unpin_buffer(g, mh[i]), 0);
+    }
+
     ASSERT_EQ(gdr_close(g), 0);
+
+    print_dbg("End invalidation_two_mappings\n");
 }
 END_TEST
 
 START_TEST(invalidation_fork_access_after_cumemfree)
 {
     expecting_exception_signal = false;
+
+    print_dbg("Start invalidation_fork_access_after_cumemfree\n");
 
     int filedes_0[2];
     int filedes_1[2];
@@ -209,7 +242,7 @@ START_TEST(invalidation_fork_access_after_cumemfree)
 
     myname = pid == 0 ? "child" : "parent";
 
-    cout << myname << ": Start" << endl;
+    print_dbg("%s: Start\n", myname);
 
     if (pid == 0) {
         close(filedes_0[0]);
@@ -222,9 +255,9 @@ START_TEST(invalidation_fork_access_after_cumemfree)
         int cont = 0;
 
         do {
-            cout << myname << ": waiting for cont signal" << endl;
+            print_dbg("%s: waiting for cont signal from parent\n", myname);
             ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
-            cout << myname << ": receive cont signal " << cont << endl;
+            print_dbg("%s: receive cont signal %d from parent\n", myname, cont);
         } while (cont != 1);
     }
     else {
@@ -257,71 +290,76 @@ START_TEST(invalidation_fork_access_after_cumemfree)
     ASSERT_NEQ(g, (void*)0);
 
     gdr_mh_t mh;
-    BEGIN_CHECK {
-        CUdeviceptr d_ptr = d_A;
 
-        // tokens are optional in CUDA 6.0
-        // wave out the test if GPUDirectRDMA is not enabled
-        BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
-        ASSERT_NEQ(mh, null_mh);
+    CUdeviceptr d_ptr = d_A;
 
-        void *bar_ptr  = NULL;
-        ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
+    // tokens are optional in CUDA 6.0
+    // wave out the test if GPUDirectRDMA is not enabled
+    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_NEQ(mh, null_mh);
 
-        gdr_info_t info;
-        ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-        int off = d_ptr - info.va;
+    void *bar_ptr  = NULL;
+    ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
 
-        volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
-        cout << myname << ": buf_ptr is " << buf_ptr << endl;
+    gdr_info_t info;
+    ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+    int off = d_ptr - info.va;
 
-        buf_ptr[0] = mydata;
-        cout << myname << ": write buf_ptr[0] with " << buf_ptr[0] << endl;
+    volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
 
-        if (pid == 0) {
-            cout << myname << ": signal parent that I have written" << endl;
-            ck_assert_int_eq(write(write_fd, &mydata, sizeof(int)), sizeof(int));
+    print_dbg("%s: writing buf_ptr[0] with %d\n", myname, mydata);
+    buf_ptr[0] = mydata;
 
-            int cont = 0;
-            cout << myname << ": waiting for signal from parent before calling cuMemFree" << endl;
-            do {
-                ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
-            } while (cont != 1);
-        }
+    if (pid == 0) {
+        print_dbg("%s: signal parent that I have written\n", myname);
+        ck_assert_int_eq(write(write_fd, &mydata, sizeof(int)), sizeof(int));
 
-        cout << myname << ": read buf_ptr[0] before cuMemFree get " << buf_ptr[0] << endl;
+        int cont = 0;
+        print_dbg("%s: waiting for signal from parent before calling cuMemFree\n", myname);
+        do {
+            ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
+        } while (cont != 1);
+    }
 
-        ASSERTDRV(cuMemFree(d_A));
+    print_dbg("%s: read buf_ptr[0] before cuMemFree get %d\n", myname, buf_ptr[0]);
 
-        if (pid > 0) {
-            cout << myname << ": did cuMemFree" << endl;
-            int msg = 1;
-            ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
-            int child_data = 0;
-            cout << myname << ": waiting for child write signal" << endl;
-            do {
-                ck_assert_int_eq(read(read_fd, &child_data, sizeof(int)), sizeof(int));
-            } while (child_data == 0);
+    print_dbg("%s: calling cuMemFree\n", myname);
+    ASSERTDRV(cuMemFree(d_A));
 
-            expecting_exception_signal = true;
-            int data_from_buf_ptr = buf_ptr[0];
-            expecting_exception_signal = false;
-            cout << myname << ": read buf_ptr[0] after child write get " << data_from_buf_ptr << endl;
-            cout << myname << ": child data is " << child_data << endl;
-            ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
-            ck_assert_msg(child_data != data_from_buf_ptr, "Data from the child process should not be visible on the parent process via bar mapping!!! Security breached!!!");
-        }
+    if (pid > 0) {
+        int msg = 1;
+        ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
+        int child_data = 0;
+        print_dbg("%s: waiting for child write signal\n", myname);
+        do {
+            ck_assert_int_eq(read(read_fd, &child_data, sizeof(int)), sizeof(int));
+        } while (child_data == 0);
 
-        ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
-        ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
-    } END_CHECK;
+        print_dbg("%s: trying to read buf_ptr[0]\n", myname);
+        expecting_exception_signal = true;
+        int data_from_buf_ptr = buf_ptr[0];
+        expecting_exception_signal = false;
+
+        print_dbg("%s: read buf_ptr[0] after child write get %d\n", myname, data_from_buf_ptr);
+        print_dbg("%s: child data is %d\n", myname, child_data);
+        ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
+        ck_assert_msg(child_data != data_from_buf_ptr, "Data from the child process should not be visible on the parent process via bar mapping!!! Security breached!!!");
+    }
+
+    ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+    ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+
     ASSERT_EQ(gdr_close(g), 0);
+
+    print_dbg("End invalidation_fork_access_after_cumemfree\n");
 }
 END_TEST
 
 START_TEST(invalidation_fork_after_gdr_map)
 {
     expecting_exception_signal = false;
+
+    print_dbg("Start invalidation_fork_after_gdr_map\n");
 
     int filedes_0[2];
     int filedes_1[2];
@@ -348,107 +386,110 @@ START_TEST(invalidation_fork_after_gdr_map)
     ASSERT_NEQ(g, (void*)0);
 
     gdr_mh_t mh;
-    BEGIN_CHECK {
-        CUdeviceptr d_ptr = d_A;
 
-        // tokens are optional in CUDA 6.0
-        // wave out the test if GPUDirectRDMA is not enabled
-        BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
-        ASSERT_NEQ(mh, null_mh);
+    CUdeviceptr d_ptr = d_A;
 
-        void *bar_ptr  = NULL;
-        ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
+    // tokens are optional in CUDA 6.0
+    // wave out the test if GPUDirectRDMA is not enabled
+    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_NEQ(mh, null_mh);
 
-        gdr_info_t info;
-        ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-        int off = d_ptr - info.va;
+    void *bar_ptr  = NULL;
+    ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
 
-        volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
+    gdr_info_t info;
+    ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+    int off = d_ptr - info.va;
 
-        pid_t pid = fork();
-        ck_assert_int_ge(pid, 0);
+    volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
 
-        myname = pid == 0 ? "child" : "parent";
+    pid_t pid = fork();
+    ck_assert_int_ge(pid, 0);
 
-        srand(time(NULL));
+    myname = pid == 0 ? "child" : "parent";
 
-        int mynumber = rand() % 1000 + 1;
+    print_dbg("%s: Start\n", myname);
 
-        cout << myname << ": bar_ptr: " << bar_ptr << endl;
+    srand(time(NULL));
 
-        if (pid == 0) {
-            close(filedes_0[0]);
-            close(filedes_1[1]);
+    int mynumber = rand() % 1000 + 1;
 
-            read_fd = filedes_1[0];
-            write_fd = filedes_0[1];
+    if (pid == 0) {
+        close(filedes_0[0]);
+        close(filedes_1[1]);
 
-            srand(rand());
-            int cont = 0;
+        read_fd = filedes_1[0];
+        write_fd = filedes_0[1];
 
-            do {
-                cout << myname << ": waiting for cont signal" << endl;
-                ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
-                cout << myname << ": receive cont signal " << cont << endl;
-            } while (cont != 1);
-        }
-        else {
-            close(filedes_0[1]);
-            close(filedes_1[0]);
+        srand(rand());
+        int cont = 0;
 
-            read_fd = filedes_0[0];
-            write_fd = filedes_1[1];
-        }
+        do {
+            print_dbg("%s: waiting for cont signal from parent\n", myname);
+            ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
+            print_dbg("%s: receive cont signal %d from parent\n", myname, cont);
+        } while (cont != 1);
+    }
+    else {
+        close(filedes_0[1]);
+        close(filedes_1[0]);
 
-        if (pid > 0) {
-            cout << myname << ": write buf_ptr[0] with " << mynumber << endl;
-            buf_ptr[0] = mynumber;
-        }
+        read_fd = filedes_0[0];
+        write_fd = filedes_1[1];
+    }
 
-        if (pid == 0) {
-            struct sigaction act;
-            act.sa_handler = exception_signal_handle;
-            sigemptyset(&act.sa_mask);
-            act.sa_flags = 0;
-            sigaction(SIGBUS, &act, 0);
-            sigaction(SIGSEGV, &act, 0);
+    if (pid > 0) {
+        print_dbg("%s: writing buf_ptr[0] with %d\n", myname, mynumber);
+        buf_ptr[0] = mynumber;
+    }
 
-            expecting_exception_signal = true;
-        }
-        cout << myname << ": try to read buf_ptr[0]" << endl;
-        int data_from_buf_ptr = buf_ptr[0];
-        cout << myname << ": read buf_ptr[0] get " << data_from_buf_ptr << endl;
-        if (pid == 0) {
-            expecting_exception_signal = false;
-            cout << myname << ": should not get to here! Error!!" << mynumber << endl;
-            exit(EXIT_FAILURE);
-        }
+    if (pid == 0) {
+        struct sigaction act;
+        act.sa_handler = exception_signal_handle;
+        sigemptyset(&act.sa_mask);
+        act.sa_flags = 0;
+        sigaction(SIGBUS, &act, 0);
+        sigaction(SIGSEGV, &act, 0);
 
-        if (pid > 0) {
-            cout << myname << ": signal child" << endl;
-            int msg = 1;
-            ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
-            cout << myname << ": waiting for cont signal" << endl;
-            // Child should exit because of sigbus, so we get nothing.
-            int child_exit_status = -EINVAL;
-            ck_assert_int_eq(wait(&child_exit_status), pid);
-            ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
-            cout << myname << ": try to read buf_ptr[0] after child exits" << endl;
-            data_from_buf_ptr = buf_ptr[0];
-            cout << myname << ": read buf_ptr[0] after child exits get " << data_from_buf_ptr << endl;
-            ck_assert_int_eq(data_from_buf_ptr, mynumber);
-            ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
-            ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
-            ASSERTDRV(cuMemFree(d_A));
-            ASSERT_EQ(gdr_close(g), 0);
-        }
-    } END_CHECK;
+        expecting_exception_signal = true;
+    }
+    print_dbg("%s: trying to read buf_ptr[0]\n", myname);
+    int data_from_buf_ptr = buf_ptr[0];
+    print_dbg("%s: read buf_ptr[0] get %d\n", myname, data_from_buf_ptr);
+    if (pid == 0) {
+        expecting_exception_signal = false;
+        print_dbg("%s: should not be able to read buf_ptr[0] anymore!! aborting!!\n", myname);
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid > 0) {
+        print_dbg("%s: signaling child\n", myname);
+        int msg = 1;
+        ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
+        print_dbg("%s: waiting for child to exit\n", myname);
+        // Child should exit because of sigbus
+        int child_exit_status = -EINVAL;
+        ck_assert_int_eq(wait(&child_exit_status), pid);
+        ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
+        print_dbg("%s: trying to read buf_ptr[0] after child exits\n", myname);
+        data_from_buf_ptr = buf_ptr[0];
+        print_dbg("%s: read buf_ptr[0] after child exits get %d\n", myname, data_from_buf_ptr);
+        ck_assert_int_eq(data_from_buf_ptr, mynumber);
+        ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+        ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+        ASSERTDRV(cuMemFree(d_A));
+        ASSERT_EQ(gdr_close(g), 0);
+    }
+
+    print_dbg("End invalidation_fork_after_gdr_map\n");
 }
 END_TEST
 
 START_TEST(invalidation_fork_child_gdr_map_parent)
 {
     expecting_exception_signal = false;
+
+    print_dbg("Start invalidation_fork_child_gdr_map_parent\n");
 
     const size_t _size = sizeof(int) * 16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -481,9 +522,13 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
 
     myname = pid == 0 ? "child" : "parent";
 
+    print_dbg("%s: Start\n", myname);
+
     if (pid == 0) {
         void *bar_ptr  = NULL;
+        print_dbg("%s: attempting to gdr_map parent's pinned GPU memory\n", myname);
         ck_assert_int_ne(gdr_map(g, mh, &bar_ptr, size), 0);
+        print_dbg("%s: cannot do gdr_map as expected\n", myname);
     }
     else {
         int child_exit_status = -EINVAL;
@@ -494,12 +539,15 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
         ASSERTDRV(cuMemFree(d_A));
         ASSERT_EQ(gdr_close(g), 0);
     }
+    print_dbg("End invalidation_fork_child_gdr_map_parent\n");
 }
 END_TEST
 
 START_TEST(invalidation_fork_map_and_free)
 {
     expecting_exception_signal = false;
+
+    print_dbg("Start invalidation_fork_map_and_free\n");
 
     int filedes_0[2];
     int filedes_1[2];
@@ -519,7 +567,7 @@ START_TEST(invalidation_fork_map_and_free)
 
     myname = pid == 0 ? "child" : "parent";
 
-    cout << myname << ": Start" << endl;
+    print_dbg("%s: Start\n", myname);
 
     if (pid == 0) {
         close(filedes_0[0]);
@@ -554,61 +602,86 @@ START_TEST(invalidation_fork_map_and_free)
     ASSERT_NEQ(g, (void*)0);
 
     gdr_mh_t mh;
-    BEGIN_CHECK {
-        CUdeviceptr d_ptr = d_A;
 
-        // tokens are optional in CUDA 6.0
-        // wave out the test if GPUDirectRDMA is not enabled
-        BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
-        ASSERT_NEQ(mh, null_mh);
+    CUdeviceptr d_ptr = d_A;
 
-        void *bar_ptr  = NULL;
-        ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
+    // tokens are optional in CUDA 6.0
+    // wave out the test if GPUDirectRDMA is not enabled
+    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_NEQ(mh, null_mh);
 
-        gdr_info_t info;
-        ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-        int off = d_ptr - info.va;
+    void *bar_ptr  = NULL;
+    ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
 
-        volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
-        cout << myname << ": buf_ptr is " << buf_ptr << endl;
+    gdr_info_t info;
+    ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+    int off = d_ptr - info.va;
 
-        buf_ptr[0] = mydata;
-        cout << myname << ": write buf_ptr[0] with " << buf_ptr[0] << endl;
+    volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
 
-        if (pid == 0) {
-            ASSERTDRV(cuMemFree(d_A));
+    print_dbg("%s: writing buf_ptr[0] with %d\n", myname, mydata);
+    buf_ptr[0] = mydata;
 
-            cout << myname << ": signal parent that I have called cuMemFree" << endl;
-            int msg = 1;
-            ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
-        }
-        else {
-            int cont = 0;
-            cout << myname << ": waiting for signal from child" << endl;
-            do {
-                ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
-            } while (cont == 0);
-            cout << myname << ": received cont signal from child" << endl;
+    if (pid == 0) {
+        print_dbg("%s: calling cuMemFree\n", myname);
+        ASSERTDRV(cuMemFree(d_A));
 
-            cout << myname << ": try reading buf_ptr[0]" << endl;
-            int data_from_buf_ptr = buf_ptr[0];
-            cout << myname << ": read buf_ptr[0] get " << data_from_buf_ptr << endl;
-            ck_assert_int_eq(data_from_buf_ptr, mydata);
-        }
+        print_dbg("%s: signal parent that I have called cuMemFree\n", myname);
+        int msg = 1;
+        ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
+    }
+    else {
+        int cont = 0;
+        do {
+            print_dbg("%s: waiting for signal from child\n", myname);
+            ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
+            print_dbg("%s: received cont signal %d from child\n", myname, cont);
+        } while (cont == 0);
 
-        ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
-        ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+        print_dbg("%s: trying to read buf_ptr[0]\n", myname);
+        int data_from_buf_ptr = buf_ptr[0];
+        print_dbg("%s: read buf_ptr[0] get %d\n", myname, data_from_buf_ptr);
+        ck_assert_int_eq(data_from_buf_ptr, mydata);
+    }
 
-        if (pid > 0)
-            ASSERTDRV(cuMemFree(d_A));
+    ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+    ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
 
-    } END_CHECK;
+    if (pid > 0)
+        ASSERTDRV(cuMemFree(d_A));
+
     ASSERT_EQ(gdr_close(g), 0);
+
+    print_dbg("End invalidation_fork_map_and_free\n");
 }
 END_TEST
 
 int main(int argc, char *argv[])
 {
+    int c;
+
+    while ((c = getopt(argc, argv, "h::v::")) != -1) {
+        switch (c) {
+            case 'v':
+                _print_dbg_msg = true;
+                print_dbg("Enable debug message\n");
+                break;
+            case 'h':
+                cout << "Usage: " << argv[0] << " [-v] [-h]" << endl;
+                break;
+            case '?':
+                if (isprint(optopt))
+                    fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+                else
+                    fprintf(stderr,
+                            "Unknown option character `\\x%x'.\n",
+                            optopt);
+                return 1;
+            default:
+                abort();
+        }
+    }
+
     Suite *s = suite_create("Invalidation");
     TCase *tc = tcase_create("Invalidation");
     SRunner *sr = srunner_create(s);
