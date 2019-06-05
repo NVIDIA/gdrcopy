@@ -197,18 +197,21 @@ struct gdr_mr {
 };
 typedef struct gdr_mr gdr_mr_t;
 
-static int gdr_mr_is_mapped(gdr_mr_t *mr )
+static int gdr_mr_is_mapped(gdr_mr_t *mr)
 {
     return mr->cpu_mapping_type != GDR_MR_NONE;
 }
 
-static int gdr_mr_is_wc_mapping(gdr_mr_t *mr )
+static int gdr_mr_is_wc_mapping(gdr_mr_t *mr)
 {
-    return (mr->cpu_mapping_type == GDR_MR_WC  ) ? 1 : 0;
+    return (mr->cpu_mapping_type == GDR_MR_WC) ? 1 : 0;
 }
 
 static inline void gdrdrv_zap_vma(struct address_space *mapping, struct vm_area_struct *vma)
 {
+    // This function is mainly used for files and the address is relative to
+    // the file offset. We use vma->pg_off here to unmap this entire range but
+    // not the other mapped ranges.
     unmap_mapping_range(mapping, vma->vm_pgoff << PAGE_SHIFT, vma->vm_end - vma->vm_start, 0);
 }
 
@@ -223,11 +226,22 @@ static void gdr_mr_destroy_all_mappings(gdr_mr_t *mr)
 
 struct gdr_info {
     // simple low-performance linked-list implementation
-    struct list_head mr_list;
-    struct mutex lock;
-    struct pid *pid;
-    struct address_space mapping;
-    off_t next_offset;
+    struct list_head        mr_list;
+    struct mutex            lock;
+
+    // Pointer to the pid struct of the creator process. We do not use
+    // numerical pid here to avoid issues from pid reuse.
+    struct pid             *pid;
+
+    // Address space uniqued to this opened file. We need to create a new one
+    // because filp->f_mapping usually points to inode->i_mapping.
+    struct address_space    mapping;
+
+    // The handle number of mmap's offset are equivalent. However, the mmap
+    // offset is used by the linux kernel when doing m(un)map; hence the range
+    // cannot be overlapped. We place two ranges next two each other to avoid
+    // this issue.
+    off_t                   next_offset;
 };
 typedef struct gdr_info gdr_info_t;
 
@@ -265,9 +279,12 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
 
     // Create mapping per opened file. By preventing sharing of this file, the
     // mapping is local to the process.
+
+    // TODO: Old kernels don't have address_space_init_once
     address_space_init_once(&info->mapping);
     info->mapping.host = filp->f_mapping->host;
     info->mapping.a_ops = filp->f_mapping->a_ops;
+    // TODO: Old kernels have f_mapping->backing_dev_info
     filp->f_mapping = &info->mapping;
 
     filp->private_data = info;
@@ -483,7 +500,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     list_add(&mr->node, &info->mr_list);
 
     // The user treats handle as the offset value for mmap. To guarantee no
-    // overlapping, the next offset will sit next to this mapping space.
+    // overlapping, the next offset will sit next to this mapping range.
     // Remember that the address space is local to the process. Thus, two
     // processes do mmap with the same offset get different mappings.
     mr->handle = info->next_offset;
@@ -649,6 +666,7 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
         gdr_err("filp contains no info\n");
         return -EIO;
     }
+    // Check that the caller is the same process that did gdrdrv_open
     if (info->pid != task_pid(current)) {
         gdr_err("filp is not opened by the current process\n");
         return -EACCES;
@@ -730,7 +748,10 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
         goto out;
     }
     pfn = paddr >> PAGE_SHIFT;
+
+    // Disallow mmapped VMA to propagate to child processes
     vma->vm_flags |= VM_DONTCOPY;
+
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
     vma->vm_pgoff = pfn;
     vma->vm_flags |= VM_RESERVED;
@@ -778,6 +799,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         gdr_err("filp contains no info\n");
         return -EIO;
     }
+    // Check that the caller is the same process that did gdrdrv_open
     if (info->pid != task_pid(current)) {
         gdr_err("filp is not opened by the current process\n");
         return -EACCES;
