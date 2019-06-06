@@ -18,6 +18,7 @@ m4_define([version_info], [lt_cur:lt_rev:lt_age])
 
 AC_PREREQ([2.69])
 AC_INIT([gdrcopy], [project_version], [gpudirect@github.com])
+AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_SRCDIR([src/gdrapi.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIRS([config/m4])
@@ -90,7 +91,15 @@ AC_TYPE_UINT64_T
 
 # Checks for library functions.
 AC_FUNC_MMAP
-AC_CHECK_FUNCS([clock_gettime memset munmap strerror strtol])
+AC_CHECK_FUNCS([memset munmap strerror strtol])
+
+AC_CHECK_FUNC(clock_gettime, [], [
+    AC_CHECK_LIB(rt, clock_gettime, [
+        LDFLAGS="$LDFLAGS -lrt"
+    ], [
+        AC_MSG_FAILURE([clock_gettime is not found in the standard libraries nor in librt])
+    ])
+])
 
 AS_IF(
     [expr match "x$target_cpu" "xpowerpc"], [arch=ppc],
