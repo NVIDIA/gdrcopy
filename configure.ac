@@ -40,44 +40,31 @@ LT_INIT
 
 AC_SUBST(VERSION_INFO, [version_info])
 
+AC_ARG_WITH(
+    [cuda],
+    [AC_HELP_STRING([--with-cuda@<:@=DIR@:>@],
+                    [Build with cuda @<:@default=check@:>@])],
+    [
+        LDFLAGS="$LDFLAGS -L${withval}/lib64"
+        CFLAGS="$CFLAGS -I${withval}/include"
+        CXXFLAGS="$CXXFLAGS -I${withval}/include"
+    ],
+    []
+)
+
 AC_ARG_ENABLE(
 	[test],
 	[AC_HELP_STRING([--enable-test],
-					[Build test programs (default=no)])],
+					[Build test programs @<:@default=no@:>@])],
 	[enable_test=$enableval],
 	[enable_test=no])
 
-AS_IF(
-	[test "x$enable_test" = "xyes"], [
-	AC_MSG_NOTICE([Test is enabled])
-	AC_CHECK_LIB([cuda], [cuMemAlloc], [], [AC_MSG_FAILURE([libcuda not found])])
-	AC_CHECK_LIB([cudart], [cudaMalloc], [], [AC_MSG_FAILURE([libcudart not found])])
-	AC_CHECK_HEADER([cuda.h], [], [AC_MSG_FAILURE([cuda.h not found])])
-	AC_CHECK_HEADER([cuda_runtime_api.h], [], [AC_MSG_FAILURE([cuda_runtime_api.h not found])])
-], [
-	AC_MSG_NOTICE([Test is disabled])
-])
-AM_CONDITIONAL(TEST_ENABLE, test "x$enable_test" = "xyes")
-
 AC_ARG_ENABLE(
 	[driver],
-	[AC_HELP_STRING([--enable-driver],
-					[Build the gdrdrv driver and install at the specified path (usage: --enable-driver=<path>)])],
+	[AC_HELP_STRING([--enable-driver@<:@=DIR@:>@],
+					[Build the gdrdrv driver and install at the specified path @<:@default=yes@:>@])],
 	[enable_driver=$enableval],
 	[enable_driver=yes])
-AS_IF(
-	[test "x$enable_driver" != "xno"], [
-	AC_MSG_NOTICE([gdrdrv is enabled])
-	AS_IF(
-		[test "x$enable_driver" = "xyes"],
-		[driver_path=$libdir],
-		[driver_path=$enable_driver]
-	)
-	AC_SUBST(DRIVER_PATH, $driver_path)
-], [
-	AC_MSG_NOTICE([gdrdrv is disabled])
-])
-AM_CONDITIONAL(DRIVER_ENABLE, test "x$enable_driver" != "xno")
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h malloc.h memory.h netdb.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h], [], [AC_MSG_FAILURE([Some of the above required headers are not found])])
@@ -100,6 +87,32 @@ AC_CHECK_FUNC(clock_gettime, [], [
         AC_MSG_FAILURE([clock_gettime is not found in the standard libraries nor in librt])
     ])
 ])
+
+AS_IF(
+	[test "x$enable_test" = "xyes"], [
+	AC_MSG_NOTICE([Test is enabled])
+	AC_CHECK_LIB([cuda], [cuMemAlloc], [], [AC_MSG_FAILURE([libcuda not found])])
+	AC_CHECK_LIB([cudart], [cudaMalloc], [], [AC_MSG_FAILURE([libcudart not found])])
+	AC_CHECK_HEADER([cuda.h], [], [AC_MSG_FAILURE([cuda.h not found])])
+	AC_CHECK_HEADER([cuda_runtime_api.h], [], [AC_MSG_FAILURE([cuda_runtime_api.h not found])])
+], [
+	AC_MSG_NOTICE([Test is disabled])
+])
+AM_CONDITIONAL(TEST_ENABLE, test "x$enable_test" = "xyes")
+
+AS_IF(
+	[test "x$enable_driver" != "xno"], [
+	AC_MSG_NOTICE([gdrdrv is enabled])
+	AS_IF(
+		[test "x$enable_driver" = "xyes"],
+		[driver_path=$libdir],
+		[driver_path=$enable_driver]
+	)
+	AC_SUBST(DRIVER_PATH, $driver_path)
+], [
+	AC_MSG_NOTICE([gdrdrv is disabled])
+])
+AM_CONDITIONAL(DRIVER_ENABLE, test "x$enable_driver" != "xno")
 
 AS_IF(
     [expr match "x$target_cpu" "xpowerpc"], [arch=ppc],
