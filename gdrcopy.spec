@@ -56,7 +56,7 @@ echo "building"
 ./autogen.sh
 mkdir build
 cd build
-../configure DESTDIR=$RPM_BUILD_ROOT --enable-test --prefix=%{_prefix} --libdir=%{_libdir} --enable-driver=$RPM_BUILD_ROOT%{driver_install_dir} LDFLAGS="-L${CUDA}/lib64" CFLAGS="-I${CUDA}/include" CXXFLAGS="-I${CUDA}/include"
+../configure DESTDIR=$RPM_BUILD_ROOT --enable-test --prefix=%{_prefix} --libdir=%{_libdir} --enable-driver=$RPM_BUILD_ROOT%{driver_install_dir} --with-cuda=${CUDA}
 make
 
 
