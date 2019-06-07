@@ -1,5 +1,10 @@
 #!/bin/bash
 
+SCRIPT_DIR_PATH="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."
+
+CWD=$(pwd)
+
 ex()
 {
     if ! eval "$@"; then
@@ -13,6 +18,8 @@ set -x
 if [ "X$CUDA" == "X" ]; then
     echo "CUDA is not defined"; exit 1
 fi
+
+cd ${SCRIPT_DIR_PATH}
 
 VERSION=`grep Version: *.spec | cut -d : -f 2 | sed -e 's@\s@@g'`
 RELEASE=`grep "define _release" *.spec | cut -d" " -f"4"| sed -r -e 's/}//'`
@@ -28,13 +35,13 @@ if [ ! -d "$tmpdir" ]; then
 fi
 echo "Working in $tmpdir ..."
 
-cwd=$PWD
-
 #cp gdrcopy.spec ~/work/mellanox/rpmbuild/SPECS/
+
+cd ${TOP_DIR_PATH}
 
 mkdir -p $tmpdir/gdrcopy
 rm -rf $tmpdir/gdrcopy/*
-cp -r *.* include src tests LICENSE config_arch Makefile $tmpdir/gdrcopy/
+cp -r *.* include src tests LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
 rm -f $tmpdir/gdrcopy-$VERSION.tar.gz
 cd $tmpdir
 mv gdrcopy gdrcopy-$VERSION
@@ -48,7 +55,7 @@ rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' -
 rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
 srpm=`ls -1 $tmpdir/topdir/SRPMS/`
 echo $srpm $rpms
-cd $cwd
+cd ${CWD}
 mv $tmpdir/topdir/SRPMS/*.rpm .
 mv $tmpdir/topdir/RPMS/*/*.rpm .
 
