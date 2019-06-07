@@ -1,36 +1,10 @@
 #/bin/sh
 
-(set -x; libtoolize)
-if [ $? -ne 0 ]
-then
-    echo "Error in libtoolize!!"
-    exit 1
-fi
+set -x
 
-(set -x; aclocal)
-if [ $? -ne 0 ]
-then
-    echo "Error in aclocal!!"
-    exit 1
-fi
+rm -rf aclocal.m4 autom4te.cache config config.h.in configure Makefile.in src/Makefile.in tests/Makefile.in
 
-(set -x; autoconf)
-if [ $? -ne 0 ]
-then
-    echo "Error in autoconf!!"
-    exit 1
-fi
+mkdir -p config/m4
 
-(set -x; autoheader)
-if [ $? -ne 0 ]
-then
-    echo "Error in autoheader!!"
-    exit 1
-fi
+autoreconf -iv || exit 1
 
-(set -x; automake --add-missing --foreign)
-if [ $? -ne 0 ]
-then
-    echo "Error in automake!!"
-    exit 1
-fi
