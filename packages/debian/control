@@ -1,0 +1,16 @@
+Source: gdrcopy
+Priority: optional
+Maintainer: Pak Markthub <pmarkthub@nvidia.com>
+Build-Depends: debhelper (>= 10), autotools-dev
+Standards-Version: 1.4.2
+Section: libs
+Homepage: https://github.com/NVIDIA/gdrcopy
+#Vcs-Git: https://anonscm.debian.org/git/collab-maint/gdrcopy.git
+#Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/gdrcopy.git
+
+Package: gdrcopy
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A low-latency GPU memory copy library 
+ A low-latency GPU memory copy library based on NVIDIA GPUDirect RDMA technology.
