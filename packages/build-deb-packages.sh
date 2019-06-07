@@ -35,27 +35,20 @@ if [ ! -d "$tmpdir" ]; then
 fi
 echo "Working in $tmpdir ..."
 
-#cp gdrcopy.spec ~/work/mellanox/rpmbuild/SPECS/
-
 cd ${TOP_DIR_PATH}
 
 mkdir -p $tmpdir/gdrcopy
 rm -rf $tmpdir/gdrcopy/*
-cp -r autogen.sh configure.ac init.d insmod.sh Makefile.am README.md include src tests LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
-rm -f $tmpdir/gdrcopy-$VERSION.tar.gz
+cp -r autogen.sh configure.ac init.d insmod.sh Makefile.am README.md include src tests LICENSE packages/debian $tmpdir/gdrcopy/
+rm -f $tmpdir/gdrcopy_$VERSION.orig.tar.gz
+
 cd $tmpdir
 mv gdrcopy gdrcopy-$VERSION
-tar czvf gdrcopy-$VERSION.tar.gz gdrcopy-$VERSION
+tar czvf gdrcopy_$VERSION.orig.tar.gz gdrcopy-$VERSION
 
-mkdir -p $tmpdir/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
-cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
-cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
+cd $tmpdir/gdrcopy-$VERSION
+debuild --set-envvar=CUDA=$CUDA -us -uc
 
-rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' --define "CUDA $CUDA"             --define "KVERSION $(uname -r)" $tmpdir/topdir/SPECS/gdrcopy.spec
-rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
-srpm=`ls -1 $tmpdir/topdir/SRPMS/`
-echo $srpm $rpms
 cd ${CWD}
-mv $tmpdir/topdir/SRPMS/*.rpm .
-mv $tmpdir/topdir/RPMS/*/*.rpm .
+mv $tmpdir/*.deb .
 
