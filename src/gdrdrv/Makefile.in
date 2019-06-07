@@ -54,8 +54,8 @@ all: module
 
 module:
 	@ echo "Picking NVIDIA driver sources from NVIDIA_SRC_DIR=$(NVIDIA_SRC_DIR). If that does not meet your expectation, you might have a stale driver still around and that might cause problems."
-	@ $(LN_S) $(VPATH)/*.c . > /dev/null 2>&1 || echo "*.c exist, ignore"
-	@ $(LN_S) $(VPATH)/*.h . > /dev/null 2>&1 || echo "*.h exist, ignore"
+	@ if [ ! -f "gdrdrv.c" ] || [ -L "gdrdrv.c" ]; then $(LN_S) $(VPATH)/*.c . > /dev/null 2>&1 || echo "*.c exist, ignore"; fi
+	@ if [ ! -f "gdrdrv.h" ] || [ -L "gdrdrv.c" ]; then $(LN_S) $(VPATH)/*.h . > /dev/null 2>&1 || echo "*.h exist, ignore"; fi
 	@ $(MAKE) -C $(KDIR) M=$(PWD) modules
 
 install:

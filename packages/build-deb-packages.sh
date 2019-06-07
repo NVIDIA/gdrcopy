@@ -13,11 +13,13 @@ ex()
     fi
 }
 
-set -x
-
 if [ "X$CUDA" == "X" ]; then
-    echo "CUDA is not defined"; exit 1
+    echo "CUDA environment variable is not defined"; exit 1
 fi
+
+echo "Building debian package for the gdrcopy library ..."
+
+set -x
 
 cd ${SCRIPT_DIR_PATH}
 
@@ -49,6 +51,36 @@ tar czvf gdrcopy_$VERSION.orig.tar.gz gdrcopy-$VERSION
 cd $tmpdir/gdrcopy-$VERSION
 debuild --set-envvar=CUDA=$CUDA -us -uc
 
+# Preparing for building the gdrdrv driver
+cd $tmpdir/gdrcopy-$VERSION
+./configure --with-cuda=$CUDA
+
+set +x
+
+echo
+echo "Building dkms module ..."
+echo "Request upgrading to root ..."
+
+sudo -s <<EOF
+set -x
+mkdir -p /usr/src/gdrdrv-$VERSION/
+cd /usr/src/gdrdrv-$VERSION/
+cp -r $tmpdir/gdrcopy-$VERSION/src/gdrdrv/* .
+cp ${SCRIPT_DIR_PATH}/dkms.conf .
+
+dkms add -m gdrdrv -v $VERSION
+dkms build -m gdrdrv -v $VERSION
+dkms mkdsc -m gdrdrv -v $VERSION --source-only
+dkms mkdeb -m gdrdrv -v $VERSION --source-only
+cp /var/lib/dkms/gdrdrv/$VERSION/deb/*.deb $tmpdir/
+dkms remove -m gdrdrv/$VERSION --all
+rm -rf /var/lib/dkms/gdrdrv/$VERSION/
+EOF
+
+echo
+echo "Copying *.deb to the current working directory ..."
+
+set -x
 cd ${CWD}
 mv $tmpdir/*.deb .
 
