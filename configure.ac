@@ -16,6 +16,8 @@ m4_define([lt_rev], [incremental_ver])
 m4_define([lt_age], [minor_ver])
 m4_define([version_info], [lt_cur:lt_rev:lt_age])
 
+LT_PREREQ([2.4.6])
+
 AC_PREREQ([2.69])
 AC_INIT([gdrcopy], [project_version], [gpudirect@github.com])
 AC_CONFIG_HEADERS([config.h])
