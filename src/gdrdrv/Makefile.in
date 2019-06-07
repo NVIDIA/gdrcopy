@@ -74,6 +74,9 @@ distclean: clean
 	@ if [ -L "gdrdrv.h" ]; then rm -rf gdrdrv.h; fi
 	@ if [ -L "nv-p2p-dummy.c" ]; then rm -rf nv-p2p-dummy.c; fi
 
+uninstall:
+	rm -f $(DRIVER_PATH)/gdrdrv.ko
+
 TAGS:
 	find $(KERNELDIR) -follow -name \*.h -o -name \*.c  |xargs etags
 
