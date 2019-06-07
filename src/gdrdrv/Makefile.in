@@ -67,11 +67,31 @@ help:
 	$(MAKE) -C $(KDIR) M=$$PWD help
 
 clean:
-	rm -rf *.o *.ko* *.mod.* .*.cmd Module.symvers modules.order .tmp_versions/ *~ core .depend TAGS 
+	rm -rf *.o *.ko* *.mod.* .*.cmd Module.symvers modules.order .tmp_versions/ *~ core .depend TAGS .cache.mk
+
+distclean: clean
+	@ if [ -L "gdrdrv.c" ]; then rm -rf gdrdrv.c; fi
+	@ if [ -L "gdrdrv.h" ]; then rm -rf gdrdrv.h; fi
+	@ if [ -L "nv-p2p-dummy.c" ]; then rm -rf nv-p2p-dummy.c; fi
 
 TAGS:
 	find $(KERNELDIR) -follow -name \*.h -o -name \*.c  |xargs etags
 
-.PHONY: clean all help install default linksyms nvidia_src_dir
+.PHONY: help default linksyms nvidia_src_dir CTAGS GTAGS TAGS all all-am \
+	am--refresh check check-am clean clean-cscope clean-generic \
+	clean-libtool cscope cscopelist-am ctags ctags-am dist \
+	dist-all dist-bzip2 dist-gzip dist-lzip dist-shar dist-tarZ \
+	dist-xz dist-zip distcheck distclean distclean-generic \
+	distclean-hdr distclean-libtool distclean-tags distcleancheck \
+	distdir distuninstallcheck dvi dvi-am html html-am info \
+	info-am install install-am install-data install-data-am \
+	install-dvi install-dvi-am install-exec install-exec-am \
+	install-html install-html-am install-includeHEADERS \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs installdirs-am \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-am uninstall-includeHEADERS
 
 endif
