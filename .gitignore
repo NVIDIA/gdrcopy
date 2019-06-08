@@ -24,3 +24,16 @@
 
 # Editor files
 *.swp
+
+# Autotools
+Makefile.in
+aclocal.m4
+autom4te.cache/*
+config.h.in
+config/*
+configure
+!src/gdrdrv/Makefile.in
+
+# Packages
+*.rpm
+*.deb
