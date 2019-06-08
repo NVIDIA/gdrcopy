@@ -13,11 +13,13 @@ ex()
     fi
 }
 
-set -x
-
 if [ "X$CUDA" == "X" ]; then
-    echo "CUDA is not defined"; exit 1
+    echo "CUDA environment variable is not defined"; exit 1
 fi
+
+echo "Building rpm package ..."
+
+set -x
 
 cd ${SCRIPT_DIR_PATH}
 
