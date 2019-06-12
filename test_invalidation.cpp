@@ -163,6 +163,16 @@ typedef struct {
     unsigned wc_mapping:1;
 } gdr_memh_t;
 
+/**
+ * This unit test ensures that accessing to gdr_map'ed region is not possible
+ * after cuMemFree.
+ *
+ * Step:
+ * 1. Initialize CUDA and gdrcopy
+ * 2. Do gdr_map(..., &bar_ptr, ...)
+ * 3. Do cuMemFree
+ * 4. Attempt to access to bar_ptr after 3. should fail
+ */
 START_TEST(invalidation_access_after_cumemfree)
 {
     expecting_exception_signal = false;
@@ -236,6 +246,18 @@ START_TEST(invalidation_access_after_cumemfree)
 }
 END_TEST
 
+/**
+ * This unit test ensures that cuMemFree destroys only the mapping it is
+ * corresponding to.
+ *
+ * Step:
+ * 1. Initialize CUDA and gdrcopy
+ * 2. cuMemAlloc(&d_A, ...); cuMemAlloc(&d_B, ...)
+ * 3. Do gdr_map(..., &bar_ptr_A, ...) of d_A
+ * 4. Do gdr_map(..., &bar_ptr_B, ...) of d_B
+ * 5. Do cuMemFree(d_A)
+ * 6. Verify that bar_ptr_B is still accessible 
+ */
 START_TEST(invalidation_two_mappings)
 {
     expecting_exception_signal = false;
@@ -319,6 +341,26 @@ START_TEST(invalidation_two_mappings)
 }
 END_TEST
 
+/**
+ * This unit test is intended to check the security hole originated from not
+ * doing invalidation correctly. In a nutshell, it ensures that the parent
+ * process cannot spy on the child process.
+ *
+ * Step:
+ * 1. Fork the process
+ * 2.C Child: Waiting for parent's signal before continue
+ *
+ * 2.P Parent: Initialize CUDA and gdrcopy
+ * 3.P Parent: Do gdr_map then cuMemFree without gdr_unmap
+ * 4.P Parent: Signal child and wait for child's signal
+ *
+ * 3.C Child: Initialize CUDA and gdrcopy
+ * 4.C Child: Do gdr_map, signal parent, and wait for parent's signal
+ *
+ * 5.P Parent: Check whether it can access to its gdr_map'ed data or not and
+ *     compare with the data written by child. If gdrdrv does not handle
+ *     invalidation properly, child's data will be leaked to parent.
+ */
 START_TEST(invalidation_fork_access_after_cumemfree)
 {
     expecting_exception_signal = false;
@@ -456,6 +498,21 @@ START_TEST(invalidation_fork_access_after_cumemfree)
 }
 END_TEST
 
+/**
+ * This unit test makes sure that child processes cannot spy on the parent
+ * process if the parent does fork without doing gdr_unmap first.
+ *
+ * Step:
+ * 1. Initilize CUDA and gdrcopy
+ * 2. Do gdr_map
+ * 3. Fork the process
+ *
+ * 4.P Parent: Waiting for child to exit
+ * 
+ * 4.C Child: Attempt to access the gdr_map'ed data and compare with what
+ *     parent writes into that region. If gdrdrv does not invalidate the
+ *     mapping correctly, child can spy on parent.
+ */
 START_TEST(invalidation_fork_after_gdr_map)
 {
     expecting_exception_signal = false;
@@ -586,6 +643,22 @@ START_TEST(invalidation_fork_after_gdr_map)
 }
 END_TEST
 
+/**
+ * This unit test ensures that child cannot do gdr_map on what parent has
+ * prepared with gdr_pin_buffer. This situation emulates when the parent
+ * forgets that it has gdr_pin_buffer without gdr_map before doing fork.
+ *
+ * Step:
+ * 1. Initilize CUDA and gdrcopy
+ * 2. Do gdr_pin_buffer
+ * 3. Fork the process
+ *
+ * 4.P Parent: Waiting for child to exit
+ * 
+ * 4.C Child: Attempt to do gdr_map on the parent's pinned buffer. gdrdrv is
+ *     expected to prevent this case so that the child process cannot spy on
+ *     the parent's GPU data.
+ */
 START_TEST(invalidation_fork_child_gdr_map_parent)
 {
     expecting_exception_signal = false;
@@ -644,6 +717,24 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
 }
 END_TEST
 
+/**
+ * This unit test verifies that cuMemFree of one process will not
+ * unintentionally invalidate mapping on other processes.
+ *
+ * Step:
+ * 1. Fork
+ *
+ * 2.P Parent: Init CUDA and gdrcopy, and do gdr_map.
+ * 3.P Parent: Wait for child's signal.
+ *
+ * 2.C Child: Init CUDA and gdrcopy, and do gdr_map.
+ * 3.C Child: Do cuMemFree. This should unmap the gdr_map'ed region.
+ * 4.C Child: Signal parent.
+ *
+ * 4.P Parent: Verify that it can still access its gdr_map'ed region. If gdrdrv
+ *     does not implement correctly, it might invalidate parent's mapping as
+ *     well.
+ */
 START_TEST(invalidation_fork_map_and_free)
 {
     expecting_exception_signal = false;
@@ -757,6 +848,24 @@ START_TEST(invalidation_fork_map_and_free)
 }
 END_TEST
 
+/**
+ * Process A can intentionally share fd with Process B through unix socket.
+ * This method may lead to sharing mappings of gdrcopy. Since CUDA contexts are
+ * not sharable between processes, gdrcopy is also expected to be unsharable.
+ * This unit test verifies that gdr_open's fd shared from another process is
+ * not usable.
+ *
+ * Step:
+ * 1. Fork
+ *
+ * 2.P Parent: Init CUDA and gdrcopy.
+ * 3.P Parent: Share gdr_open's fd to child through unix socket.
+ *
+ * 2.C Child: Init CUDA.
+ * 3.C Child: Receive the fd from parent.
+ * 4.C Child: Attempt to do gdr_pin_buffer using this fd. gdrdrv should not
+ *     allow it.
+ */
 START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 {
     expecting_exception_signal = false;
@@ -832,6 +941,25 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 }
 END_TEST
 
+/**
+ * Process A can intentionally share fd with Process B through unix socket.
+ * This method may lead to sharing mappings of gdrcopy. Since CUDA contexts are
+ * not sharable between processes, gdrcopy is also expected to be unsharable.
+ * This unit test verifies that gdr_open's fd shared from another process is
+ * not usable.
+ *
+ * Step:
+ * 1. Fork
+ *
+ * 2.P Parent: Init CUDA and gdrcopy, and do gdr_pin_buffer
+ * 3.P Parent: Share gdr_open's fd to child through unix socket.
+ * 4.P Parent: Also share the handle returned from gdr_pin_buffer with child.
+ *
+ * 2.C Child: Init CUDA.
+ * 3.C Child: Receive the fd and handle from parent.
+ * 4.C Child: Attempt to do gdr_map using this fd and handle. gdrdrv should not
+ *     allow it.
+ */
 START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 {
     expecting_exception_signal = false;
