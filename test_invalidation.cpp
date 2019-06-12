@@ -26,8 +26,11 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <stdio.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
 #include <cuda.h>
@@ -61,6 +64,104 @@ void exception_signal_handle(int sig)
     }
     ck_abort_msg("Unexpectedly get exception signal");
 }
+
+/**
+ * Sends given file descriptior via given socket
+ *
+ * @param socket to be used for fd sending
+ * @param fd to be sent
+ * @return sendmsg result
+ *
+ * @note socket should be (PF_UNIX, SOCK_DGRAM)
+ */
+int sendfd(int socket, int fd) {
+    char dummy = '$';
+    struct msghdr msg;
+    struct iovec iov;
+
+    char cmsgbuf[CMSG_SPACE(sizeof(int))];
+
+    iov.iov_base = &dummy;
+    iov.iov_len = sizeof(dummy);
+
+    msg.msg_name = NULL;
+    msg.msg_namelen = 0;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_flags = 0;
+    msg.msg_control = cmsgbuf;
+    msg.msg_controllen = CMSG_LEN(sizeof(int));
+
+    struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+
+    *(int*) CMSG_DATA(cmsg) = fd;
+
+    int ret = sendmsg(socket, &msg, 0);
+
+    if (ret == -1) {
+        print_dbg("sendmsg failed with %s", strerror(errno));
+    }
+
+    return ret;
+}
+
+/**
+ * Receives file descriptor using given socket
+ *
+ * @param socket to be used for fd recepion
+ * @return received file descriptor; -1 if failed
+ *
+ * @note socket should be (PF_UNIX, SOCK_DGRAM)
+ */
+int recvfd(int socket) {
+    int len;
+    int fd;
+    char buf[1];
+    struct iovec iov;
+    struct msghdr msg;
+    struct cmsghdr *cmsg;
+    char cms[CMSG_SPACE(sizeof(int))];
+
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+
+    msg.msg_name = 0;
+    msg.msg_namelen = 0;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_flags = 0;
+    msg.msg_control = (caddr_t) cms;
+    msg.msg_controllen = sizeof cms;
+
+    len = recvmsg(socket, &msg, 0);
+
+    if (len < 0) {
+        print_dbg("recvmsg failed with %s", strerror(errno));
+        return -1;
+    }
+
+    if (len == 0) {
+        print_dbg("recvmsg failed no data");
+        return -1;
+    }
+
+    cmsg = CMSG_FIRSTHDR(&msg);
+    memmove(&fd, CMSG_DATA(cmsg), sizeof(int));
+    return fd;
+}
+
+struct gdr {
+    int fd;
+};
+
+typedef struct { 
+    uint32_t handle;
+    unsigned mapped:1;
+    unsigned wc_mapping:1;
+} gdr_memh_t;
 
 START_TEST(invalidation_access_after_cumemfree)
 {
@@ -656,6 +757,200 @@ START_TEST(invalidation_fork_map_and_free)
 }
 END_TEST
 
+START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
+{
+    expecting_exception_signal = false;
+
+    print_dbg("Start invalidation_unix_sock_shared_fd_gdr_pin_buffer\n");
+
+    pid_t pid;
+    int pair[2];
+    int fd = -1;
+
+    const size_t _size = sizeof(int) * 16;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    ck_assert_int_eq(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
+
+    pid = fork();
+    ck_assert_int_ge(pid, 0);
+    const char *myname = pid == 0 ? "child" : "parent";
+
+    print_dbg("%s: Start\n", myname);
+
+    void *dummy;
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    CUdeviceptr d_A;
+    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+
+    unsigned int flag = 1;
+    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+
+    CUdeviceptr d_ptr = d_A;
+
+    if (pid == 0) {
+        close(pair[1]);
+
+        print_dbg("%s: Receiving fd from parent via unix socket\n", myname);
+        fd = recvfd(pair[0]);
+        ck_assert_int_ge(fd, 0);
+
+        print_dbg("%s: Got fd %d\n", myname, fd);
+
+        print_dbg("%s: Converting fd to gdr_t\n", myname);
+        struct gdr _g;
+        _g.fd = fd;
+        gdr_t g = &_g;
+
+        print_dbg("%s: Trying to do gdr_pin_buffer with the received fd\n", myname);
+        gdr_mh_t mh;
+        ck_assert_int_ne(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+        print_dbg("%s: Cannot do gdr_pin_buffer with the received fd as expected\n", myname);
+    }
+    else {
+        close(pair[0]);
+
+        print_dbg("%s: Calling gdr_open\n", myname);
+        gdr_t g = gdr_open();
+        ASSERT_NEQ(g, (void*)0);
+
+        fd = g->fd;
+        print_dbg("%s: Extracted fd from gdr_t got fd %d\n", myname, fd);
+        
+        print_dbg("%s: Sending fd to child via unix socket\n", myname);
+        ck_assert_int_ge(sendfd(pair[1], fd), 0);
+
+        print_dbg("%s: Waiting for child to finish\n", myname);
+        int child_exit_status = -EINVAL;
+        ck_assert_int_eq(wait(&child_exit_status), pid);
+        ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
+    }
+
+    print_dbg("End invalidation_unix_sock_shared_fd_gdr_pin_buffer\n");
+}
+END_TEST
+
+START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
+{
+    expecting_exception_signal = false;
+
+    print_dbg("Start invalidation_unix_sock_shared_fd_gdr_map\n");
+
+    int filedes_0[2];
+    int filedes_1[2];
+    int read_fd;
+    int write_fd;
+    ck_assert_int_ne(pipe(filedes_0), -1);
+    ck_assert_int_ne(pipe(filedes_1), -1);
+
+    pid_t pid;
+    int pair[2];
+    int fd = -1;
+
+    const size_t _size = sizeof(int) * 16;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    ck_assert_int_eq(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
+
+    pid = fork();
+    ck_assert_int_ge(pid, 0);
+    const char *myname = pid == 0 ? "child" : "parent";
+
+    print_dbg("%s: Start\n", myname);
+    if (pid == 0) {
+        close(filedes_0[0]);
+        close(filedes_1[1]);
+
+        read_fd = filedes_1[0];
+        write_fd = filedes_0[1];
+
+        srand(rand());
+    }
+    else {
+        close(filedes_0[1]);
+        close(filedes_1[0]);
+
+        read_fd = filedes_0[0];
+        write_fd = filedes_1[1];
+    }
+
+    void *dummy;
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    CUdeviceptr d_A;
+    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+
+    unsigned int flag = 1;
+    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+
+    CUdeviceptr d_ptr = d_A;
+
+    if (pid == 0) {
+        close(pair[1]);
+
+        print_dbg("%s: Receiving fd from parent via unix socket\n", myname);
+        fd = recvfd(pair[0]);
+        ck_assert_int_ge(fd, 0);
+
+        print_dbg("%s: Got fd %d\n", myname, fd);
+
+        print_dbg("%s: Converting fd to gdr_t\n", myname);
+        struct gdr _g;
+        _g.fd = fd;
+        gdr_t g = &_g;
+
+        print_dbg("%s: Receiving gdr_memh_t from parent\n", myname);
+        gdr_memh_t memh;
+        ck_assert_int_eq(read(read_fd, &memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
+        print_dbg("%s: Got handle 0x%lx\n", myname, memh.handle);
+
+        print_dbg("%s: Converting gdr_memh_t to gdr_mh_t\n", myname);
+        gdr_mh_t mh;
+        mh.h = (unsigned long)(&memh);
+
+        print_dbg("%s: Attempting gdr_map\n", myname);
+        void *bar_ptr  = NULL;
+        ck_assert_int_ne(gdr_map(g, mh, &bar_ptr, size), 0);
+        print_dbg("%s: Cannot do gdr_map as expected\n", myname);
+    }
+    else {
+        close(pair[0]);
+
+        print_dbg("%s: Calling gdr_open\n", myname);
+        gdr_t g = gdr_open();
+        ASSERT_NEQ(g, (void*)0);
+
+        print_dbg("%s: Calling gdr_pin_buffer\n", myname);
+        gdr_mh_t mh;
+        ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+        ASSERT_NEQ(mh, null_mh);
+
+        fd = g->fd;
+        print_dbg("%s: Extracted fd from gdr_t got fd %d\n", myname, fd);
+
+        print_dbg("%s: Sending fd to child via unix socket\n", myname);
+        ck_assert_int_ge(sendfd(pair[1], fd), 0);
+
+        gdr_memh_t *memh = (gdr_memh_t *)mh.h;
+        print_dbg("%s: Extracted gdr_memh_t from gdr_mh_t got handle 0x%lx\n", myname, memh->handle);
+
+        print_dbg("%s: Sending gdr_memh_t to child\n", myname);
+        ck_assert_int_eq(write(write_fd, memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
+
+        print_dbg("%s: Waiting for child to finish\n", myname);
+        int child_exit_status = -EINVAL;
+        ck_assert_int_eq(wait(&child_exit_status), pid);
+        ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
+    }
+
+    print_dbg("End invalidation_unix_sock_shared_fd_gdr_map\n");
+}
+END_TEST
+
+
 int main(int argc, char *argv[])
 {
     int c;
@@ -695,6 +990,8 @@ int main(int argc, char *argv[])
     tcase_add_test(tc, invalidation_fork_after_gdr_map);
     tcase_add_test(tc, invalidation_fork_child_gdr_map_parent);
     tcase_add_test(tc, invalidation_fork_map_and_free);
+    tcase_add_test(tc, invalidation_unix_sock_shared_fd_gdr_pin_buffer);
+    tcase_add_test(tc, invalidation_unix_sock_shared_fd_gdr_map);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
