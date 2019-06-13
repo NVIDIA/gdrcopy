@@ -53,14 +53,15 @@
 #define BEGIN_CHECK do
 #define END_CHECK while(0)
 
-static void compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
+static int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
 {
     int diff = 0;
     if (size % 4 != 0U) {
-        printf("warning: buffer size is not dword aligned\n");
+        printf("warning: buffer size %d is not dword aligned, ignoring trailing bytes\n");
         size -= (size % 4);
     }
-    for(unsigned  w = 0; w<size/sizeof(uint32_t); ++w) {
+    unsigned ndwords = size/sizeof(uint32_t);
+    for(unsigned  w = 0; w < ndwords; ++w) {
         if (ref_buf[w] != buf[w]) {
             if (!diff) {
                 printf("%10.10s %8.8s %8.8s\n", "word", "content", "expected");
@@ -71,11 +72,10 @@ static void compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
             ++diff;
         }
     }
-    //OUT << "diff(s): " << diff << endl;
-    //CHECK_EQ(diff, 0);
     if (diff) {
-        cout << "check error: diff(s)=" << diff << endl;
+        printf("check error: %d different dwords out of %d\n", diff, ndwords);
     }
+    return diff;
 }
 
 static void init_hbuf_walking_bit(uint32_t *h_buf, size_t size)
