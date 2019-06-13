@@ -241,7 +241,7 @@ struct gdr_info {
     // offset is used by the linux kernel when doing m(un)map; hence the range
     // cannot be overlapped. We place two ranges next two each other to avoid
     // this issue.
-    off_t                   next_offset;
+    gdr_hnd_t               next_handle;
 };
 typedef struct gdr_info gdr_info_t;
 
@@ -353,7 +353,7 @@ static gdr_mr_t *gdr_mr_from_handle_unlocked(gdr_info_t *info, gdr_hnd_t handle)
 
     list_for_each(p, &info->mr_list) {
         mr = list_entry(p, gdr_mr_t, node);
-        gdr_dbg("mr->handle=0x%x handle=0x%x\n", mr->handle, handle);
+        gdr_dbg("mr->handle=0x%llx handle=0x%llx\n", mr->handle, handle);
         if (handle == mr->handle)
             break;
     }
@@ -399,6 +399,39 @@ static void gdrdrv_get_pages_free_callback(void *data)
     } else {
         gdr_err("ERROR: free callback, page_table is NULL\n");
     }
+}
+
+//-----------------------------------------------------------------------------
+
+/**
+ * Generate mr->handle. This function should be called under info->lock.
+ *
+ * Prerequisite:
+ * - mr->mapped_size is set and round to max(PAGE_SIZE, GPU_PAGE_SIZE)
+ *
+ * Return 0 if success, -1 if failed.
+ */
+static inline int gdr_generate_mr_handle(gdr_info_t *info, gdr_mr_t *mr)
+{
+    // The user-space library passes the memory (handle << PAGE_SHIFT) as the
+    // mmap offset, and offsets are used to determine the VMAs to delete during
+    // invalidation.  
+    // Hence, we need [(handle << PAGE_SHIFT), (handle << PAGE_SHIFT) + size - 1] 
+    // to correspond to a unique VMA.  Note that size here must match the
+    // original mmap size
+
+    gdr_hnd_t next_handle = info->next_handle + (mr->mapped_size >> PAGE_SHIFT);
+
+    // The end of this range is wrapped around. The calculation uses PAGE_SHIFT
+    // because handle is equal vm_pgoff (aka file offset << PAGE_SHIFT). We
+    // indicate this case as -ENOMEM error.
+    if ((next_handle & ((gdr_hnd_t)(-1) >> PAGE_SHIFT)) < info->next_handle)
+        return -1;
+
+    mr->handle = info->next_handle;
+    info->next_handle = next_handle;
+
+    return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -473,7 +506,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
         goto out;
     }
 
-    switch(page_table->page_size) {
+    switch (page_table->page_size) {
     case NVIDIA_P2P_PAGE_SIZE_4KB:
         mr->page_size = 4*1024;
         break;
@@ -490,7 +523,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     }
 
     // we are not really ready for a different page size
-    if(page_table->page_size != NVIDIA_P2P_PAGE_SIZE_64KB) {
+    if (page_table->page_size != NVIDIA_P2P_PAGE_SIZE_64KB) {
         gdr_err("nvidia_p2p_get_pages assumption of 64KB pages failed size_id=%d\n", page_table->page_size);
         ret = -EINVAL;
         goto out;
@@ -509,13 +542,10 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     mutex_lock(&info->lock);
     list_add(&mr->node, &info->mr_list);
 
-    // The user treats handle as the offset value for mmap. To guarantee no
-    // overlapping, the next offset will sit next to this mapping range.
-    // Remember that the address space is local to the process. Thus, two
-    // processes do mmap with the same offset get different mappings.
-    mr->handle = info->next_offset;
-    info->next_offset += mr->mapped_size;
-
+    if (gdr_generate_mr_handle(info, mr) != 0) {
+        gdr_err("No address space left for future BAR1 mapping.\n");
+        ret = -ENOMEM;
+    }
     mutex_unlock(&info->lock);
 
     params.handle = mr->handle;
@@ -561,7 +591,7 @@ static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
     mutex_lock(&info->lock);
     mr = gdr_mr_from_handle_unlocked(info, params.handle);
     if (NULL == mr) {
-        gdr_err("unexpected handle %x while unmapping buffer\n", params.handle);
+        gdr_err("unexpected handle %llx while unmapping buffer\n", params.handle);
         ret = -EINVAL;
     } else {
         if (gdr_mr_is_mapped(mr)) {
@@ -606,7 +636,7 @@ static int gdrdrv_get_cb_flag(gdr_info_t *info, void __user *_params)
     }
     mr = gdr_mr_from_handle(info, params.handle);
     if (NULL == mr) {
-        gdr_err("unexpected handle %x in get_cb_flag\n", params.handle);
+        gdr_err("unexpected handle %llx in get_cb_flag\n", params.handle);
         ret = -EINVAL;
         goto out;
     }
@@ -637,7 +667,7 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
 
     mr = gdr_mr_from_handle(info, params.handle);
     if (NULL == mr) {
-        gdr_err("unexpected handle %x in get_cb_flag\n", params.handle);
+        gdr_err("unexpected handle %llx in get_cb_flag\n", params.handle);
         ret = -EINVAL;
         goto out;
     }
