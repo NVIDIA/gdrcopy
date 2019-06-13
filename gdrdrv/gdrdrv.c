@@ -258,7 +258,7 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     int ret = 0;
     gdr_info_t *info = NULL;
 
-    gdr_dbg("minor=%d filep=0x%p\n", minor, filp);
+    gdr_dbg("minor=%d filep=0x%px\n", minor, filp);
     if(minor >= 1) {
         gdr_err("device minor number too big!\n");
         ret = -ENXIO;
@@ -307,7 +307,7 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
     mutex_lock(&info->lock);
     list_for_each_safe(p, n, &info->mr_list) {
         mr = list_entry(p, gdr_mr_t, node);
-        gdr_info("freeing MR=0x%p\n", mr);
+        gdr_info("freeing MR=0x%px\n", mr);
         if (gdr_mr_is_mapped(mr)) {
             mutex_unlock(&info->lock);
             gdr_mr_destroy_all_mappings(mr);
@@ -405,7 +405,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     cycles_t ta, tb;
 
     if (copy_from_user(&params, _params, sizeof(params))) {
-        gdr_err("copy_from_user failed on user pointer %p\n", _params);
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
         ret = -EFAULT;
         goto out;
     }
@@ -526,7 +526,7 @@ out:
     }
 
     if (!ret && copy_to_user(_params, &params, sizeof(params))) {
-        gdr_err("copy_to_user failed on user pointer %p\n", _params);
+        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
         ret = -EFAULT;
     }
 
@@ -542,7 +542,7 @@ static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
     gdr_mr_t *mr = NULL;
 
     if (copy_from_user(&params, _params, sizeof(params))) {
-        gdr_err("copy_from_user failed on user pointer %p\n", _params);
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
         return -EFAULT;
     }
 
@@ -555,7 +555,7 @@ static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
         ret = -EINVAL;
     } else {
         if (gdr_mr_is_mapped(mr)) {
-            gdr_err("trying to unpin mapped mr 0x%p\n", mr);
+            gdr_err("trying to unpin mapped mr 0x%px\n", mr);
             ret = -EBUSY;
         } else {
             list_del(&mr->node);
@@ -591,7 +591,7 @@ static int gdrdrv_get_cb_flag(gdr_info_t *info, void __user *_params)
     gdr_mr_t *mr = NULL;
 
     if (copy_from_user(&params, _params, sizeof(params))) {
-        gdr_err("copy_from_user failed on user pointer %p\n", _params);
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
         return -EFAULT;
     }
     mr = gdr_mr_from_handle(info, params.handle);
@@ -604,7 +604,7 @@ static int gdrdrv_get_cb_flag(gdr_info_t *info, void __user *_params)
     params.flag = !!mr->cb_flag;
 
     if (copy_to_user(_params, &params, sizeof(params))) {
-        gdr_err("copy_to_user failed on user pointer %p\n", _params);
+        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
         ret = -EFAULT;
     }
  out:
@@ -620,7 +620,7 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
     gdr_mr_t *mr = NULL;
 
     if (copy_from_user(&params, _params, sizeof(params))) {
-        gdr_err("copy_from_user failed on user pointer %p\n", _params);
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
         ret = -EFAULT;
         goto out;
     }
@@ -640,7 +640,7 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
     params.mapped      = gdr_mr_is_mapped(mr);
     params.wc_mapping  = gdr_mr_is_wc_mapping(mr);
     if (copy_to_user(_params, &params, sizeof(params))) {
-        gdr_err("copy_to_user failed on user pointer %p\n", _params);
+        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
         ret = -EFAULT;
     }
  out:
@@ -710,7 +710,7 @@ static long gdrdrv_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 void gdrdrv_vma_close(struct vm_area_struct *vma)
 {
     gdr_mr_t *mr = (gdr_mr_t *)vma->vm_private_data;
-    gdr_dbg("closing vma=0x%p vm_file=0x%p vm_private_data=0x%p mr=0x%p mr->vma=0x%p\n", vma, vma->vm_file, vma->vm_private_data, mr, mr->vma);
+    gdr_dbg("closing vma=0x%px vm_file=0x%px vm_private_data=0x%px mr=0x%px mr->vma=0x%px\n", vma, vma->vm_file, vma->vm_private_data, mr, mr->vma);
     // TODO: handle multiple vma's
     mr->vma = NULL;
     mr->cpu_mapping_type = GDR_MR_NONE;
@@ -793,7 +793,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     int p = 0;
     unsigned long vaddr;
 
-    gdr_info("mmap filp=0x%p vma=0x%p vm_file=0x%p start=0x%lx size=%zu off=0x%lx\n", filp, vma, vma->vm_file, vma->vm_start, size, vma->vm_pgoff);
+    gdr_info("mmap filp=0x%px vma=0x%px vm_file=0x%px start=0x%lx size=%zu off=0x%lx\n", filp, vma, vma->vm_file, vma->vm_start, size, vma->vm_pgoff);
 
     if (!info) {
         gdr_err("filp contains no info\n");
@@ -856,7 +856,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     // this also works as the mapped flag for this mr
     mr->cpu_mapping_type = GDR_MR_CACHING;
     vma->vm_ops = &gdrdrv_vm_ops;
-    gdr_dbg("overwriting vma->vm_private_data=0x%p with mr=0x%p\n", vma->vm_private_data, mr);
+    gdr_dbg("overwriting vma->vm_private_data=0x%px with mr=0x%px\n", vma->vm_private_data, mr);
     vma->vm_private_data = mr;
     p = 0;
     vaddr = vma->vm_start;
@@ -926,7 +926,7 @@ out:
     } else {
         mr->vma = vma;
         mr->mapping = filp->f_mapping;
-        gdr_dbg("mr vma=0x%p mapping=0x%p\n", mr->vma, mr->mapping);
+        gdr_dbg("mr vma=0x%px mapping=0x%px\n", mr->vma, mr->mapping);
     }
     return ret;
 }
