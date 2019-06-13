@@ -1,0 +1,12 @@
+Source: gdrdrv-dkms
+Section: misc
+Priority: optional
+Maintainer: Dynamic Kernel Modules Support Team <pkg-dkms-maint@lists.alioth.debian.org>
+Build-Depends: debhelper (>= 7), dkms
+Standards-Version: 3.8.1
+
+Package: gdrdrv-dkms
+Architecture: any
+Multi-Arch: same
+Depends: dkms (>= 1.95), ${misc:Depends}
+Description: gdrdrv driver in DKMS format.
