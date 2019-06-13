@@ -304,6 +304,16 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
 
     gdr_dbg("closing\n");
 
+    if (!info) {
+        gdr_err("filp contains no info\n");
+        return -EIO;
+    }
+    // Check that the caller is the same process that did gdrdrv_open
+    if (info->pid != task_pid(current)) {
+        gdr_err("filp is not opened by the current process\n");
+        return -EACCES;
+    }
+
     mutex_lock(&info->lock);
     list_for_each_safe(p, n, &info->mr_list) {
         mr = list_entry(p, gdr_mr_t, node);
