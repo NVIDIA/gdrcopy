@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -394,7 +394,6 @@ START_TEST(invalidation_fork_access_after_cumemfree)
         read_fd = filedes_1[0];
         write_fd = filedes_0[1];
 
-        srand(rand());
         int cont = 0;
 
         do {
@@ -418,6 +417,11 @@ START_TEST(invalidation_fork_access_after_cumemfree)
     }
 
     int mydata = (rand() % 1000) + 1;
+
+    // Make sure that parent's and child's mydata are different.
+    // Remember that we do srand before fork.
+    if (pid == 0)
+        mydata += 10;
 
     void *dummy;
     ASSERTRT(cudaMalloc(&dummy, 0));
