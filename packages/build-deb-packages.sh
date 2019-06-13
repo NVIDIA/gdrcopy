@@ -7,9 +7,14 @@ CWD=$(pwd)
 
 ex()
 {
-    if ! eval "$@"; then
-        echo "Failed to execute: $@" >&2
-        exit 1
+    local rc
+    echo "+ $@"
+    eval "$@"
+    rc=$?
+    
+    if [[ $rc -ne 0 ]]; then
+        echo "Failed with error $rc to execute: $@" >&2
+        exit $rc
     fi
 }
 
@@ -19,9 +24,7 @@ fi
 
 echo "Building debian package for the gdrcopy library ..."
 
-set -x
-
-cd ${SCRIPT_DIR_PATH}
+ex cd ${SCRIPT_DIR_PATH}
 
 VERSION=`grep Version: *.spec | cut -d : -f 2 | sed -e 's@\s@@g'`
 RELEASE=`grep "define _release" *.spec | cut -d" " -f"4"| sed -r -e 's/}//'`
@@ -37,50 +40,39 @@ if [ ! -d "$tmpdir" ]; then
 fi
 echo "Working in $tmpdir ..."
 
-cd ${TOP_DIR_PATH}
+ex cd ${TOP_DIR_PATH}
 
-mkdir -p $tmpdir/gdrcopy
-rm -rf $tmpdir/gdrcopy/*
-cp -r autogen.sh configure.ac init.d insmod.sh Makefile.am README.md include src tests LICENSE packages/debian $tmpdir/gdrcopy/
-rm -f $tmpdir/gdrcopy_$VERSION.orig.tar.gz
+ex mkdir -p $tmpdir/gdrcopy
+ex rm -rf $tmpdir/gdrcopy/*
+ex cp -r autogen.sh configure.ac init.d insmod.sh Makefile.am README.md include src tests LICENSE packages/debian $tmpdir/gdrcopy/
+ex rm -f $tmpdir/gdrcopy_$VERSION.orig.tar.gz
 
-cd $tmpdir
-mv gdrcopy gdrcopy-$VERSION
-tar czvf gdrcopy_$VERSION.orig.tar.gz gdrcopy-$VERSION
+ex cd $tmpdir
+ex mv gdrcopy gdrcopy-$VERSION
+ex tar czvf gdrcopy_$VERSION.orig.tar.gz gdrcopy-$VERSION
 
-cd $tmpdir/gdrcopy-$VERSION
-debuild --set-envvar=CUDA=$CUDA -us -uc
-
-# Preparing for building the gdrdrv driver
-cd $tmpdir/gdrcopy-$VERSION
-./configure --with-cuda=$CUDA
-
-set +x
+ex cd $tmpdir/gdrcopy-$VERSION
+ex debuild --set-envvar=CUDA=$CUDA -us -uc
 
 echo
 echo "Building dkms module ..."
-echo "Request upgrading to root ..."
+ex cd $tmpdir/gdrcopy-$VERSION
+ex ./configure --with-cuda=$CUDA
 
-sudo -s <<EOF
-set -x
-mkdir -p /usr/src/gdrdrv-$VERSION/
-cd /usr/src/gdrdrv-$VERSION/
-cp -r $tmpdir/gdrcopy-$VERSION/src/gdrdrv/* .
-cp ${SCRIPT_DIR_PATH}/dkms.conf .
+ex mkdir -p $tmpdir/gdrdrv-dkms-$VERSION/
+ex cp -r $tmpdir/gdrcopy-$VERSION/src/gdrdrv $tmpdir/gdrdrv-dkms-$VERSION/gdrdrv-$VERSION
+ex cp ${SCRIPT_DIR_PATH}/dkms.conf $tmpdir/gdrdrv-dkms-$VERSION/gdrdrv-$VERSION/
+ex cd $tmpdir/gdrdrv-dkms-$VERSION/
+ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
 
-dkms add -m gdrdrv -v $VERSION
-dkms build -m gdrdrv -v $VERSION
-dkms mkdsc -m gdrdrv -v $VERSION --source-only
-dkms mkdeb -m gdrdrv -v $VERSION --source-only
-cp /var/lib/dkms/gdrdrv/$VERSION/deb/*.deb $tmpdir/
-dkms remove -m gdrdrv/$VERSION --all
-rm -rf /var/lib/dkms/gdrdrv/$VERSION/
-EOF
+ex dpkg-buildpackage -S -us -uc
+ex dpkg-buildpackage -rfakeroot -d -b -us -uc
 
 echo
-echo "Copying *.deb to the current working directory ..."
+echo "Copying *.deb and supplementary files to the current working directory ..."
 
-set -x
-cd ${CWD}
-mv $tmpdir/*.deb .
+ex cd ${CWD}
+ex cp $tmpdir/*.deb .
+ex cp $tmpdir/*.tar.* .
+ex cp $tmpdir/*.dsc .
 
