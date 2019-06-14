@@ -17,7 +17,7 @@ License:        MIT
 URL:            https://github.com/NVIDIA/gdrcopy
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  gcc kernel-headers
-Requires:       %{name}-%{kmod} check
+Requires:       %{name}-%{kmod} check subunit
 
 # to get rid of libcuda/libcudart
 AutoReqProv:    no
