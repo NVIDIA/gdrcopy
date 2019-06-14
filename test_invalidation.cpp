@@ -36,6 +36,7 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <check.h>
+#include <errno.h>
 
 using namespace std;
 
@@ -381,7 +382,7 @@ START_TEST(invalidation_fork_access_after_cumemfree)
     const char *myname;
 
     pid_t pid = fork();
-    ck_assert_int_ge(pid, 0);
+    ck_assert(pid >= 0);
 
     myname = pid == 0 ? "child" : "parent";
 
@@ -566,7 +567,7 @@ START_TEST(invalidation_fork_after_gdr_map)
     volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
 
     pid_t pid = fork();
-    ck_assert_int_ge(pid, 0);
+    ck_assert(pid >= 0);
 
     myname = pid == 0 ? "child" : "parent";
 
@@ -696,7 +697,7 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
     ASSERT_NEQ(mh, null_mh);
 
     pid_t pid = fork();
-    ck_assert_int_ge(pid, 0);
+    ck_assert(pid >= 0);
 
     myname = pid == 0 ? "child" : "parent";
 
@@ -759,7 +760,7 @@ START_TEST(invalidation_fork_map_and_free)
     const char *myname;
 
     pid_t pid = fork();
-    ck_assert_int_ge(pid, 0);
+    ck_assert(pid >= 0);
 
     myname = pid == 0 ? "child" : "parent";
 
@@ -886,7 +887,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
     ck_assert_int_eq(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
 
     pid = fork();
-    ck_assert_int_ge(pid, 0);
+    ck_assert(pid >= 0);
     const char *myname = pid == 0 ? "child" : "parent";
 
     print_dbg("%s: Start\n", myname);
@@ -908,7 +909,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 
         print_dbg("%s: Receiving fd from parent via unix socket\n", myname);
         fd = recvfd(pair[0]);
-        ck_assert_int_ge(fd, 0);
+        ck_assert(fd >= 0);
 
         print_dbg("%s: Got fd %d\n", myname, fd);
 
@@ -933,7 +934,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
         print_dbg("%s: Extracted fd from gdr_t got fd %d\n", myname, fd);
         
         print_dbg("%s: Sending fd to child via unix socket\n", myname);
-        ck_assert_int_ge(sendfd(pair[1], fd), 0);
+        ck_assert(sendfd(pair[1], fd) >= 0);
 
         print_dbg("%s: Waiting for child to finish\n", myname);
         int child_exit_status = -EINVAL;
@@ -987,7 +988,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
     ck_assert_int_eq(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
 
     pid = fork();
-    ck_assert_int_ge(pid, 0);
+    ck_assert(pid >= 0);
     const char *myname = pid == 0 ? "child" : "parent";
 
     print_dbg("%s: Start\n", myname);
@@ -1025,7 +1026,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 
         print_dbg("%s: Receiving fd from parent via unix socket\n", myname);
         fd = recvfd(pair[0]);
-        ck_assert_int_ge(fd, 0);
+        ck_assert(fd >= 0);
 
         print_dbg("%s: Got fd %d\n", myname, fd);
 
@@ -1064,7 +1065,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
         print_dbg("%s: Extracted fd from gdr_t got fd %d\n", myname, fd);
 
         print_dbg("%s: Sending fd to child via unix socket\n", myname);
-        ck_assert_int_ge(sendfd(pair[1], fd), 0);
+        ck_assert(sendfd(pair[1], fd) >= 0);
 
         gdr_memh_t *memh = (gdr_memh_t *)mh.h;
         print_dbg("%s: Extracted gdr_memh_t from gdr_mh_t got handle 0x%lx\n", myname, memh->handle);
