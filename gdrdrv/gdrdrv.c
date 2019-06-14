@@ -38,6 +38,34 @@
 #include <linux/sched/mm.h>
 #include <linux/sched.h>
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
+/**
+ * This API is available after Linux kernel 2.6.42
+ */
+void address_space_init_once(struct address_space *mapping)
+{
+    memset(mapping, 0, sizeof(*mapping));
+    INIT_RADIX_TREE(&mapping->page_tree, GFP_ATOMIC);
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,26)
+    //  
+    // The .tree_lock member variable was changed from type rwlock_t, to
+    // spinlock_t, on 25 July 2008, by mainline commit
+    // 19fd6231279be3c3bdd02ed99f9b0eb195978064.
+    //  
+    rwlock_init(&mapping->tree_lock);
+#else
+    spin_lock_init(&mapping->tree_lock);
+#endif
+
+    spin_lock_init(&mapping->i_mmap_lock);
+    INIT_LIST_HEAD(&mapping->private_list);
+    spin_lock_init(&mapping->private_lock);
+    INIT_RAW_PRIO_TREE_ROOT(&mapping->i_mmap);
+    INIT_LIST_HEAD(&mapping->i_mmap_nonlinear);
+}
+#endif
+
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_32)
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 {
@@ -280,11 +308,12 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     // Create mapping per opened file. By preventing sharing of this file, the
     // mapping is local to the process.
 
-    // TODO: Old kernels don't have address_space_init_once
     address_space_init_once(&info->mapping);
-    info->mapping.host = filp->f_mapping->host;
-    info->mapping.a_ops = filp->f_mapping->a_ops;
-    // TODO: Old kernels have f_mapping->backing_dev_info
+    info->mapping.host = inode;
+    info->mapping.a_ops = inode->i_mapping->a_ops;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,0,0)
+    info->mapping.backing_dev_info = inode->i_mapping->backing_dev_info;
+#endif
     filp->f_mapping = &info->mapping;
 
     filp->private_data = info;
@@ -337,6 +366,8 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
         kzfree(mr);
     }
     mutex_unlock(&info->lock);
+
+    filp->f_mapping = NULL;
 
     kfree(info);
     filp->private_data = NULL;
