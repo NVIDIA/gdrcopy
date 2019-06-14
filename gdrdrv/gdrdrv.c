@@ -35,7 +35,6 @@
 #include <linux/io.h>
 #include <linux/timex.h>
 #include <linux/timer.h>
-#include <linux/sched/mm.h>
 #include <linux/sched.h>
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
