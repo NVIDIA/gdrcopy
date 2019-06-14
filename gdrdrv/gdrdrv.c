@@ -269,6 +269,7 @@ struct gdr_info {
     // cannot be overlapped. We place two ranges next two each other to avoid
     // this issue.
     gdr_hnd_t               next_handle;
+    int                     next_handle_overflow;
 };
 typedef struct gdr_info gdr_info_t;
 
@@ -450,13 +451,17 @@ static inline int gdr_generate_mr_handle(gdr_info_t *info, gdr_mr_t *mr)
     // to correspond to a unique VMA.  Note that size here must match the
     // original mmap size
 
-    gdr_hnd_t next_handle = info->next_handle + (mr->mapped_size >> PAGE_SHIFT);
+    gdr_hnd_t next_handle;
 
-    // The end of this range is wrapped around. The calculation uses PAGE_SHIFT
-    // because handle is equal vm_pgoff (aka file offset << PAGE_SHIFT). We
-    // indicate this case as -ENOMEM error.
-    if ((next_handle & ((gdr_hnd_t)(-1) >> PAGE_SHIFT)) < info->next_handle)
+    // We run out of handle, so fail.
+    if (unlikely(info->next_handle_overflow))
         return -1;
+    
+    next_handle = info->next_handle + (mr->mapped_size >> PAGE_SHIFT);
+
+    // The next handle will be overflowed, so we mark it.
+    if (unlikely((next_handle & ((gdr_hnd_t)(-1) >> PAGE_SHIFT)) < info->next_handle))
+        info->next_handle_overflow = 1;
 
     mr->handle = info->next_handle;
     info->next_handle = next_handle;
@@ -570,12 +575,12 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     // DMA data structure
 
     mutex_lock(&info->lock);
-    list_add(&mr->node, &info->mr_list);
-
     if (gdr_generate_mr_handle(info, mr) != 0) {
-        gdr_err("No address space left for future BAR1 mapping.\n");
+        gdr_err("No address space left for BAR1 mapping.\n");
         ret = -ENOMEM;
     }
+
+    list_add(&mr->node, &info->mr_list);
     mutex_unlock(&info->lock);
 
     params.handle = mr->handle;
