@@ -580,7 +580,8 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
         ret = -ENOMEM;
     }
 
-    list_add(&mr->node, &info->mr_list);
+    if (!ret)
+        list_add(&mr->node, &info->mr_list);
     mutex_unlock(&info->lock);
 
     params.handle = mr->handle;
