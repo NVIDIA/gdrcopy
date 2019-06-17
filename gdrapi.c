@@ -344,10 +344,10 @@ static void gdr_init_cpu_flags()
 
 // note: more than one implementation may be compiled in
 
-static void unroll8_memcpy(void *map_d_ptr, const void *h_ptr, size_t size)
+static void unroll8_memcpy(void *dst, const void *src, size_t size)
 {
-    const uint64_t *r = (const uint64_t *)h_ptr;
-    uint64_t *w = (uint64_t *)map_d_ptr;
+    const uint64_t *r = (const uint64_t *)src;
+    uint64_t *w = (uint64_t *)dst;
     size_t nw = size / sizeof(*r);
     assert(size % sizeof(*r) == 0);
 
@@ -381,10 +381,10 @@ static void unroll8_memcpy(void *map_d_ptr, const void *h_ptr, size_t size)
     }
 }
 
-static void unroll4_memcpy(void *map_d_ptr, const void *h_ptr, size_t size)
+static void unroll4_memcpy(void *dst, const void *src, size_t size)
 {
-    const uint32_t *r = (const uint32_t *)h_ptr;
-    uint32_t *w = (uint32_t *)map_d_ptr;
+    const uint32_t *r = (const uint32_t *)src;
+    uint32_t *w = (uint32_t *)dst;
     size_t nw = size / sizeof(*r);
     assert(size % sizeof(*r) == 0);
 
