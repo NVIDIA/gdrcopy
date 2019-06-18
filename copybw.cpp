@@ -163,8 +163,8 @@ main(int argc, char *argv[])
         uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
         OUT << "user-space pointer:" << buf_ptr << endl;
 
-        // copy to BAR benchmark
-        cout << "BAR writing test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_write_iters << endl;
+        // copy to GPU benchmark
+        cout << "writing test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_write_iters << endl;
         struct timespec beg, end;
         clock_gettime(MYCLOCK, &beg);
         for (int iter=0; iter<num_write_iters; ++iter)
@@ -177,13 +177,13 @@ main(int argc, char *argv[])
             double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
             double Bps = byte_count / dt_ms * 1e3;
             woMBps = Bps / 1024.0 / 1024.0;
-            cout << "BAR1 write BW: " << woMBps << "MB/s" << endl;
+            cout << "write BW: " << woMBps << "MB/s" << endl;
         }
 
         compare_buf(init_buf, buf_ptr + copy_offset/4, copy_size);
 
         // copy from BAR benchmark
-        cout << "BAR reading test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_read_iters << endl;
+        cout << "reading test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_read_iters << endl;
         clock_gettime(MYCLOCK, &beg);
         for (int iter=0; iter<num_read_iters; ++iter)
             gdr_copy_from_bar(init_buf, buf_ptr + copy_offset/4, copy_size);
@@ -195,7 +195,7 @@ main(int argc, char *argv[])
             double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
             double Bps = byte_count / dt_ms * 1e3;
             roMBps = Bps / 1024.0 / 1024.0;
-            cout << "BAR1 read BW: " << roMBps << "MB/s" << endl;
+            cout << "read BW: " << roMBps << "MB/s" << endl;
         }
 
         OUT << "unmapping buffer" << endl;
