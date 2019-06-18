@@ -39,7 +39,7 @@
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
 /**
- * This API is available after Linux kernel 2.6.42
+ * This API is available after Linux kernel 2.6.32
  */
 void address_space_init_once(struct address_space *mapping)
 {
@@ -264,7 +264,7 @@ struct gdr_info {
     // because filp->f_mapping usually points to inode->i_mapping.
     struct address_space    mapping;
 
-    // The handle number of mmap's offset are equivalent. However, the mmap
+    // The handle number and mmap's offset are equivalent. However, the mmap
     // offset is used by the linux kernel when doing m(un)map; hence the range
     // cannot be overlapped. We place two ranges next two each other to avoid
     // this issue.
@@ -303,10 +303,10 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     INIT_LIST_HEAD(&info->mr_list);
     mutex_init(&info->lock);
 
+    // GPU driver does not support sharing GPU allocations at fork time. Hence
+    // here we track the process owning the driver fd and prevent other process
+    // to use it.
     info->pid = task_pid(current);
-
-    // Create mapping per opened file. By preventing sharing of this file, the
-    // mapping is local to the process.
 
     address_space_init_once(&info->mapping);
     info->mapping.host = inode;
@@ -452,6 +452,8 @@ static inline int gdr_generate_mr_handle(gdr_info_t *info, gdr_mr_t *mr)
     // original mmap size
 
     gdr_hnd_t next_handle;
+
+    WARN_ON(!mutex_is_locked(&info->lock));
 
     // We run out of handle, so fail.
     if (unlikely(info->next_handle_overflow))
