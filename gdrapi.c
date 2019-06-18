@@ -45,14 +45,7 @@
 #include "gdrdrv.h"
 #include "gdrconfig.h"
 
-// based on post at http://stackoverflow.com/questions/3385515/static-assert-in-c
-#define STATIC_ASSERT(COND,MSG) typedef char static_assertion_##MSG[(!!(COND))*2-1]
-// token pasting madness
-#define COMPILE_TIME_ASSERT3(X,L) STATIC_ASSERT(X,static_assertion_at_line_##L)
-#define COMPILE_TIME_ASSERT2(X,L) COMPILE_TIME_ASSERT3(X,L)
-#define COMPILE_TIME_ASSERT(X)    COMPILE_TIME_ASSERT2(X,__LINE__)
-
-// hint: use page_size = sysconf(_SC_PAGESIZE) instead
+// TODO either use page_size = sysconf(_SC_PAGESIZE) or check the assumption below
 #ifdef GDRAPI_POWER
 #define PAGE_SHIFT 16
 #else // catching all 4KB page size platforms here
@@ -117,9 +110,6 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
     return mh;
 }
 
-// check GDR HaNDle size
-//COMPILE_TIME_ASSERT(sizeof(gdr_hnd_t)==sizeof(gdr_mh_t));
-
 struct gdr {
     int fd;
 };
@@ -128,6 +118,12 @@ gdr_t gdr_open()
 {
     gdr_t g = NULL;
     const char *gdrinode = "/dev/gdrdrv";
+
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size != PAGE_SIZE) {
+        gdr_err("detected unexpected system page size\n");
+        return NULL;
+    }
 
     g = calloc(1, sizeof(*g));
     if (!g) {
