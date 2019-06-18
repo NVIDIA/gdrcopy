@@ -85,6 +85,7 @@ int main(int argc, char *argv[])
         //OUT << "buf_ptr:" << buf_ptr << endl;
 
         printf("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
+        memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
         init_hbuf_walking_bit(buf_ptr, size);
         //mmiowcwb();
         ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
@@ -92,33 +93,37 @@ int main(int argc, char *argv[])
         ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
         memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
-        printf("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
-        gdr_copy_to_bar(buf_ptr, init_buf, size);
+        printf("check 2: gdr_copy_to_mapping() + read back via cuMemcpy D->H\n");
+        memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+        gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
         ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
         //ASSERTDRV(cuCtxSynchronize());
         ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
         memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
-        printf("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
-        gdr_copy_to_bar(buf_ptr, init_buf, size);
-        gdr_copy_from_bar(copy_buf, buf_ptr, size);
+        printf("check 3: gdr_copy_to_mapping() + read back via gdr_copy_from_mapping()\n");
+        memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+        gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
+        gdr_copy_from_mapping(mh, copy_buf, buf_ptr, size);
         //ASSERTDRV(cuCtxSynchronize());
         ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
         memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
         int extra_dwords = 5;
         int extra_off = extra_dwords * sizeof(uint32_t);
-        printf("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset\n", extra_dwords);
-        gdr_copy_to_bar(buf_ptr + extra_dwords, init_buf, size - extra_off);
-        gdr_copy_from_bar(copy_buf, buf_ptr + extra_dwords, size - extra_off);
+        printf("check 4: gdr_copy_to_mapping() + read back via gdr_copy_from_mapping() + %d dwords offset\n", extra_dwords);
+        memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+        gdr_copy_to_mapping(mh, buf_ptr + extra_dwords, init_buf, size - extra_off);
+        gdr_copy_from_mapping(mh, copy_buf, buf_ptr + extra_dwords, size - extra_off);
         ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
         memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
         // check for access to misaligned address
         extra_off = 11;
-        printf("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
-        gdr_copy_to_bar((char*)buf_ptr + extra_off, init_buf, size - extra_off);
-        gdr_copy_from_bar(copy_buf, (char*)buf_ptr + extra_off, size - extra_off);
+        printf("check 5: gdr_copy_to_mapping() + read back via gdr_copy_from_mapping() + %d bytes offset\n", extra_off);
+        memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+        gdr_copy_to_mapping(mh, (char*)buf_ptr + extra_off, init_buf, size - extra_off);
+        gdr_copy_from_mapping(mh, copy_buf, (char*)buf_ptr + extra_off, size - extra_off);
         ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
 
         printf("unampping\n");

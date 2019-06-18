@@ -68,7 +68,7 @@ gdr_t gdr_open();
 // gdr_unmap on all mappings before calling gdr_close.
 int gdr_close(gdr_t g);
 
-// The handle to a GPU memory mapping
+// The handle to a user-space GPU memory mapping
 typedef struct gdr_mh_s {
   unsigned long h;
 } gdr_mh_t;
@@ -99,8 +99,8 @@ struct gdr_info {
     uint32_t page_size;
     uint64_t tm_cycles;
     uint32_t cycles_per_ms;
-    uint32_t mapped;
-    uint32_t wc_mapping;
+    unsigned mapped:1;
+    unsigned wc_mapping:1;
 };
 typedef struct gdr_info gdr_info_t;
 int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_t *info);
@@ -118,10 +118,10 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **va, size_t size);
 // First invoke gdr_unmap() then gdr_unpin_buffer().
 int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size);
 
-// gpubar_ptr is a user-space virtual address, i.e. one returned by gdr_map()
-int gdr_copy_to_bar(void  *gpubar_ptr, const void *cpumem_ptr, size_t size);
-int gdr_copy_from_bar(void *cpumem_ptr, const void *gpubar_ptr, size_t size);
-
+// map_d_ptr is the user-space virtual address belonging to a mapping of a device memory buffer,
+// i.e. one returned by gdr_map()
+int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size);
+int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size);
 
 #ifdef __cplusplus
 }

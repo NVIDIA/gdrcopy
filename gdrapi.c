@@ -463,16 +463,16 @@ static void unroll4_memcpy(void *dst, const void *src, size_t size)
 
 static inline int is_aligned(unsigned long value, unsigned powof2)
 {
-    return  ((value & (powof2-1)) == 0);
+    return ((value & (powof2-1)) == 0);
 }
 
 static inline int ptr_is_aligned(const void *ptr, unsigned powof2)
 {
     unsigned long addr = (unsigned long)ptr;
-    return  is_aligned(addr, powof2);
+    return is_aligned(addr, powof2);
 }
 
-int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size)
+static int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size, int wc_mapping)
 {
     if (first_time) {
         gdr_init_cpu_flags();
@@ -482,11 +482,13 @@ int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size)
         // pick the most performing implementation compatible with the platform we are running on
         // NOTE: write fences are included in functions below
         if (has_avx) {
+            assert(wc_mapping);
             gdr_dbgc(1, "using AVX implementation of gdr_copy_to_bar\n");
             memcpy_uncached_store_avx(map_d_ptr, h_ptr, size);
             break;
         }
         if (has_sse) {
+            assert(wc_mapping);
             gdr_dbgc(1, "using SSE implementation of gdr_copy_to_bar\n");
             memcpy_uncached_store_sse(map_d_ptr, h_ptr, size);
             break;
@@ -496,11 +498,11 @@ int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size)
         // 64bit stores are not better than 32bit ones, so we prefer the latter
         // NOTE: if preferred but not aligned, a better implementation would still try to
         // use byte sized stores to align map_d_ptr and h_ptr to next word
-        if (PREFERS_STORE_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
+        if (wc_mapping && PREFERS_STORE_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
             gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_bar\n");
             unroll8_memcpy(map_d_ptr, h_ptr, size);
             break;
-        } else if (PREFERS_STORE_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
+        } else if (wc_mapping && PREFERS_STORE_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_to_bar\n");
             unroll4_memcpy(map_d_ptr, h_ptr, size);
             break;
@@ -509,15 +511,17 @@ int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size)
             memcpy(map_d_ptr, h_ptr, size);
         }
 
-        // fencing is needed even for plain memcpy(), due to performance
-        // being hit by delayed flushing of WC buffers
-        wc_store_fence();
+        if (wc_mapping) {
+            // fencing is needed even for plain memcpy(), due to performance
+            // being hit by delayed flushing of WC buffers
+            wc_store_fence();
+        }
     } while (0);
     
     return 0;
 }
 
-int gdr_copy_from_bar(void *h_ptr, const void *map_d_ptr, size_t size)
+static int gdr_copy_from_bar(void *h_ptr, const void *map_d_ptr, size_t size, int wc_mapping)
 {
     if (first_time) {
         gdr_init_cpu_flags();
@@ -526,16 +530,19 @@ int gdr_copy_from_bar(void *h_ptr, const void *map_d_ptr, size_t size)
     do {
         // pick the most performing implementation compatible with the platform we are running on
         if (has_sse4_1) {
+            assert(wc_mapping);
             gdr_dbgc(1, "using SSE4_1 implementation of gdr_copy_from_bar\n");
             memcpy_uncached_load_sse41(h_ptr, map_d_ptr, size);
             break;
         }
         if (has_avx) {
+            assert(wc_mapping);
             gdr_dbgc(1, "using AVX implementation of gdr_copy_from_bar\n");
             memcpy_cached_store_avx(h_ptr, map_d_ptr, size);
             break;
         }
         if (has_sse) {
+            assert(wc_mapping);
             gdr_dbgc(1, "using SSE implementation of gdr_copy_from_bar\n");
             memcpy_cached_store_sse(h_ptr, map_d_ptr, size);
             break;
@@ -543,11 +550,11 @@ int gdr_copy_from_bar(void *h_ptr, const void *map_d_ptr, size_t size)
 
         // on POWER, compiler memcpy is not optimal for MMIO
         // 64bit loads have 2x the BW of 32bit ones
-        if (PREFERS_LOAD_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
+        if (wc_mapping && PREFERS_LOAD_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
             gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_from_bar\n");
             unroll8_memcpy(h_ptr, map_d_ptr, size);
             break;
-        } else if (PREFERS_LOAD_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
+        } else if (wc_mapping && PREFERS_LOAD_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_from_bar\n");
             unroll4_memcpy(h_ptr, map_d_ptr, size);
             break;
@@ -557,12 +564,35 @@ int gdr_copy_from_bar(void *h_ptr, const void *map_d_ptr, size_t size)
         }
 
         // note: fencing is not needed because plain stores are used
-        // if non-temporal stores were used on x86, a proper fence would be needed instead
-        // wc_store_fence();
+        // if non-temporal/uncached stores were used on x86, a proper fence would be needed instead
+        // if (wc_mapping)
+        //    wc_store_fence();
     } while (0);
     
     return 0;
 }
+
+int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size)
+{
+    gdr_memh_t *mh = to_memh(handle);
+    if (!mh->mapped) {
+        gdr_err("mh is not mapped yet\n");
+        return EINVAL;
+    }
+    return gdr_copy_to_bar(map_d_ptr, h_ptr, size, mh->wc_mapping);
+}
+
+int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size)
+{
+    gdr_memh_t *mh = to_memh(handle);
+    if (!mh->mapped) {
+        gdr_err("mh is not mapped yet\n");
+        return EINVAL;
+    }
+    return gdr_copy_from_bar(h_ptr, map_d_ptr, size, mh->wc_mapping);
+}
+
+
 
 /*
  * Local variables:

@@ -170,7 +170,7 @@ main(int argc, char *argv[])
         struct timespec beg, end;
         clock_gettime(MYCLOCK, &beg);
         for (int iter=0; iter<num_write_iters; ++iter)
-            gdr_copy_to_bar(buf_ptr + copy_offset/4, init_buf, copy_size);
+            gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);
         clock_gettime(MYCLOCK, &end);
 
         double woMBps;
@@ -188,7 +188,7 @@ main(int argc, char *argv[])
         cout << "reading test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_read_iters << endl;
         clock_gettime(MYCLOCK, &beg);
         for (int iter=0; iter<num_read_iters; ++iter)
-            gdr_copy_from_bar(init_buf, buf_ptr + copy_offset/4, copy_size);
+            gdr_copy_from_mapping(mh, init_buf, buf_ptr + copy_offset/4, copy_size);
         clock_gettime(MYCLOCK, &end);
 
         double roMBps;
