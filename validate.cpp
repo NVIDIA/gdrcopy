@@ -72,16 +72,16 @@ int main(int argc, char *argv[])
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
         ASSERT(!info.mapped);
 
-        void *bar_ptr  = NULL;
-        ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
-        //OUT << "bar_ptr: " << bar_ptr << endl;
+        void *map_d_ptr  = NULL;
+        ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, size), 0);
+        //OUT << "map_d_ptr: " << map_d_ptr << endl;
 
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
         ASSERT(info.mapped);
         int off = d_ptr - info.va;
         cout << "off: " << off << endl;
 
-        uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
+        uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
         //OUT << "buf_ptr:" << buf_ptr << endl;
 
         printf("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
         ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
 
         printf("unampping\n");
-        ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+        ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, size), 0);
         printf("unpinning\n");
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     } END_CHECK;
