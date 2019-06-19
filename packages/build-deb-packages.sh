@@ -26,9 +26,8 @@ echo "Building debian package for the gdrcopy library ..."
 
 ex cd ${SCRIPT_DIR_PATH}
 
-VERSION=`grep Version: *.spec | cut -d : -f 2 | sed -e 's@\s@@g'`
-RELEASE=`grep "define _release" *.spec | cut -d" " -f"4"| sed -r -e 's/}//'`
-if [ "X$VERSION" == "X" ] || [ "X$RELEASE" == "X" ]; then
+VERSION=`grep "Standards-Version" debian/control | cut -d : -f 2 | sed -e 's@\s@@g'`
+if [ "X$VERSION" == "X" ]; then
     echo "Failed to get version numbers!" >&2
     exit 1
 fi
@@ -45,11 +44,11 @@ ex cd ${TOP_DIR_PATH}
 ex mkdir -p $tmpdir/gdrcopy
 ex rm -rf $tmpdir/gdrcopy/*
 ex cp -r autogen.sh configure.ac Makefile.am README.md include src tests LICENSE packages/debian $tmpdir/gdrcopy/
-ex rm -f $tmpdir/gdrcopy_$VERSION.orig.tar.gz
+ex rm -f $tmpdir/gdrcopy_${VERSION}.orig.tar.gz
 
 ex cd $tmpdir
 ex mv gdrcopy gdrcopy-$VERSION
-ex tar czvf gdrcopy_$VERSION.orig.tar.gz gdrcopy-$VERSION
+ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-$VERSION
 
 ex cd $tmpdir/gdrcopy-$VERSION
 ex debuild --set-envvar=CUDA=$CUDA -us -uc

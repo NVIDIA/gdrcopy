@@ -1,9 +1,9 @@
 Source: gdrdrv-dkms
 Section: misc
 Priority: optional
-Maintainer: Dynamic Kernel Modules Support Team <pkg-dkms-maint@lists.alioth.debian.org>
-Build-Depends: debhelper (>= 7), dkms
-Standards-Version: 3.8.1
+Maintainer: Pak Markthub <pmarkthub@nvidia.com>
+Build-Depends: debhelper (>= 10), dkms
+Standards-Version: 1.4
 
 Package: gdrdrv-dkms
 Architecture: any
