@@ -43,7 +43,7 @@ cd ${TOP_DIR_PATH}
 
 mkdir -p $tmpdir/gdrcopy
 rm -rf $tmpdir/gdrcopy/*
-cp -r autogen.sh configure.ac init.d insmod.sh Makefile.am README.md include src tests LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
+cp -r autogen.sh configure.ac packages/rhel/init.d insmod.sh Makefile.am README.md include src tests LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
 rm -f $tmpdir/gdrcopy-$VERSION.tar.gz
 cd $tmpdir
 mv gdrcopy gdrcopy-$VERSION
