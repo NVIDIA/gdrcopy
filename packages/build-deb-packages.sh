@@ -44,7 +44,7 @@ ex cd ${TOP_DIR_PATH}
 
 ex mkdir -p $tmpdir/gdrcopy
 ex rm -rf $tmpdir/gdrcopy/*
-ex cp -r autogen.sh configure.ac init.d insmod.sh Makefile.am README.md include src tests LICENSE packages/debian $tmpdir/gdrcopy/
+ex cp -r autogen.sh configure.ac Makefile.am README.md include src tests LICENSE packages/debian $tmpdir/gdrcopy/
 ex rm -f $tmpdir/gdrcopy_$VERSION.orig.tar.gz
 
 ex cd $tmpdir
