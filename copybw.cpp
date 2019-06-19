@@ -144,9 +144,9 @@ main(int argc, char *argv[])
         BREAK_IF_NEQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
         ASSERT_NEQ(mh, null_mh);
 
-        void *bar_ptr  = NULL;
-        ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
-        OUT << "bar_ptr: " << bar_ptr << endl;
+        void *map_d_ptr  = NULL;
+        ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, size), 0);
+        OUT << "map_d_ptr: " << map_d_ptr << endl;
 
         gdr_info_t info;
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
@@ -162,7 +162,7 @@ main(int argc, char *argv[])
         int off = info.va - d_A;
         OUT << "page offset: " << off << endl;
 
-        uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
+        uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
         OUT << "user-space pointer:" << buf_ptr << endl;
 
         // copy to GPU benchmark
@@ -184,7 +184,7 @@ main(int argc, char *argv[])
 
         compare_buf(init_buf, buf_ptr + copy_offset/4, copy_size);
 
-        // copy from BAR benchmark
+        // copy from GPU benchmark
         cout << "reading test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_read_iters << endl;
         clock_gettime(MYCLOCK, &beg);
         for (int iter=0; iter<num_read_iters; ++iter)
@@ -201,7 +201,7 @@ main(int argc, char *argv[])
         }
 
         OUT << "unmapping buffer" << endl;
-        ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+        ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, size), 0);
 
         OUT << "unpinning buffer" << endl;
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
