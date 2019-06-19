@@ -73,11 +73,11 @@ typedef struct gdr_mh_s {
   unsigned long h;
 } gdr_mh_t;
 
-// Map device memory buffer on GPU BAR1, returning an handle.
-// Memory is still not accessible to user-space.
+// Create a peer-to-peer mapping of the device memory buffer, returning an opaque handle.
+// Note that at this point the mapping is still not accessible to user-space.
 int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token, uint32_t va_space, gdr_mh_t *handle);
 
-// Unmap the handle. 
+// Destroys the peer-to-peer mapping and frees the handle.
 //
 // If there exists a corresponding user-space mapping, gdr_unmap should be
 // called before this one.
@@ -105,10 +105,9 @@ struct gdr_info {
 typedef struct gdr_info gdr_info_t;
 int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_t *info);
 
-// create a user-space mapping for the BAR1 info, length is bar1->size
-// above.
+// Create a user-space mapping of the memory handle.
 //
-// WARNING: the BAR physical address will be aligned to the page size
+// WARNING: the address could be potentially aligned to the boundary of the page size
 // before being mapped in user-space, so the pointer returned might be
 // affected by an offset. gdr_get_info can be used to calculate that
 // offset.
