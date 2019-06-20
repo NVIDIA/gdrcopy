@@ -63,7 +63,7 @@ static int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
 {
     int diff = 0;
     if (size % 4 != 0U) {
-        printf("warning: buffer size %d is not dword aligned, ignoring trailing bytes\n", size);
+        printf("warning: buffer size %zu is not dword aligned, ignoring trailing bytes\n", size);
         size -= (size % 4);
     }
     unsigned ndwords = size/sizeof(uint32_t);
