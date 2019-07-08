@@ -6,7 +6,7 @@
 
 DEB_NAME=gdrdrv
 NAME=gdrdrv
-VERSION=1.4
+VERSION=@VERSION@
 
 configure: configure-stamp
 configure-stamp:

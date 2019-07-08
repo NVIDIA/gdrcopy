@@ -1,7 +1,7 @@
 #!/bin/sh
 
 NAME=gdrdrv
-VERSION=1.4
+VERSION=@VERSION@
 
 set -e
 
