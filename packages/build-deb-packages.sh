@@ -26,7 +26,9 @@ echo "Building debian package for the gdrcopy library ..."
 
 ex cd ${SCRIPT_DIR_PATH}
 
-VERSION=`grep "Standards-Version" debian/control | cut -d : -f 2 | sed -e 's@\s@@g'`
+MAJOR_VERSION=$(awk '/#define GDR_API_MAJOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
+MINOR_VERSION=$(awk '/#define GDR_API_MINOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
+VERSION="${MAJOR_VERSION}.${MINOR_VERSION}"
 if [ "X$VERSION" == "X" ]; then
     echo "Failed to get version numbers!" >&2
     exit 1
@@ -37,6 +39,9 @@ if [ ! -d "$tmpdir" ]; then
     echo "Failed to create a temp directory!" >&2
     exit 1
 fi
+
+echo "Building gdrcopy debian packages version ${VERSION} ..."
+
 echo "Working in $tmpdir ..."
 
 ex cd ${TOP_DIR_PATH}
@@ -46,11 +51,14 @@ ex rm -rf $tmpdir/gdrcopy/*
 ex cp -r autogen.sh configure.ac Makefile.am README.md include src tests LICENSE packages/debian $tmpdir/gdrcopy/
 ex rm -f $tmpdir/gdrcopy_${VERSION}.orig.tar.gz
 
-ex cd $tmpdir
-ex mv gdrcopy gdrcopy-$VERSION
-ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-$VERSION
+ex cd $tmpdir/gdrcopy
+ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 
-ex cd $tmpdir/gdrcopy-$VERSION
+ex cd $tmpdir
+ex mv gdrcopy gdrcopy-${VERSION}
+ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
+
+ex cd $tmpdir/gdrcopy-${VERSION}
 ex debuild --set-envvar=CUDA=$CUDA -us -uc
 
 echo
@@ -63,6 +71,7 @@ ex cp -r $tmpdir/gdrcopy-$VERSION/src/gdrdrv $tmpdir/gdrdrv-dkms-$VERSION/gdrdrv
 ex cp ${SCRIPT_DIR_PATH}/dkms.conf $tmpdir/gdrdrv-dkms-$VERSION/gdrdrv-$VERSION/
 ex cd $tmpdir/gdrdrv-dkms-$VERSION/
 ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
+ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 
 ex dpkg-buildpackage -S -us -uc
 ex dpkg-buildpackage -rfakeroot -d -b -us -uc

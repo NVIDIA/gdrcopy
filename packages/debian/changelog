@@ -1,4 +1,4 @@
-gdrcopy (1.4) unstable; urgency=low
+gdrcopy (@VERSION@) unstable; urgency=low
 
   * Initial release of Debian package
 

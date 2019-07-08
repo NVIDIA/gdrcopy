@@ -1,4 +1,4 @@
-gdrdrv-dkms (1.4) unstable; urgency=low
+gdrdrv-dkms (@VERSION@) unstable; urgency=low
 
   * Automatically packaged by DKMS.
 
