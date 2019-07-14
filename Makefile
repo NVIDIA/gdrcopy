@@ -45,7 +45,12 @@ exes: $(EXES)
 
 install: lib_install #drv_install
 
-lib_install:
+makedirs:
+        @ echo "creating $(DESTLIB) ..."
+        mkdir -p $(DESTLIB)
+        mkdir -p $(PREFIX)/include
+
+lib_install: makedirs
 	@ echo "installing in $(PREFIX)..." && \
 	install -D -v -m u=rw,g=rw,o=r $(LIB_DYNAMIC) -t $(DESTLIB) && \
 	install -D -v -m u=rw,g=rw,o=r gdrapi.h -t $(PREFIX)/include/; \
