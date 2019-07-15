@@ -260,7 +260,7 @@ struct gdr_info {
     // numerical pid here to avoid issues from pid reuse.
     struct pid             *pid;
 
-    // Address space uniqued to this opened file. We need to create a new one
+    // Address space unique to this opened file. We need to create a new one
     // because filp->f_mapping usually points to inode->i_mapping.
     struct address_space    mapping;
 
@@ -828,16 +828,6 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
     // Disallow mmapped VMA to propagate to child processes
     vma->vm_flags |= VM_DONTCOPY;
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
-    vma->vm_pgoff = pfn;
-    vma->vm_flags |= VM_RESERVED;
-    vma->vm_flags |= VM_IO;
-    if (remap_page_range(vma, vaddr, paddr, size, vma->vm_page_prot)) {
-        gdr_err("error in remap_page_range()\n");
-        ret = -EAGAIN;
-        goto out;
-    }
-#else
     if (is_wcomb) {
         // override prot to create non-coherent WC mappings
         vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
@@ -849,7 +839,6 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
         ret = -EAGAIN;
         goto out;
     }
-#endif
 
 out:
     return ret;
