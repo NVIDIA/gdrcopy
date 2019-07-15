@@ -80,7 +80,7 @@ copybw: copybw.o $(LIB)
 	$(LINK.cc)  -o $@ $^ $(LIBS)
 
 sanity: sanity.o $(LIB)
-	$(LINK.cc)  -o $@ $^ -lcheck -lcudart -lcuda -lpthread -lrt -lsubunit
+	$(LINK.cc)  -o $@ $^ $(LIBS) `pkg-config --libs check`
 
 driver:
 	cd gdrdrv; \
@@ -92,7 +92,7 @@ drv_install:
 
 
 clean:
-	rm -f *.o $(EXES) lib*.{a,so}* *~ core.* gdrdrv/.cache.mk libgdrapi.so* && \
+	rm -f *.o $(EXES) lib*.{a,so}* *~ core.* libgdrapi.so* && \
 	$(MAKE) -C gdrdrv clean
 
 .PHONY: driver clean all lib exes lib_install install
