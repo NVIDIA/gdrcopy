@@ -219,14 +219,13 @@ START_TEST(data_validation)
     void *dummy;
     ASSERTRT(cudaMalloc(&dummy, 0));
 
-    const size_t _size = 256*1024+16; //32*1024+8;
+    const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
     ASSERTDRV(cuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
-    //OUT << "device ptr: " << hex << d_A << dec << endl;
 
     unsigned int flag = 1;
     ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
@@ -255,7 +254,6 @@ START_TEST(data_validation)
 
     void *bar_ptr  = NULL;
     ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
-    //OUT << "bar_ptr: " << bar_ptr << endl;
 
     ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
     ASSERT(info.mapped);
@@ -263,27 +261,22 @@ START_TEST(data_validation)
     print_dbg("off: %d\n", off);
 
     uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
-    //OUT << "buf_ptr:" << buf_ptr << endl;
 
     print_dbg("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
     init_hbuf_walking_bit(buf_ptr, size);
-    //mmiowcwb();
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    //ASSERTDRV(cuCtxSynchronize());
     compare_buf(init_buf, copy_buf, size);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
     print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
     gdr_copy_to_bar(buf_ptr, init_buf, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    //ASSERTDRV(cuCtxSynchronize());
     compare_buf(init_buf, copy_buf, size);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
     print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
     gdr_copy_to_bar(buf_ptr, init_buf, size);
     gdr_copy_from_bar(copy_buf, buf_ptr, size);
-    //ASSERTDRV(cuCtxSynchronize());
     compare_buf(init_buf, copy_buf, size);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
