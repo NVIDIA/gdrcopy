@@ -986,7 +986,6 @@ out:
             mr->vma = NULL;
             mr->mapping = NULL;
             mr->cpu_mapping_type = GDR_MR_NONE;
-            // TODO: tear down stale partial mappings
         }
     } else {
         mr->vma = vma;
