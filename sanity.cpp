@@ -185,17 +185,17 @@ START_TEST(basic)
     ASSERT_NEQ(g, (void*)0);
 
     gdr_mh_t mh = null_mh;
-	CUdeviceptr d_ptr = d_A;
+    CUdeviceptr d_ptr = d_A;
 
-	// tokens are optional in CUDA 6.0
-	// wave out the test if GPUDirectRDMA is not enabled
-	ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
-	ASSERT_NEQ(mh, null_mh);
-	ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+    // tokens are optional in CUDA 6.0
+    // wave out the test if GPUDirectRDMA is not enabled
+    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_NEQ(mh, null_mh);
+    ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
 
     ASSERTDRV(cuMemFree(d_A));
-	
+
     print_dbg("End basic\n");
 }
 END_TEST
