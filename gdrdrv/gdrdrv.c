@@ -36,6 +36,7 @@
 #include <linux/timex.h>
 #include <linux/timer.h>
 #include <linux/sched/mm.h>
+#include <linux/sched.h>
 
 #ifndef random_get_entropy
 #define random_get_entropy()	get_cycles()
@@ -240,6 +241,7 @@ struct gdr_info {
     // simple low-performance linked-list implementation
     struct list_head mr_list;
     struct mutex lock;
+    struct pid *pid;
 };
 typedef struct gdr_info gdr_info_t;
 
@@ -272,6 +274,8 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
 
     INIT_LIST_HEAD(&info->mr_list);
     mutex_init(&info->lock);
+
+    info->pid = task_pid(current);
 
     filp->private_data = info;
 
@@ -642,6 +646,15 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
         return -EINVAL;
     }
 
+    if (!info) {
+        gdr_err("filp contains no info\n");
+        return -EIO;
+    }
+    if (info->pid != task_pid(current)) {
+        gdr_err("filp is not opened by the current process\n");
+        return -EACCES;
+    }
+
     switch (cmd) {
     case GDRDRV_IOC_PIN_BUFFER:
         ret = gdrdrv_pin_buffer(info, argp);
@@ -762,10 +775,13 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
 
     gdr_info("mmap filp=0x%p vma=0x%p vm_file=0x%p start=0x%lx size=%zu off=0x%lx\n", filp, vma, vma->vm_file, vma->vm_start, size, vma->vm_pgoff);
 
-    if (info == NULL) {
-        gdr_dbg("gdr_info is not found\n");
-        ret = -EINVAL;
-        goto out;
+    if (!info) {
+        gdr_err("filp contains no info\n");
+        return -EIO;
+    }
+    if (info->pid != task_pid(current)) {
+        gdr_err("filp is not opened by the current process\n");
+        return -EACCES;
     }
 
     handle = gdrdrv_handle_from_off(vma->vm_pgoff);

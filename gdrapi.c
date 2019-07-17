@@ -134,7 +134,7 @@ gdr_t gdr_open()
         return NULL;
     }
 
-    int fd = open(gdrinode, O_RDWR);
+    int fd = open(gdrinode, O_RDWR | O_CLOEXEC);
     if (-1 == fd ) {
         int ret = errno;
         gdr_err("error opening driver (errno=%d/%s)\n", ret, strerror(ret));
