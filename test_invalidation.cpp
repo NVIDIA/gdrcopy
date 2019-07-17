@@ -372,6 +372,57 @@ START_TEST(invalidation_fork_after_gdr_map)
 }
 END_TEST
 
+START_TEST(invalidation_fork_child_gdr_map_parent)
+{
+    expecting_exception_signal = false;
+
+    const size_t _size = sizeof(int) * 16;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const char *myname;
+
+    void *dummy;
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    CUdeviceptr d_A;
+    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+
+    unsigned int flag = 1;
+    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    gdr_mh_t mh;
+
+    CUdeviceptr d_ptr = d_A;
+
+    // tokens are optional in CUDA 6.0
+    // wave out the test if GPUDirectRDMA is not enabled
+    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_NEQ(mh, null_mh);
+
+    pid_t pid = fork();
+    ck_assert_int_ge(pid, 0);
+
+    myname = pid == 0 ? "child" : "parent";
+
+    if (pid == 0) {
+        void *bar_ptr  = NULL;
+        ck_assert_int_ne(gdr_map(g, mh, &bar_ptr, size), 0);
+    }
+    else {
+        int child_exit_status = -EINVAL;
+        ck_assert_int_eq(wait(&child_exit_status), pid);
+        ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
+
+        ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+        ASSERTDRV(cuMemFree(d_A));
+        ASSERT_EQ(gdr_close(g), 0);
+    }
+}
+END_TEST
+
 int main(int argc, char *argv[])
 {
     Suite *s = suite_create("Invalidation");
@@ -384,6 +435,7 @@ int main(int argc, char *argv[])
     tcase_add_test(tc, invalidation_one_process);
     tcase_add_test(tc, invalidation_two_processes);
     tcase_add_test(tc, invalidation_fork_after_gdr_map);
+    tcase_add_test(tc, invalidation_fork_child_gdr_map_parent);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
