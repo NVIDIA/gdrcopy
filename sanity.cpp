@@ -164,6 +164,154 @@ typedef struct {
     unsigned wc_mapping:1;
 } gdr_memh_t;
 
+START_TEST(basic)
+{
+    expecting_exception_signal = false;
+
+    print_dbg("Start basic\n");
+
+    void *dummy;
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    const size_t _size = 256*1024+16;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    print_dbg("buffer size: %zu\n", size);
+    CUdeviceptr d_A;
+    ASSERTDRV(cuMemAlloc(&d_A, size));
+
+    unsigned int flag = 1;
+    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+
+    uint32_t *init_buf = new uint32_t[size];
+    uint32_t *copy_buf = new uint32_t[size];
+
+    init_hbuf_walking_bit(init_buf, size);
+    memset(copy_buf, 0, sizeof(*copy_buf) * sizeof(uint32_t));
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    gdr_mh_t mh = {0};
+    if (mh == null_mh) 
+		print_dbg("miao\n");
+	CUdeviceptr d_ptr = d_A;
+
+	// tokens are optional in CUDA 6.0
+	// wave out the test if GPUDirectRDMA is not enabled
+	ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+	ASSERT_NEQ(mh, null_mh);
+	ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+    ASSERT_EQ(gdr_close(g), 0);
+
+    ASSERTDRV(cuMemFree(d_A));
+	
+    print_dbg("End basic\n");
+}
+END_TEST
+
+START_TEST(data_validation)
+{
+    print_dbg("Start data_validation\n");
+
+    void *dummy;
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    const size_t _size = 256*1024+16; //32*1024+8;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    print_dbg("buffer size: %zu\n", size);
+    CUdeviceptr d_A;
+    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+    //OUT << "device ptr: " << hex << d_A << dec << endl;
+
+    unsigned int flag = 1;
+    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+
+    uint32_t *init_buf = new uint32_t[size];
+    uint32_t *copy_buf = new uint32_t[size];
+
+    init_hbuf_walking_bit(init_buf, size);
+    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    gdr_mh_t mh;
+
+	CUdeviceptr d_ptr = d_A;
+
+	// tokens are optional in CUDA 6.0
+	// wave out the test if GPUDirectRDMA is not enabled
+	ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+	ASSERT_NEQ(mh, null_mh);
+
+	gdr_info_t info;
+	ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+	ASSERT(!info.mapped);
+
+	void *bar_ptr  = NULL;
+	ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
+	//OUT << "bar_ptr: " << bar_ptr << endl;
+
+	ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+	ASSERT(info.mapped);
+	int off = d_ptr - info.va;
+	print_dbg("off: %d\n", off);
+
+	uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
+	//OUT << "buf_ptr:" << buf_ptr << endl;
+
+	print_dbg("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
+	init_hbuf_walking_bit(buf_ptr, size);
+	//mmiowcwb();
+	ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
+	//ASSERTDRV(cuCtxSynchronize());
+	compare_buf(init_buf, copy_buf, size);
+	memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+
+	print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
+	gdr_copy_to_bar(buf_ptr, init_buf, size);
+	ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
+	//ASSERTDRV(cuCtxSynchronize());
+	compare_buf(init_buf, copy_buf, size);
+	memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+
+	print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
+	gdr_copy_to_bar(buf_ptr, init_buf, size);
+	gdr_copy_from_bar(copy_buf, buf_ptr, size);
+	//ASSERTDRV(cuCtxSynchronize());
+	compare_buf(init_buf, copy_buf, size);
+	memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+
+	int extra_dwords = 5;
+	int extra_off = extra_dwords * sizeof(uint32_t);
+	print_dbg("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset\n", extra_dwords);
+	gdr_copy_to_bar(buf_ptr + extra_dwords, init_buf, size - extra_off);
+	gdr_copy_from_bar(copy_buf, buf_ptr + extra_dwords, size - extra_off);
+	compare_buf(init_buf, copy_buf, size - extra_off);
+	memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+
+	extra_off = 11;
+	print_dbg("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
+	gdr_copy_to_bar((char*)buf_ptr + extra_off, init_buf, size);
+	gdr_copy_from_bar(copy_buf, (char*)buf_ptr + extra_off, size);
+	compare_buf(init_buf, copy_buf, size);
+
+	print_dbg("unampping\n");
+	ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+	print_dbg("unpinning\n");
+	ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+
+    ASSERT_EQ(gdr_close(g), 0);
+
+    ASSERTDRV(cuMemFree(d_A));
+
+    print_dbg("End data_validation\n");
+}
+END_TEST
+
 /**
  * This unit test ensures that accessing to gdr_map'ed region is not possible
  * after cuMemFree.
@@ -1110,21 +1258,31 @@ int main(int argc, char *argv[])
         }
     }
 
-    Suite *s = suite_create("Invalidation");
-    TCase *tc = tcase_create("Invalidation");
+    Suite *s = suite_create("Sanity");
+
+    TCase *tc_basic = tcase_create("Basic");
+    TCase *tc_data_validation = tcase_create("Data Validation");
+    TCase *tc_invalidation = tcase_create("Invalidation");
+
     SRunner *sr = srunner_create(s);
 
     int nf;
 
-    suite_add_tcase(s, tc);
-    tcase_add_test(tc, invalidation_access_after_cumemfree);
-    tcase_add_test(tc, invalidation_two_mappings);
-    tcase_add_test(tc, invalidation_fork_access_after_cumemfree);
-    tcase_add_test(tc, invalidation_fork_after_gdr_map);
-    tcase_add_test(tc, invalidation_fork_child_gdr_map_parent);
-    tcase_add_test(tc, invalidation_fork_map_and_free);
-    tcase_add_test(tc, invalidation_unix_sock_shared_fd_gdr_pin_buffer);
-    tcase_add_test(tc, invalidation_unix_sock_shared_fd_gdr_map);
+    suite_add_tcase(s, tc_basic);
+	tcase_add_test(tc_basic, basic);
+
+    suite_add_tcase(s, tc_data_validation);
+	tcase_add_test(tc_data_validation, data_validation);
+
+    suite_add_tcase(s, tc_invalidation);
+    tcase_add_test(tc_invalidation, invalidation_access_after_cumemfree);
+    tcase_add_test(tc_invalidation, invalidation_two_mappings);
+    tcase_add_test(tc_invalidation, invalidation_fork_access_after_cumemfree);
+    tcase_add_test(tc_invalidation, invalidation_fork_after_gdr_map);
+    tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_map_parent);
+    tcase_add_test(tc_invalidation, invalidation_fork_map_and_free);
+    tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer);
+    tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
