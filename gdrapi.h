@@ -65,7 +65,7 @@ gdr_t gdr_open();
 int gdr_close(gdr_t g);
 
 typedef struct gdr_mh_s {
-  unsigned long h;
+    unsigned long h;
 } gdr_mh_t;
 
 // Map device memory buffer on GPU BAR1, returning an handle.
