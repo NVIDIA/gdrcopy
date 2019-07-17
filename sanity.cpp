@@ -37,6 +37,7 @@
 #include <cuda_runtime_api.h>
 #include <check.h>
 #include <errno.h>
+#include <sys/queue.h>
 
 using namespace std;
 
@@ -154,15 +155,18 @@ int recvfd(int socket) {
     return fd;
 }
 
-struct gdr {
-    int fd;
-};
-
-typedef struct { 
+typedef struct gdr_memh_t { 
     uint32_t handle;
+    LIST_ENTRY(gdr_memh_t) entries;
     unsigned mapped:1;
     unsigned wc_mapping:1;
 } gdr_memh_t;
+
+struct gdr {
+    int fd;
+    LIST_HEAD(memh_list, gdr_memh_t) memhs;
+};
+
 
 START_TEST(basic)
 {
@@ -309,6 +313,85 @@ START_TEST(data_validation)
     ASSERTDRV(cuMemFree(d_A));
 
     print_dbg("End data_validation\n");
+}
+END_TEST
+
+/**
+ * This unit test ensures that accessing to gdr_map'ed region is not possible
+ * after gdr_close.
+ *
+ * Step:
+ * 1. Initialize CUDA and gdrcopy
+ * 2. Do gdr_map(..., &bar_ptr, ...)
+ * 3. Do gdr_close
+ * 4. Attempt to access to bar_ptr after 3. should fail
+ */
+START_TEST(invalidation_access_after_gdr_close)
+{
+    expecting_exception_signal = false;
+
+    print_dbg("Start invalidation_access_after_gdr_close\n");
+
+    struct sigaction act;
+    act.sa_handler = exception_signal_handle;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+    sigaction(SIGBUS, &act, 0);
+
+    srand(time(NULL));
+
+    const size_t _size = sizeof(int) * 16;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    int mydata = (rand() % 1000) + 1;
+
+    void *dummy;
+    // Let libcudart initialize CUDA for us
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    CUdeviceptr d_A;
+    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+
+    unsigned int flag = 1;
+    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    gdr_mh_t mh;
+    CUdeviceptr d_ptr = d_A;
+
+    // tokens are optional in CUDA 6.0
+    // wave out the test if GPUDirectRDMA is not enabled
+    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_NEQ(mh, null_mh);
+
+    print_dbg("Mapping bar1\n");
+    void *bar_ptr  = NULL;
+    ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
+
+    gdr_info_t info;
+    ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+    int off = d_ptr - info.va;
+
+    volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
+
+    // Write data
+    print_dbg("Writing %d into buf_ptr[0]\n", mydata);
+    buf_ptr[0] = mydata;
+
+    print_dbg("Calling gdr_close\n");
+    ASSERT_EQ(gdr_close(g), 0);
+    
+    print_dbg("Trying to read buf_ptr[0] after gdr_close\n");
+    expecting_exception_signal = true;
+    int data_from_buf_ptr = buf_ptr[0];
+    expecting_exception_signal = false;
+
+    ck_assert_msg(data_from_buf_ptr != mydata, "Got the same data after gdr_close!!");
+    
+    print_dbg("End invalidation_access_after_gdr_close\n");
 }
 END_TEST
 
@@ -1275,6 +1358,7 @@ int main(int argc, char *argv[])
 	tcase_add_test(tc_data_validation, data_validation);
 
     suite_add_tcase(s, tc_invalidation);
+    tcase_add_test(tc_invalidation, invalidation_access_after_gdr_close);
     tcase_add_test(tc_invalidation, invalidation_access_after_cumemfree);
     tcase_add_test(tc_invalidation, invalidation_two_mappings);
     tcase_add_test(tc_invalidation, invalidation_fork_access_after_cumemfree);
