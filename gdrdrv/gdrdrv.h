@@ -26,7 +26,6 @@
 #define GDRDRV_IOCTL                 0xDA
 
 typedef __u32 gdr_hnd_t;
-#define GDR_HANDLE_MASK ((1UL<<32)-1)
 
 //-----------
 

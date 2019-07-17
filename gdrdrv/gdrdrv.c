@@ -38,10 +38,6 @@
 #include <linux/sched/mm.h>
 #include <linux/sched.h>
 
-#ifndef random_get_entropy
-#define random_get_entropy()	get_cycles()
-#endif
-
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_32)
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 {
@@ -211,21 +207,9 @@ static int gdr_mr_is_wc_mapping(gdr_mr_t *mr )
     return (mr->cpu_mapping_type == GDR_MR_WC  ) ? 1 : 0;
 }
 
-static void gdrdrv_zap_vma(struct address_space *mapping, struct vm_area_struct *vma)
+static inline void gdrdrv_zap_vma(struct address_space *mapping, struct vm_area_struct *vma)
 {
-    // BUG: this needs to be called from the same process, i.e. it
-    // does not store the original mm.
-#if 0
-	struct mm_struct *mm;
-	mm = get_task_mm(current);
-    down_write(&mm->mmap_sem);
-    // this API is not exported to modules
-    zap_page_range(vma, vma->vm_start, vma->vm_end - vma->vm_start);
-    up_write(&mm->mmap_sem);
-	mmput(mm);
-#else
     unmap_mapping_range(mapping, vma->vm_pgoff << PAGE_SHIFT, vma->vm_end - vma->vm_start, 0);
-#endif
 }
 
 static void gdr_mr_destroy_all_mappings(gdr_mr_t *mr)
@@ -242,6 +226,8 @@ struct gdr_info {
     struct list_head mr_list;
     struct mutex lock;
     struct pid *pid;
+    struct address_space mapping;
+    off_t next_offset;
 };
 typedef struct gdr_info gdr_info_t;
 
@@ -258,14 +244,14 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     int ret = 0;
     gdr_info_t *info = NULL;
 
-    gdr_dbg("minor=%d filep=%p\n", minor, filp);
+    gdr_dbg("minor=%d filep=0x%p\n", minor, filp);
     if(minor >= 1) {
         gdr_err("device minor number too big!\n");
         ret = -ENXIO;
         goto out;
     }
 
-    info = kmalloc(sizeof(gdr_info_t), GFP_KERNEL);
+    info = kzalloc(sizeof(gdr_info_t), GFP_KERNEL);
     if (!info) {
         gdr_err("can't alloc kernel memory\n");
         ret = -ENOMEM;
@@ -276,6 +262,13 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     mutex_init(&info->lock);
 
     info->pid = task_pid(current);
+
+    // Create mapping per opened file. By preventing sharing of this file, the
+    // mapping is local to the process.
+    address_space_init_once(&info->mapping);
+    info->mapping.host = filp->f_mapping->host;
+    info->mapping.a_ops = filp->f_mapping->a_ops;
+    filp->f_mapping = &info->mapping;
 
     filp->private_data = info;
 
@@ -430,7 +423,6 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     mr->cpu_mapping_type = GDR_MR_NONE;
     mr->page_table   = NULL;
     mr->cb_flag      = 0;
-    mr->handle       = random_get_entropy() & GDR_HANDLE_MASK; // this is a hack, we need something really unique and randomized
 
     gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x)\n",
              mr->va, mr->mapped_size, mr->p2p_token, mr->va_space);
@@ -484,15 +476,22 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
         }
     }
 
-
     // here a typical driver would use the page_table to fill in some HW
     // DMA data structure
 
-    params.handle = mr->handle;
-
     mutex_lock(&info->lock);
     list_add(&mr->node, &info->mr_list);
+
+    // The user treats handle as the offset value for mmap. To guarantee no
+    // overlapping, the next offset will sit next to this mapping space.
+    // Remember that the address space is local to the process. Thus, two
+    // processes do mmap with the same offset get different mappings.
+    mr->handle = info->next_offset;
+    info->next_offset += mr->mapped_size;
+
     mutex_unlock(&info->lock);
+
+    params.handle = mr->handle;
 
 out:
 
