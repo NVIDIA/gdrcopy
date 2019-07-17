@@ -293,7 +293,7 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
     mutex_lock(&info->lock);
     list_for_each_safe(p, n, &info->mr_list) {
         mr = list_entry(p, gdr_mr_t, node);
-        gdr_info("freeing MR=%px\n", mr);
+        gdr_info("freeing MR=0x%p\n", mr);
         if (gdr_mr_is_mapped(mr)) {
             mutex_unlock(&info->lock);
             gdr_mr_destroy_all_mappings(mr);
@@ -329,6 +329,7 @@ static gdr_mr_t *gdr_mr_from_handle_unlocked(gdr_info_t *info, gdr_hnd_t handle)
 
     list_for_each(p, &info->mr_list) {
         mr = list_entry(p, gdr_mr_t, node);
+        gdr_dbg("mr->handle=0x%x handle=0x%x\n", mr->handle, handle);
         if (handle == mr->handle)
             break;
     }
@@ -534,7 +535,7 @@ static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
         ret = -EINVAL;
     } else {
         if (gdr_mr_is_mapped(mr)) {
-            gdr_err("trying to unpin mapped mr %px\n", mr);
+            gdr_err("trying to unpin mapped mr 0x%p\n", mr);
             ret = -EBUSY;
         } else {
             list_del(&mr->node);
@@ -679,7 +680,7 @@ static long gdrdrv_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 void gdrdrv_vma_close(struct vm_area_struct *vma)
 {
     gdr_mr_t *mr = (gdr_mr_t *)vma->vm_private_data;
-    gdr_dbg("closing vma=%px vm_file=%px vm_private_data=%px mr=%px mr->vma=%px\n", vma, vma->vm_file, vma->vm_private_data, mr, mr->vma);
+    gdr_dbg("closing vma=0x%p vm_file=0x%p vm_private_data=0x%p mr=0x%p mr->vma=0x%p\n", vma, vma->vm_file, vma->vm_private_data, mr, mr->vma);
     // TODO: handle multiple vma's
     mr->vma = NULL;
     mr->cpu_mapping_type = GDR_MR_NONE;
@@ -717,6 +718,7 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
         goto out;
     }
     pfn = paddr >> PAGE_SHIFT;
+    vma->vm_flags |= VM_DONTCOPY;
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
     vma->vm_pgoff = pfn;
     vma->vm_flags |= VM_RESERVED;
@@ -758,7 +760,13 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     int p = 0;
     unsigned long vaddr;
 
-    gdr_info("mmap vma=%px start=0x%lx size=%zu off=0x%lx\n", vma, vma->vm_start, size, vma->vm_pgoff);
+    gdr_info("mmap filp=0x%p vma=0x%p vm_file=0x%p start=0x%lx size=%zu off=0x%lx\n", filp, vma, vma->vm_file, vma->vm_start, size, vma->vm_pgoff);
+
+    if (info == NULL) {
+        gdr_dbg("gdr_info is not found\n");
+        ret = -EINVAL;
+        goto out;
+    }
 
     handle = gdrdrv_handle_from_off(vma->vm_pgoff);
     mr = gdr_mr_from_handle(info, handle);
@@ -811,7 +819,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     // this also works as the mapped flag for this mr
     mr->cpu_mapping_type = GDR_MR_CACHING;
     vma->vm_ops = &gdrdrv_vm_ops;
-    gdr_dbg("overwriting vma->vm_private_data=%px with mr=%px\n", vma->vm_private_data, mr);
+    gdr_dbg("overwriting vma->vm_private_data=0x%p with mr=0x%p\n", vma->vm_private_data, mr);
     vma->vm_private_data = mr;
     p = 0;
     vaddr = vma->vm_start;
@@ -872,14 +880,16 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
 
 out:
     if (ret) {
-        mr->vma = NULL;
-        mr->mapping = NULL;
-        mr->cpu_mapping_type = GDR_MR_NONE;
-        // TODO: tear down stale partial mappings
+        if (mr) {
+            mr->vma = NULL;
+            mr->mapping = NULL;
+            mr->cpu_mapping_type = GDR_MR_NONE;
+            // TODO: tear down stale partial mappings
+        }
     } else {
         mr->vma = vma;
         mr->mapping = filp->f_mapping;
-        gdr_dbg("mr vma=%px mapping=%px\n", mr->vma, mr->mapping);
+        gdr_dbg("mr vma=0x%p mapping=0x%p\n", mr->vma, mr->mapping);
     }
     return ret;
 }
