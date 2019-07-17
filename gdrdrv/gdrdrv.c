@@ -633,11 +633,9 @@ static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
         ret = -EINVAL;
     } else {
         if (gdr_mr_is_mapped(mr)) {
-            gdr_err("trying to unpin mapped mr 0x%px\n", mr);
-            ret = -EBUSY;
-        } else {
-            list_del(&mr->node);
+            gdr_mr_destroy_all_mappings(mr);
         }
+        list_del(&mr->node);
     }
     mutex_unlock(&info->lock);
     if (ret)

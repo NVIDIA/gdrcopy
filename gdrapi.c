@@ -39,6 +39,7 @@
 #include <sys/ioctl.h>
 #include <time.h>
 #include <asm/types.h>
+#include <sys/queue.h>
 
 #include "gdrapi.h"
 #include "gdrdrv.h"
@@ -100,8 +101,9 @@ static void gdr_msg(enum gdrcopy_msg_level lvl, const char* fmt, ...)
 #define gdr_warn(FMT, ARGS...) gdr_msg(GDRCOPY_MSG_WARN,  "WARN: " FMT, ## ARGS)
 #define gdr_err(FMT, ARGS...)  gdr_msg(GDRCOPY_MSG_ERROR, "ERR:  " FMT, ## ARGS)
 
-typedef struct { 
+typedef struct gdr_memh_t { 
     gdr_hnd_t handle;
+    LIST_ENTRY(gdr_memh_t) entries;
     unsigned mapped:1;
     unsigned wc_mapping:1;
 } gdr_memh_t;
@@ -121,6 +123,7 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
 
 struct gdr {
     int fd;
+    LIST_HEAD(memh_list, gdr_memh_t) memhs;
 };
 
 gdr_t gdr_open()
@@ -143,6 +146,7 @@ gdr_t gdr_open()
     }
 
     g->fd = fd;
+    LIST_INIT(&g->memhs);
 
     return g;
 }
@@ -150,7 +154,23 @@ gdr_t gdr_open()
 int gdr_close(gdr_t g)
 {
     int ret = 0;
-    int retcode = close(g->fd);
+    int retcode;
+    gdr_memh_t *mh, *next_mh;
+
+    mh = g->memhs.lh_first;
+    while (mh != NULL) {
+        // gdr_unpin_buffer frees mh, so we need to get the next one
+        // beforehand.
+        next_mh = mh->entries.le_next;
+        ret = gdr_unpin_buffer(g, from_memh(mh));
+        if (ret) {
+            gdr_err("error unpinning buffer inside gdr_close (errno=%d/%s)\n", ret, strerror(ret));
+            return ret;
+        }
+        mh = next_mh;
+    }
+
+    retcode = close(g->fd);
     if (-1 == retcode) {
         ret = errno;
         gdr_err("error closing driver (errno=%d/%s)\n", ret, strerror(ret));
@@ -188,6 +208,7 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
         goto err;
     }
     mh->handle = params.handle;
+    LIST_INSERT_HEAD(&g->memhs, mh, entries);
     *handle = from_memh(mh);
  err:
     return ret;
@@ -206,6 +227,8 @@ int gdr_unpin_buffer(gdr_t g, gdr_mh_t handle)
         ret = errno;
         gdr_err("ioctl error (errno=%d)\n", ret);
     }
+    LIST_REMOVE(mh, entries);
+    free(mh);
     
     return ret;
 }
