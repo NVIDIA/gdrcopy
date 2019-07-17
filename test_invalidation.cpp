@@ -46,7 +46,7 @@ void exception_signal_handle(int sig)
     ck_abort_msg("Unexpectedly get exception signal");
 }
 
-START_TEST(invalidation_one_process)
+START_TEST(invalidation_access_after_cumemfree)
 {
     expecting_exception_signal = false;
 
@@ -113,7 +113,81 @@ START_TEST(invalidation_one_process)
 }
 END_TEST
 
-START_TEST(invalidation_two_processes)
+START_TEST(invalidation_two_mappings)
+{
+    expecting_exception_signal = false;
+
+    srand(time(NULL));
+
+    const size_t _size = sizeof(int) * 16;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    int mydata = (rand() % 1000) + 1;
+
+    void *dummy;
+    // Let libcudart initialize CUDA for us
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    CUdeviceptr d_A[2];
+
+    for (int i = 0; i < 2; ++i) {
+        ASSERTDRV(cuMemAlloc(&d_A[i], size));
+        ASSERTDRV(cuMemsetD8(d_A[i], 0x95, size));
+
+        unsigned int flag = 1;
+        ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A[i]));
+    }
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    gdr_mh_t mh[2];
+    BEGIN_CHECK {
+        volatile int *buf_ptr[2];
+        void *bar_ptr[2];
+
+        for (int i = 0; i < 2; ++i) {
+            CUdeviceptr d_ptr = d_A[i];
+
+            // tokens are optional in CUDA 6.0
+            // wave out the test if GPUDirectRDMA is not enabled
+            BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh[i]), 0);
+            ASSERT_NEQ(mh[i], null_mh);
+
+            bar_ptr[i] = NULL;
+            ASSERT_EQ(gdr_map(g, mh[i], &bar_ptr[i], size), 0);
+
+            gdr_info_t info;
+            ASSERT_EQ(gdr_get_info(g, mh[i], &info), 0);
+            int off = d_ptr - info.va;
+
+            buf_ptr[i] = (volatile int *)((char *)bar_ptr[i] + off);
+        }
+
+
+        // Write data
+        buf_ptr[0][0] = mydata;
+        buf_ptr[1][0] = mydata + 1;
+
+        ck_assert_int_eq(buf_ptr[0][0], mydata);
+        ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
+
+        ASSERTDRV(cuMemFree(d_A[0]));
+
+        ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
+
+        ASSERTDRV(cuMemFree(d_A[1]));
+        
+        for (int i = 0; i < 2; ++i) {
+            ASSERT_EQ(gdr_unmap(g, mh[i], bar_ptr[i], size), 0);
+            ASSERT_EQ(gdr_unpin_buffer(g, mh[i]), 0);
+        }
+    } END_CHECK;
+    ASSERT_EQ(gdr_close(g), 0);
+}
+END_TEST
+
+START_TEST(invalidation_fork_access_after_cumemfree)
 {
     expecting_exception_signal = false;
 
@@ -423,6 +497,116 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
 }
 END_TEST
 
+START_TEST(invalidation_fork_map_and_free)
+{
+    expecting_exception_signal = false;
+
+    int filedes_0[2];
+    int filedes_1[2];
+    int read_fd;
+    int write_fd;
+    ck_assert_int_ne(pipe(filedes_0), -1);
+    ck_assert_int_ne(pipe(filedes_1), -1);
+
+    srand(time(NULL));
+
+    const size_t _size = sizeof(int) * 16;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const char *myname;
+
+    pid_t pid = fork();
+    ck_assert_int_ge(pid, 0);
+
+    myname = pid == 0 ? "child" : "parent";
+
+    cout << myname << ": Start" << endl;
+
+    if (pid == 0) {
+        close(filedes_0[0]);
+        close(filedes_1[1]);
+
+        read_fd = filedes_1[0];
+        write_fd = filedes_0[1];
+
+        srand(rand());
+    }
+    else {
+        close(filedes_0[1]);
+        close(filedes_1[0]);
+
+        read_fd = filedes_0[0];
+        write_fd = filedes_1[1];
+    }
+
+    int mydata = (rand() % 1000) + 1;
+
+    void *dummy;
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    CUdeviceptr d_A;
+    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+
+    unsigned int flag = 1;
+    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    gdr_mh_t mh;
+    BEGIN_CHECK {
+        CUdeviceptr d_ptr = d_A;
+
+        // tokens are optional in CUDA 6.0
+        // wave out the test if GPUDirectRDMA is not enabled
+        BREAK_IF_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+        ASSERT_NEQ(mh, null_mh);
+
+        void *bar_ptr  = NULL;
+        ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
+
+        gdr_info_t info;
+        ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+        int off = d_ptr - info.va;
+
+        volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
+        cout << myname << ": buf_ptr is " << buf_ptr << endl;
+
+        buf_ptr[0] = mydata;
+        cout << myname << ": write buf_ptr[0] with " << buf_ptr[0] << endl;
+
+        if (pid == 0) {
+            ASSERTDRV(cuMemFree(d_A));
+
+            cout << myname << ": signal parent that I have called cuMemFree" << endl;
+            int msg = 1;
+            ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
+        }
+        else {
+            int cont = 0;
+            cout << myname << ": waiting for signal from child" << endl;
+            do {
+                ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
+            } while (cont == 0);
+            cout << myname << ": received cont signal from child" << endl;
+
+            cout << myname << ": try reading buf_ptr[0]" << endl;
+            int data_from_buf_ptr = buf_ptr[0];
+            cout << myname << ": read buf_ptr[0] get " << data_from_buf_ptr << endl;
+            ck_assert_int_eq(data_from_buf_ptr, mydata);
+        }
+
+        ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+        ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+
+        if (pid > 0)
+            ASSERTDRV(cuMemFree(d_A));
+
+    } END_CHECK;
+    ASSERT_EQ(gdr_close(g), 0);
+}
+END_TEST
+
 int main(int argc, char *argv[])
 {
     Suite *s = suite_create("Invalidation");
@@ -432,10 +616,12 @@ int main(int argc, char *argv[])
     int nf;
 
     suite_add_tcase(s, tc);
-    tcase_add_test(tc, invalidation_one_process);
-    tcase_add_test(tc, invalidation_two_processes);
+    tcase_add_test(tc, invalidation_access_after_cumemfree);
+    tcase_add_test(tc, invalidation_two_mappings);
+    tcase_add_test(tc, invalidation_fork_access_after_cumemfree);
     tcase_add_test(tc, invalidation_fork_after_gdr_map);
     tcase_add_test(tc, invalidation_fork_child_gdr_map_parent);
+    tcase_add_test(tc, invalidation_fork_map_and_free);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
