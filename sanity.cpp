@@ -196,9 +196,7 @@ START_TEST(basic)
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
 
-    gdr_mh_t mh = {0};
-    if (mh == null_mh) 
-		print_dbg("miao\n");
+    gdr_mh_t mh = null_mh;
 	CUdeviceptr d_ptr = d_A;
 
 	// tokens are optional in CUDA 6.0
@@ -244,69 +242,69 @@ START_TEST(data_validation)
 
     gdr_mh_t mh;
 
-	CUdeviceptr d_ptr = d_A;
+    CUdeviceptr d_ptr = d_A;
 
-	// tokens are optional in CUDA 6.0
-	// wave out the test if GPUDirectRDMA is not enabled
-	ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
-	ASSERT_NEQ(mh, null_mh);
+    // tokens are optional in CUDA 6.0
+    // wave out the test if GPUDirectRDMA is not enabled
+    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_NEQ(mh, null_mh);
 
-	gdr_info_t info;
-	ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-	ASSERT(!info.mapped);
+    gdr_info_t info;
+    ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+    ASSERT(!info.mapped);
 
-	void *bar_ptr  = NULL;
-	ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
-	//OUT << "bar_ptr: " << bar_ptr << endl;
+    void *bar_ptr  = NULL;
+    ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
+    //OUT << "bar_ptr: " << bar_ptr << endl;
 
-	ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-	ASSERT(info.mapped);
-	int off = d_ptr - info.va;
-	print_dbg("off: %d\n", off);
+    ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+    ASSERT(info.mapped);
+    int off = d_ptr - info.va;
+    print_dbg("off: %d\n", off);
 
-	uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
-	//OUT << "buf_ptr:" << buf_ptr << endl;
+    uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
+    //OUT << "buf_ptr:" << buf_ptr << endl;
 
-	print_dbg("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
-	init_hbuf_walking_bit(buf_ptr, size);
-	//mmiowcwb();
-	ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-	//ASSERTDRV(cuCtxSynchronize());
-	compare_buf(init_buf, copy_buf, size);
-	memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    print_dbg("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
+    init_hbuf_walking_bit(buf_ptr, size);
+    //mmiowcwb();
+    ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
+    //ASSERTDRV(cuCtxSynchronize());
+    compare_buf(init_buf, copy_buf, size);
+    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
-	print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
-	gdr_copy_to_bar(buf_ptr, init_buf, size);
-	ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-	//ASSERTDRV(cuCtxSynchronize());
-	compare_buf(init_buf, copy_buf, size);
-	memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
+    gdr_copy_to_bar(buf_ptr, init_buf, size);
+    ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
+    //ASSERTDRV(cuCtxSynchronize());
+    compare_buf(init_buf, copy_buf, size);
+    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
-	print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
-	gdr_copy_to_bar(buf_ptr, init_buf, size);
-	gdr_copy_from_bar(copy_buf, buf_ptr, size);
-	//ASSERTDRV(cuCtxSynchronize());
-	compare_buf(init_buf, copy_buf, size);
-	memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
+    gdr_copy_to_bar(buf_ptr, init_buf, size);
+    gdr_copy_from_bar(copy_buf, buf_ptr, size);
+    //ASSERTDRV(cuCtxSynchronize());
+    compare_buf(init_buf, copy_buf, size);
+    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
-	int extra_dwords = 5;
-	int extra_off = extra_dwords * sizeof(uint32_t);
-	print_dbg("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset\n", extra_dwords);
-	gdr_copy_to_bar(buf_ptr + extra_dwords, init_buf, size - extra_off);
-	gdr_copy_from_bar(copy_buf, buf_ptr + extra_dwords, size - extra_off);
-	compare_buf(init_buf, copy_buf, size - extra_off);
-	memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    int extra_dwords = 5;
+    int extra_off = extra_dwords * sizeof(uint32_t);
+    print_dbg("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset\n", extra_dwords);
+    gdr_copy_to_bar(buf_ptr + extra_dwords, init_buf, size - extra_off);
+    gdr_copy_from_bar(copy_buf, buf_ptr + extra_dwords, size - extra_off);
+    compare_buf(init_buf, copy_buf, size - extra_off);
+    memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
-	extra_off = 11;
-	print_dbg("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
-	gdr_copy_to_bar((char*)buf_ptr + extra_off, init_buf, size);
-	gdr_copy_from_bar(copy_buf, (char*)buf_ptr + extra_off, size);
-	compare_buf(init_buf, copy_buf, size);
+    extra_off = 11;
+    print_dbg("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
+    gdr_copy_to_bar((char*)buf_ptr + extra_off, init_buf, size);
+    gdr_copy_from_bar(copy_buf, (char*)buf_ptr + extra_off, size);
+    compare_buf(init_buf, copy_buf, size);
 
-	print_dbg("unampping\n");
-	ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
-	print_dbg("unpinning\n");
-	ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+    print_dbg("unampping\n");
+    ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+    print_dbg("unpinning\n");
+    ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
 
     ASSERT_EQ(gdr_close(g), 0);
 
