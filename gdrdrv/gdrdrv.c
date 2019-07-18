@@ -540,6 +540,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     // check version before accessing page table
     if (!NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE(page_table)) {
         gdr_err("incompatible page table version 0x%08x\n", page_table->version);
+        ret = -EFAULT;
         goto out;
     }
 
@@ -586,8 +587,6 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
         list_add(&mr->node, &info->mr_list);
     mutex_unlock(&info->lock);
 
-    params.handle = mr->handle;
-
 out:
 
     if (ret && mr && mr->page_table) {
@@ -603,10 +602,15 @@ out:
         mr = NULL;
     }
 
-    if (!ret && copy_to_user(_params, &params, sizeof(params))) {
-        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
-        ret = -EFAULT;
+    if (!ret) {
+        params.handle = mr->handle;
+
+        if (copy_to_user(_params, &params, sizeof(params))) {
+            gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
+            ret = -EFAULT;
+        }
     }
+
 
     return ret;
 }
@@ -825,7 +829,7 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
     }
     pfn = paddr >> PAGE_SHIFT;
 
-    // Disallow mmapped VMA to propagate to child processes
+    // Disallow mmapped VMA to propagate to children processes
     vma->vm_flags |= VM_DONTCOPY;
 
     if (is_wcomb) {
