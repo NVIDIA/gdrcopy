@@ -45,6 +45,8 @@
 #include "gdrdrv.h"
 #include "gdrconfig.h"
 
+#include "gdrapi_internal.h"
+
 // based on post at http://stackoverflow.com/questions/3385515/static-assert-in-c
 #define STATIC_ASSERT(COND,MSG) typedef char static_assertion_##MSG[(!!(COND))*2-1]
 // token pasting madness
@@ -101,13 +103,6 @@ static void gdr_msg(enum gdrcopy_msg_level lvl, const char* fmt, ...)
 #define gdr_warn(FMT, ARGS...) gdr_msg(GDRCOPY_MSG_WARN,  "WARN: " FMT, ## ARGS)
 #define gdr_err(FMT, ARGS...)  gdr_msg(GDRCOPY_MSG_ERROR, "ERR:  " FMT, ## ARGS)
 
-typedef struct gdr_memh_t { 
-    gdr_hnd_t handle;
-    LIST_ENTRY(gdr_memh_t) entries;
-    unsigned mapped:1;
-    unsigned wc_mapping:1;
-} gdr_memh_t;
-
 static gdr_memh_t *to_memh(gdr_mh_t mh) {
     return (gdr_memh_t *)mh.h;
 }
@@ -120,11 +115,6 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
 
 // check GDR HaNDle size
 //COMPILE_TIME_ASSERT(sizeof(gdr_hnd_t)==sizeof(gdr_mh_t));
-
-struct gdr {
-    int fd;
-    LIST_HEAD(memh_list, gdr_memh_t) memhs;
-};
 
 gdr_t gdr_open()
 {
