@@ -42,6 +42,7 @@
 using namespace std;
 
 #include "gdrapi.h"
+#include "gdrapi_internal.h"
 #include "common.hpp"
 
 static bool _print_dbg_msg = false;
@@ -154,19 +155,6 @@ int recvfd(int socket) {
     memmove(&fd, CMSG_DATA(cmsg), sizeof(int));
     return fd;
 }
-
-typedef struct gdr_memh_t { 
-    uint32_t handle;
-    LIST_ENTRY(gdr_memh_t) entries;
-    unsigned mapped:1;
-    unsigned wc_mapping:1;
-} gdr_memh_t;
-
-struct gdr {
-    int fd;
-    LIST_HEAD(memh_list, gdr_memh_t) memhs;
-};
-
 
 START_TEST(basic)
 {
