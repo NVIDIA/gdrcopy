@@ -26,8 +26,8 @@
 #include <stdint.h> // for standard [u]intX_t types
 #include <stddef.h>
 
-#define GDR_API_MAJOR_VERSION    1
-#define GDR_API_MINOR_VERSION    4
+#define GDR_API_MAJOR_VERSION    2
+#define GDR_API_MINOR_VERSION    0
 #define GDR_API_VERSION          ((GDR_API_MAJOR_VERSION << 16) | GDR_API_MINOR_VERSION)
 
 
