@@ -20,68 +20,31 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef __GDR_DRV_H__
-#define __GDR_DRV_H__
+#ifndef __GDRAPI_INTERNAL_H__
+#define __GDRAPI_INTERNAL_H__
 
-#define GDRDRV_IOCTL                 0xDA
+#include <stdint.h> // for standard [u]intX_t types
+#include <stddef.h>
+#include <sys/queue.h>
 
-typedef __u64 gdr_hnd_t;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-//-----------
+typedef struct gdr_memh_t { 
+    uint32_t handle;
+    LIST_ENTRY(gdr_memh_t) entries;
+    unsigned mapped:1;
+    unsigned wc_mapping:1;
+} gdr_memh_t;
 
-struct GDRDRV_IOC_PIN_BUFFER_PARAMS
-{
-    // in
-    __u64 addr;
-    __u64 size;
-    __u64 p2p_token;
-    __u32 va_space;
-    // out
-    gdr_hnd_t handle;
+struct gdr {
+    int fd;
+    LIST_HEAD(memh_list, gdr_memh_t) memhs;
 };
 
-#define GDRDRV_IOC_PIN_BUFFER _IOWR(GDRDRV_IOCTL, 1, struct GDRDRV_IOC_PIN_BUFFER_PARAMS)
+#ifdef __cplusplus
+}
+#endif
 
-//-----------
-
-struct GDRDRV_IOC_UNPIN_BUFFER_PARAMS
-{
-    // in
-    gdr_hnd_t handle;
-};
-
-#define GDRDRV_IOC_UNPIN_BUFFER _IOWR(GDRDRV_IOCTL, 2, struct GDRDRV_IOC_UNPIN_BUFFER_PARAMS *)
-
-//-----------
-
-struct GDRDRV_IOC_GET_CB_FLAG_PARAMS
-{
-    // in
-    gdr_hnd_t handle;
-    // out
-    __u32 flag;
-};
-
-#define GDRDRV_IOC_GET_CB_FLAG _IOWR(GDRDRV_IOCTL, 3, struct GDRDRV_IOC_GET_CB_FLAG_PARAMS *)
-
-//-----------
-
-struct GDRDRV_IOC_GET_INFO_PARAMS
-{
-    // in
-    gdr_hnd_t handle;
-    // out
-    __u64 va;
-    __u64 mapped_size;
-    __u32 page_size;
-    __u32 tsc_khz;
-    __u64 tm_cycles;
-    __u32 mapped;
-    __u32 wc_mapping;
-};
-
-#define GDRDRV_IOC_GET_INFO _IOWR(GDRDRV_IOCTL, 4, struct GDRDRV_IOC_GET_INFO_PARAMS *)
-
-//-----------
-
-#endif // __GDR_DRV_H__
+#endif // __GDRAPI_INTERNAL_H__

@@ -142,7 +142,7 @@ main(int argc, char *argv[])
         // tokens are optional in CUDA 6.0
         // wave out the test if GPUDirectRDMA is not enabled
         BREAK_IF_NEQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
-        ASSERT_NEQ(mh, 0U);
+        ASSERT_NEQ(mh, null_mh);
 
         void *bar_ptr  = NULL;
         ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
@@ -153,6 +153,8 @@ main(int argc, char *argv[])
         OUT << "info.va: " << hex << info.va << dec << endl;
         OUT << "info.mapped_size: " << info.mapped_size << endl;
         OUT << "info.page_size: " << info.page_size << endl;
+        OUT << "info.mapped: " << info.mapped << endl;
+        OUT << "info.wc_mapping: " << info.wc_mapping << endl;
 
         // remember that mappings start on a 64KB boundary, so let's
         // calculate the offset from the head of the mapping to the

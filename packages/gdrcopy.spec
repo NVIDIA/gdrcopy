@@ -18,7 +18,7 @@ License:        MIT
 URL:            https://github.com/NVIDIA/gdrcopy
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  gcc kernel-headers
-Requires:       %{name}-%{kmod} 
+Requires:       %{name}-%{kmod} check subunit
 
 # to get rid of libcuda/libcudart
 AutoReqProv:    no
@@ -93,8 +93,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %files
 %{_prefix}/bin/copybw
-%{_prefix}/bin/basic
-%{_prefix}/bin/validate
+%{_prefix}/bin/sanity
 %{_libdir}/libgdrapi.so.?.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so

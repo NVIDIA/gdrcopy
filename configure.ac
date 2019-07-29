@@ -97,6 +97,7 @@ AS_IF(
 	AC_CHECK_LIB([cudart], [cudaMalloc], [], [AC_MSG_FAILURE([libcudart not found])])
 	AC_CHECK_HEADER([cuda.h], [], [AC_MSG_FAILURE([cuda.h not found])])
 	AC_CHECK_HEADER([cuda_runtime_api.h], [], [AC_MSG_FAILURE([cuda_runtime_api.h not found])])
+	PKG_CHECK_MODULES([CHECK], [check >= 0.9.8])
 ], [
 	AC_MSG_NOTICE([Test is disabled])
 ])
