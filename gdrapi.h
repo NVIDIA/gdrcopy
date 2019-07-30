@@ -62,14 +62,10 @@ gdr_t gdr_open();
 
 // Destroy library state object, e.g. it closes the connection to kernel-mode
 // driver.
-//
-// Note that altough BAR mappings of GPU memory are destroyed, user-space
-// mappings are not. So therefore user code is responsible of calling
-// gdr_unmap on all mappings before calling gdr_close.
 int gdr_close(gdr_t g);
 
 typedef struct gdr_mh_s {
-  unsigned long h;
+    unsigned long h;
 } gdr_mh_t;
 
 // Map device memory buffer on GPU BAR1, returning an handle.
