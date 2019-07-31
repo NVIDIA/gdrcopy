@@ -115,6 +115,7 @@ gdr_t gdr_open()
 {
     gdr_t g = NULL;
     const char *gdrinode = "/dev/gdrdrv";
+    int ret;
 
     g = calloc(1, sizeof(*g));
     if (!g) {
@@ -124,15 +125,46 @@ gdr_t gdr_open()
 
     int fd = open(gdrinode, O_RDWR);
     if (-1 == fd ) {
-        int ret = errno;
+        ret = errno;
         gdr_err("error opening driver (errno=%d/%s)\n", ret, strerror(ret));
-        free(g);
-        return NULL;
+        goto err;
+    }
+
+    struct GDRDRV_IOC_GET_VERSION_PARAMS params;
+    int retcode = ioctl(fd, GDRDRV_IOC_GET_VERSION, &params);
+    if (0 != retcode) {
+        ret = errno;
+        gdr_err("Error getting the gdrdrv driver version with ioctl error (errno=%d). gdrdrv might be too old.\n", ret);
+        goto err;
+    }
+    if (params.gdrdrv_version < MINIMUM_GDRDRV_VERSION) {
+        gdr_err(
+            "The minimum required gdrdrv driver version is %d.%d but the current gdrdrv version is %d.%d\n", 
+            MINIMUM_GDRDRV_MAJOR_VERSION, 
+            MINIMUM_GDRDRV_MINOR_VERSION, 
+            params.gdrdrv_version >> MAJOR_VERSION_SHIFT, 
+            params.gdrdrv_version & MINOR_VERSION_MASK
+        );
+        goto err;
+    }
+    if (params.minimum_gdr_api_version > GDR_API_VERSION) {
+        gdr_err(
+            "gdrdrv driver requires libgdrapi version %d.%d or above but the current libgdrapi version is %d.%d\n", 
+            params.minimum_gdr_api_version >> MAJOR_VERSION_SHIFT, 
+            params.minimum_gdr_api_version & MINOR_VERSION_MASK, 
+            GDR_API_MAJOR_VERSION, 
+            GDR_API_MINOR_VERSION
+        );
+        goto err;
     }
 
     g->fd = fd;
 
     return g;
+
+err:
+    free(g);
+    return NULL;
 }
 
 int gdr_close(gdr_t g)

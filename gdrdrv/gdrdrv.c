@@ -535,6 +535,24 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
 
 //-----------------------------------------------------------------------------
 
+static int gdrdrv_get_version(gdr_info_t *info, void __user *_params)
+{
+    struct GDRDRV_IOC_GET_VERSION_PARAMS params = {0};
+    int ret = 0;
+
+    params.gdrdrv_version = GDRDRV_VERSION;
+    params.minimum_gdr_api_version = MINIMUM_GDR_API_VERSION;
+
+    if (copy_to_user(_params, &params, sizeof(params))) {
+        gdr_err("copy_to_user failed on user pointer %p\n", _params);
+        ret = -EFAULT;
+    }
+
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+
 static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg)
 {
     int ret = 0;
@@ -563,6 +581,10 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
 
     case GDRDRV_IOC_GET_INFO:
         ret = gdrdrv_get_info(info, argp);
+        break;
+
+    case GDRDRV_IOC_GET_VERSION:
+        ret = gdrdrv_get_version(info, argp);
         break;
 
     default:
