@@ -123,6 +123,12 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size);
 int gdr_copy_to_bar(void  *gpubar_ptr, const void *cpumem_ptr, size_t size);
 int gdr_copy_from_bar(void *cpumem_ptr, const void *gpubar_ptr, size_t size);
 
+// Query the version of libgdrapi
+void gdr_runtime_get_version(int *major, int *minor);
+
+// Query the version of gdrdrv driver
+int gdr_driver_get_version(gdr_t g, int *major, int *minor);
+
 
 #ifdef __cplusplus
 }

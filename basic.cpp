@@ -58,6 +58,13 @@ int main(int argc, char *argv[])
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
 
+	int major_version, minor_version;
+	gdr_runtime_get_version(&major_version, &minor_version);
+	printf("libgdrapi version %d.%d\n", major_version, minor_version);
+
+	ASSERT_EQ(gdr_driver_get_version(g, &major_version, &minor_version), 0);
+	printf("gdrdrv driver version %d.%d\n", major_version, minor_version);
+
     gdr_mh_t mh;
     BEGIN_CHECK {
         CUdeviceptr d_ptr = d_A;

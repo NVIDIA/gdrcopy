@@ -552,6 +552,31 @@ int gdr_copy_from_bar(void *h_ptr, const void *map_d_ptr, size_t size)
     return 0;
 }
 
+void gdr_runtime_get_version(int *major, int *minor)
+{
+    *major = GDR_API_MAJOR_VERSION;
+    *minor = GDR_API_MINOR_VERSION;
+}
+
+int gdr_driver_get_version(gdr_t g, int *major, int *minor)
+{
+    assert(g != NULL);
+    assert(g->fd > 0);
+
+    struct GDRDRV_IOC_GET_VERSION_PARAMS params;
+    int retcode = ioctl(g->fd, GDRDRV_IOC_GET_VERSION, &params);
+    if (0 != retcode) {
+        int ret = errno;
+        gdr_err("Error getting the gdrdrv driver version with ioctl error (errno=%d). gdrdrv might be too old.\n", ret);
+        return ret;
+    }
+
+    *major = params.gdrdrv_version >> MAJOR_VERSION_SHIFT;
+    *minor = params.gdrdrv_version & MINOR_VERSION_MASK;
+
+    return 0;
+}
+
 /*
  * Local variables:
  *  c-indent-level: 4
