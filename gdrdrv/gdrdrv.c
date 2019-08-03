@@ -49,12 +49,35 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
     return new_prot;
 }
 #define get_tsc_khz() cpu_khz // tsc_khz
+static inline int gdr_pfn_is_ram(unsigned long pfn)
+{
+    // page_is_ram is GPL-only. Regardless there are no x86_64
+    // platforms supporting coherent GPU mappings, so we would not use
+    // this function anyway.
+    return 0;
+}
+
 #elif defined(CONFIG_PPC64)
+#include <asm/reg.h>
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 {
     return pgprot_writecombine(old_prot);
 }
 #define get_tsc_khz() (get_cycles()/1000) // dirty hack
+static inline int gdr_pfn_is_ram(unsigned long pfn)
+{
+    // catch platforms, e.g. POWER8, POWER9 with GPUs not attached via NVLink,
+    // where GPU memory is non-coherent
+#if 0
+    // unfortunately this module is MIT, and page_is_ram is GPL-only.
+    return page_is_ram(pfn);
+#else
+    unsigned long start = pfn << PAGE_SHIFT;
+    unsigned long mask_47bits = (1UL<<47)-1;
+    return 0 == (start & ~mask_47bits);
+#endif
+}
+
 #else
 #error "X86_64/32 or PPC64 is required"
 #endif
@@ -166,6 +189,7 @@ struct gdr_mr {
     u32 page_size;
     u64 va;
     u64 mapped_size;
+    enum { GDR_MR_NONE, GDR_MR_WC, GDR_MR_CACHING } cpu_mapping_type;
     nvidia_p2p_page_table_t *page_table;
     int cb_flag;
     cycles_t tm_cycles;
@@ -184,7 +208,7 @@ typedef struct gdr_info gdr_info_t;
 //-----------------------------------------------------------------------------
 
 static int gdrdrv_major = 0;
-//static gdr_mr_t *mr = NULL;
+static int gdrdrv_cpu_can_cache_gpu_mappings = 0;
 
 //-----------------------------------------------------------------------------
 
@@ -342,6 +366,7 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     mr->va_space     = params.va_space;
     mr->va           = page_virt_start;
     mr->mapped_size  = rounded_size;
+    mr->cpu_mapping_type = GDR_MR_NONE;
     mr->page_table   = NULL;
     mr->cb_flag      = 0;
     mr->handle       = random_get_entropy() & GDR_HANDLE_MASK; // this is a hack, we need something really unique and randomized
@@ -524,7 +549,8 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
     params.page_size   = mr->page_size;
     params.tm_cycles   = mr->tm_cycles;
     params.tsc_khz     = mr->tsc_khz;
-
+    params.mapped      = (mr->cpu_mapping_type == GDR_MR_NONE) ? 0 : 1;
+    params.wc_mapping  = (mr->cpu_mapping_type == GDR_MR_WC  ) ? 1 : 0;
     if (copy_to_user(_params, &params, sizeof(params))) {
         gdr_err("copy_to_user failed on user pointer %p\n", _params);
         ret = -EFAULT;
@@ -583,7 +609,7 @@ static long gdrdrv_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 
 /*----------------------------------------------------------------------------*/
 
-static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long vaddr, unsigned long paddr, size_t size)
+static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr, unsigned long paddr, size_t size, int is_wcomb)
 {
     int ret = 0;
     unsigned long pfn;
@@ -617,9 +643,12 @@ static int gdrdrv_mmap_phys_mem_wcomb(struct vm_area_struct *vma, unsigned long 
         goto out;
     }
 #else
-    vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
-    //gdr_dbg("calling io_remap_pfn_range() pfn=%lx vma=%p vaddr=%lx pfn=%lx size=%zu\n", 
-    //        pfn, vma, vaddr, pfn, size);
+    if (is_wcomb) {
+        // override prot to create non-coherent WC mappings
+        vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
+    } else {
+        // by default, vm_page_prot should be set to create cached mappings
+    }
     if (io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
         gdr_err("error in remap_pfn_range()\n");
         ret = -EAGAIN;
@@ -682,7 +711,8 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     if (size % PAGE_SIZE != 0) {
         gdr_dbg("size is not multiple of PAGE_SIZE\n");
     }
-
+    // let's assume this mapping is not WC
+    mr->cpu_mapping_type = GDR_MR_CACHING;
     // check for physically contiguous IO ranges
     p = 0;
     vaddr = vma->vm_start;
@@ -690,6 +720,8 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         unsigned long paddr = mr->page_table->pages[p]->physical_address;
         unsigned nentries = 1;
         size_t len;
+        int is_wcomb;
+
         gdr_dbg("range start with p=%d vaddr=%lx page_paddr=%lx\n", p, vaddr, paddr);
 
         ++p;
@@ -715,16 +747,19 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         // phys range is [paddr, paddr+len-1]
         gdr_dbg("mapping p=%u entries=%d offset=%llx len=%zu vaddr=%lx paddr=%lx\n", 
                 p, nentries, offset, len, vaddr, paddr);
-#if 1
-        ret = gdrdrv_mmap_phys_mem_wcomb(vma,
-                                         vaddr,
-                                         paddr,
-                                         len);
+        if (gdr_pfn_is_ram(paddr >> PAGE_SHIFT)) {
+            WARN_ON_ONCE(!gdrdrv_cpu_can_cache_gpu_mappings);
+            is_wcomb = 0;
+        } else {
+            is_wcomb = 1;
+            // flagging the whole mr as a WC mapping if at least one chunk is WC
+            mr->cpu_mapping_type = GDR_MR_WC;
+        }
+        ret = gdrdrv_remap_gpu_mem(vma, vaddr, paddr, len, is_wcomb);
         if (ret) {
-            gdr_err("error %d in gdrdrv_mmap_phys_mem_wcomb\n", ret);
+            gdr_err("error %d in gdrdrv_remap_gpu_mem\n", ret);
             goto out;
         }
-#endif
         vaddr += len;
         size -= len;
         offset = 0;
@@ -771,7 +806,18 @@ static int __init gdrdrv_init(void)
     gdr_msg(KERN_INFO, "device registered with major number %d\n", gdrdrv_major);
     gdr_msg(KERN_INFO, "dbg traces %s, info traces %s", dbg_enabled ? "enabled" : "disabled", info_enabled ? "enabled" : "disabled");
 
-    //gdrdrv_init_devices();/* fills to zero the device array */
+#if defined(CONFIG_PPC64) && defined(PVR_POWER9)
+    if (pvr_version_is(PVR_POWER9)) {
+        // Approximating CPU-GPU coherence with CPU model
+        // This might break in the future
+        // A better way would be to detect the presence of the IBM-NPU bridges and
+        // verify that all GPUs are connected through those
+        gdrdrv_cpu_can_cache_gpu_mappings = 1;
+    }
+#endif
+
+    if (gdrdrv_cpu_can_cache_gpu_mappings)
+        gdr_msg(KERN_INFO, "enabling use of CPU cached mappings\n");
 
     return 0;
 }

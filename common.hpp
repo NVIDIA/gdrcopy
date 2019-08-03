@@ -46,9 +46,15 @@
             ASSERT(cudaSuccess == result);     \
         } while (0)
 
+static inline bool operator==(const gdr_mh_t &a, const gdr_mh_t &b) {
+    return a.h == b.h;
+}
+
+static const gdr_mh_t null_mh = {0};
+
 #define ASSERT_EQ(P, V) ASSERT((P) == (V))
 #define CHECK_EQ(P, V) ASSERT((P) == (V))
-#define ASSERT_NEQ(P, V) ASSERT((P) != (V))
+#define ASSERT_NEQ(P, V) ASSERT(!((P) == (V)))
 #define BREAK_IF_NEQ(P, V) if((P) != (V)) break
 #define BEGIN_CHECK do
 #define END_CHECK while(0)
@@ -57,7 +63,7 @@ static int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
 {
     int diff = 0;
     if (size % 4 != 0U) {
-        printf("warning: buffer size %d is not dword aligned, ignoring trailing bytes\n");
+        printf("warning: buffer size %zu is not dword aligned, ignoring trailing bytes\n", size);
         size -= (size % 4);
     }
     unsigned ndwords = size/sizeof(uint32_t);

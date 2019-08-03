@@ -142,17 +142,19 @@ main(int argc, char *argv[])
         // tokens are optional in CUDA 6.0
         // wave out the test if GPUDirectRDMA is not enabled
         BREAK_IF_NEQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
-        ASSERT_NEQ(mh, 0U);
+        ASSERT_NEQ(mh, null_mh);
 
-        void *bar_ptr  = NULL;
-        ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
-        OUT << "bar_ptr: " << bar_ptr << endl;
+        void *map_d_ptr  = NULL;
+        ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, size), 0);
+        OUT << "map_d_ptr: " << map_d_ptr << endl;
 
         gdr_info_t info;
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
         OUT << "info.va: " << hex << info.va << dec << endl;
         OUT << "info.mapped_size: " << info.mapped_size << endl;
         OUT << "info.page_size: " << info.page_size << endl;
+        OUT << "info.mapped: " << info.mapped << endl;
+        OUT << "info.wc_mapping: " << info.wc_mapping << endl;
 
         // remember that mappings start on a 64KB boundary, so let's
         // calculate the offset from the head of the mapping to the
@@ -160,7 +162,7 @@ main(int argc, char *argv[])
         int off = info.va - d_A;
         OUT << "page offset: " << off << endl;
 
-        uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
+        uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
         OUT << "user-space pointer:" << buf_ptr << endl;
 
         // copy to GPU benchmark
@@ -168,7 +170,7 @@ main(int argc, char *argv[])
         struct timespec beg, end;
         clock_gettime(MYCLOCK, &beg);
         for (int iter=0; iter<num_write_iters; ++iter)
-            gdr_copy_to_bar(buf_ptr + copy_offset/4, init_buf, copy_size);
+            gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);
         clock_gettime(MYCLOCK, &end);
 
         double woMBps;
@@ -182,11 +184,11 @@ main(int argc, char *argv[])
 
         compare_buf(init_buf, buf_ptr + copy_offset/4, copy_size);
 
-        // copy from BAR benchmark
+        // copy from GPU benchmark
         cout << "reading test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_read_iters << endl;
         clock_gettime(MYCLOCK, &beg);
         for (int iter=0; iter<num_read_iters; ++iter)
-            gdr_copy_from_bar(init_buf, buf_ptr + copy_offset/4, copy_size);
+            gdr_copy_from_mapping(mh, init_buf, buf_ptr + copy_offset/4, copy_size);
         clock_gettime(MYCLOCK, &end);
 
         double roMBps;
@@ -199,7 +201,7 @@ main(int argc, char *argv[])
         }
 
         OUT << "unmapping buffer" << endl;
-        ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
+        ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, size), 0);
 
         OUT << "unpinning buffer" << endl;
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);

@@ -68,12 +68,16 @@ gdr_t gdr_open();
 // gdr_unmap on all mappings before calling gdr_close.
 int gdr_close(gdr_t g);
 
-// Map device memory buffer on GPU BAR1, returning an handle.
-// Memory is still not accessible to user-space.
-typedef uint32_t gdr_mh_t;
+// The handle to a user-space GPU memory mapping
+typedef struct gdr_mh_s {
+  unsigned long h;
+} gdr_mh_t;
+
+// Create a peer-to-peer mapping of the device memory buffer, returning an opaque handle.
+// Note that at this point the mapping is still not accessible to user-space.
 int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token, uint32_t va_space, gdr_mh_t *handle);
 
-// Unmap the handle. 
+// Destroys the peer-to-peer mapping and frees the handle.
 //
 // If there exists a corresponding user-space mapping, gdr_unmap should be
 // called before this one.
@@ -95,14 +99,15 @@ struct gdr_info {
     uint32_t page_size;
     uint64_t tm_cycles;
     uint32_t cycles_per_ms;
+    unsigned mapped:1;
+    unsigned wc_mapping:1;
 };
 typedef struct gdr_info gdr_info_t;
 int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_t *info);
 
-// create a user-space mapping for the BAR1 info, length is bar1->size
-// above.
+// Create a user-space mapping of the memory handle.
 //
-// WARNING: the BAR physical address will be aligned to the page size
+// WARNING: the address could be potentially aligned to the boundary of the page size
 // before being mapped in user-space, so the pointer returned might be
 // affected by an offset. gdr_get_info can be used to calculate that
 // offset.
@@ -112,10 +117,10 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **va, size_t size);
 // First invoke gdr_unmap() then gdr_unpin_buffer().
 int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size);
 
-// gpubar_ptr is a user-space virtual address, i.e. one returned by gdr_map()
-int gdr_copy_to_bar(void  *gpubar_ptr, const void *cpumem_ptr, size_t size);
-int gdr_copy_from_bar(void *cpumem_ptr, const void *gpubar_ptr, size_t size);
-
+// map_d_ptr is the user-space virtual address belonging to a mapping of a device memory buffer,
+// i.e. one returned by gdr_map()
+int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size);
+int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size);
 
 #ifdef __cplusplus
 }
