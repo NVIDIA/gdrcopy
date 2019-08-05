@@ -76,6 +76,9 @@ document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 The device driver requires CUDA >= 5.0.
 The library and tests require CUDA >= 6.0 and/or display driver >= 331.14.
 
+The _sanity_ test requires check >= 0.9.8 and subunit >= 1.2.0. The development
+packages are also needed for compilation.
+
 Developed and tested on RH6.x. The only supported architecture is
 Linux x86_64 so far.
 
@@ -103,12 +106,10 @@ $ export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
 
 Execute provided tests:
 ```shell
-$ ./validate
-buffer size: 327680
-check 1: direct access + read back via cuMemcpy D->H
-check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H
-check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()
-check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + extra_dwords=5
+$ ./sanity
+Running suite(s): Sanity
+100%: Checks: 11, Failures: 0, Errors: 0
+
 
 $ ./copybw
 testing size: 4096
