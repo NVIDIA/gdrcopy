@@ -2,11 +2,11 @@ PREFIX ?= /usr/local
 DESTLIB ?= $(PREFIX)/lib64
 CUDA ?= /usr/local/cuda
 
+LIB_MAJOR_VER ?= $(shell awk '/\#define GDR_API_MAJOR_VERSION/ { print $$3 }' include/gdrapi.h | tr -d '\n')
+LIB_MINOR_VER ?= $(shell awk '/\#define GDR_API_MINOR_VERSION/ { print $$3 }' include/gdrapi.h | tr -d '\n')
+
 GDRAPI_ARCH := $(shell ./config_arch)
 GDRAPI_INC := ../include
-
-LIB_MAJOR_VER:=1
-LIB_MINOR_VER:=4
 
 LIB_VER:=$(LIB_MAJOR_VER).$(LIB_MINOR_VER)
 LIB_BASENAME:=libgdrapi.so
@@ -14,6 +14,9 @@ LIB_DYNAMIC=$(LIB_BASENAME).$(LIB_VER)
 LIB_SONAME=$(LIB_BASENAME).$(LIB_MAJOR_VER)
 
 all: config driver lib exes
+
+version:
+	@ echo "$(LIB_VER)"
 
 config:
 	@ echo "GDRAPI_ARCH=$(GDRAPI_ARCH)"

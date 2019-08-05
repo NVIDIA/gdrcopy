@@ -1,0 +1,293 @@
+#!/bin/sh
+# Copyright (C) 2002-2005 Flavio Stanchina
+# Copyright (C) 2005-2006 Aric Cyr
+# Copyright (C) 2007 Mario Limonciello
+# Copyright (C) 2009 Alberto Milone
+
+set -e
+
+. /usr/share/debconf/confmodule
+
+uname_s=$(uname -s)
+
+_get_kernel_dir() {
+    KVER=$1
+    case ${uname_s} in
+	Linux)		DIR="/lib/modules/$KVER/build" ;;
+	GNU/kFreeBSD)	DIR="/usr/src/kfreebsd-headers-$KVER/sys" ;;
+    esac
+    echo $DIR
+}
+
+_check_kernel_dir() {
+    DIR=$(_get_kernel_dir $1)
+    case ${uname_s} in
+	Linux)		test -e $DIR/include ;;
+	GNU/kFreeBSD)	test -e $DIR/kern && test -e $DIR/conf/kmod.mk ;;
+	*)		return 1 ;;
+    esac
+    return $?
+}
+
+# Check the existence of a kernel named as $1
+_is_kernel_name_correct() {
+    CORRECT="no"
+    KERNEL_NAME=$1
+
+    for kernel in /boot/config-*; do
+        KERNEL=${kernel#*-}
+        if [ "${KERNEL}" = "${KERNEL_NAME}" ]; then
+            CORRECT="yes"
+            break
+        fi
+    done
+
+    echo $CORRECT
+}
+
+
+# Get the most recent kernel on Debian based systems. This keeps
+# into account both the version and the ABI. If the current kernel
+# is the most recent kernel then the function will print a null string.
+_get_newest_kernel_debian() {
+    NEWEST_KERNEL=
+    NEWEST_VERSION=
+    NEWEST_ABI=
+
+    for kernel in /boot/config-*; do
+        [ -f "$kernel" ] || continue
+        KERNEL=${kernel#*-}
+        KERNEL_VERSION=${KERNEL%%-*}
+        ABI=${KERNEL#*-}
+        ABI=${ABI%%-*}
+
+        if [ -z "$NEWEST_KERNEL" ]; then
+            # The 1st time get a version which is bigger than $1
+            COMPARE_TO=$1
+        else
+            # Get the biggest version
+            COMPARE_TO="$NEWEST_VERSION-$NEWEST_ABI"
+        fi
+
+        # if $kernel is greater than $COMPARE_TO
+        if [ `dpkg --compare-versions "$KERNEL_VERSION-$ABI" gt "$COMPARE_TO" && echo "yes" || \
+              echo "no"` = "yes" ]; then
+            NEWEST_KERNEL=$KERNEL
+            NEWEST_VERSION=$KERNEL_VERSION
+            NEWEST_ABI=$ABI
+        fi
+    done
+
+    echo "$NEWEST_KERNEL"
+}
+
+# Get the most recent kernel in Rhel based systems. If the current kernel
+# is the most recent kernel then the function will print a null string.
+_get_newest_kernel_rhel() {
+    NEWEST_KERNEL=
+
+    LAST_INSTALLED_KERNEL=$(rpm -q --whatprovides kernel  --last | grep kernel -m1 | cut -f1 -d' ')
+
+    LIK_FORMATTED_NAME=$(rpm -q $LAST_INSTALLED_KERNEL --queryformat="%{VERSION}-%{RELEASE}.%{ARCH}\n")
+
+    if [ `echo $LIK_FORMATTED_NAME | grep 2.6 >/dev/null` ]; then
+        # Fedora and Suse
+        NEWEST_KERNEL=$LIK_FORMATTED_NAME
+    else
+        # Hack for Mandriva where $LIK_FORMATTED_NAME is broken
+        LIK_NAME=$(rpm -q $LAST_INSTALLED_KERNEL --queryformat="%{NAME}\n")
+        LIK_TYPE=${LIK_NAME#kernel-}
+        LIK_TYPE=${LIK_TYPE%%-*}
+        LIK_STRIPPED=${LIK_NAME#kernel-}
+        LIK_STRIPPED=${LIK_STRIPPED#$LIK_TYPE-}
+        LIK_STRIPPED_BASE=${LIK_STRIPPED%%-*}
+        LIK_STRIPPED_END=${LIK_STRIPPED#$LIK_STRIPPED_BASE-}
+        LIK_FINAL=$LIK_STRIPPED_BASE-$LIK_TYPE-$LIK_STRIPPED_END
+
+        NEWEST_KERNEL=$LIK_FINAL
+    fi
+
+    echo $NEWEST_KERNEL
+}
+
+# Get the newest kernel on Debian and Rhel based systems.
+get_newest_kernel() {
+    NEWEST_KERNEL=
+    # Try Debian first as rpm can be installed in Debian based distros
+    if [ -e /usr/bin/dpkg ]; then
+        # If DEB based
+        CURRENT_VERSION=${CURRENT_KERNEL%%-*}
+        CURRENT_ABI=${CURRENT_KERNEL#*-}
+        CURRENT_FLAVOUR=${CURRENT_ABI#*-}
+        CURRENT_ABI=${CURRENT_ABI%%-*}
+        NEWEST_KERNEL=$(_get_newest_kernel_debian "$CURRENT_VERSION-$CURRENT_ABI")
+
+    elif [ `which rpm >/dev/null` ]; then
+        # If RPM based
+        NEWEST_KERNEL=$(_get_newest_kernel_rhel)
+    fi
+
+    # Make sure that kernel name that we extracted corresponds to an installed
+    # kernel
+    if [ -n "$NEWEST_KERNEL" ] && [ `_is_kernel_name_correct $NEWEST_KERNEL` = "no" ]; then
+        NEWEST_KERNEL=
+    fi
+
+    echo $NEWEST_KERNEL
+}
+
+NAME=$1
+VERSION=$2
+TARBALL_ROOT=$3
+ARCH=$4
+UPGRADE=$5
+
+if [ -z "$NAME" ] || [ -z "$VERSION" ]; then
+    echo "Need NAME, and VERSION defined"
+    echo "ARCH is optional"
+    exit 1
+fi
+
+# read framework configuration options
+if [ -r /etc/dkms/framework.conf ]; then
+    . /etc/dkms/framework.conf
+fi
+
+KERNELS=$(ls /lib/modules/ 2>/dev/null || true)
+CURRENT_KERNEL=$(uname -r)
+
+#We never want to keep an older version side by side to prevent conflicts
+if [ -e "/var/lib/dkms/$NAME/$VERSION" ]; then
+    echo "Removing old $NAME-$VERSION DKMS files..."
+    dkms remove -m $NAME -v $VERSION --all
+fi
+
+#Load new files, by source package and by tarball
+if [ -f "$TARBALL_ROOT/$NAME-$VERSION.dkms.tar.gz" ]; then
+    if ! dkms ldtarball --archive "$TARBALL_ROOT/$NAME-$VERSION.dkms.tar.gz"; then
+        echo ""
+        echo ""
+        echo "Unable to load DKMS tarball $TARBALL_ROOT/$NAME-$VERSION.dkms.tar.gz."
+        echo "Common causes include: "
+        echo " - You must be using DKMS 2.1.0.0 or later to support binaries only"
+        echo "   distribution specific archives."
+        echo " - Corrupt distribution specific archive"
+        echo ""
+        echo ""
+        exit 2
+    fi
+elif [ -d "/usr/src/$NAME-$VERSION" ]; then
+    echo "Loading new $NAME-$VERSION DKMS files..."
+    dkms add -m $NAME -v $VERSION > /dev/null
+fi
+
+# On 1st installation, let us look for a directory
+# in /lib/modules which matches `uname -r`. If none
+# is found it is possible that buildd is being used
+# and that uname -r is giving us the name of the
+# kernel used by the buildd machine.
+#
+# If this is the case we try to build the kernel
+# module for each kernel which has a directory in
+# /lib/modules. Furthermore we will have to tell
+# DKMS which architecture it should build the module
+# for (e.g. if the buildd machine is using a
+# 2.6.24-23-xen 64bit kernel).
+#
+# NOTE: if the headers are not installed then the
+#       module won't be built, as usual
+
+# Here we look for the most recent kernel so that we can
+# build the module for it (in addition to doing it for the
+# current kernel.
+NEWEST_KERNEL=$(get_newest_kernel)
+
+if [ -z "$autoinstall_all_kernels" ]; then
+    # If the current kernel is installed on the system or chroot
+    if [ `_is_kernel_name_correct $CURRENT_KERNEL` = "yes" ]; then
+        if [ -n "$NEWEST_KERNEL" ] && [ ${CURRENT_KERNEL} != ${NEWEST_KERNEL} ]; then
+            KERNELS="$CURRENT_KERNEL $NEWEST_KERNEL"
+        else
+            KERNELS=$CURRENT_KERNEL
+        fi
+    # The current kernel is not useful as it's not installed
+    else
+        echo "It is likely that $CURRENT_KERNEL belongs to a chroot's host"
+
+        # Let's use only the newest kernel if this is not a first installation
+        # otherwise build for all kernels
+        if [ -n "$NEWEST_KERNEL" -a -n "$UPGRADE" ]; then
+            KERNELS="$NEWEST_KERNEL"
+        fi
+    fi
+fi
+
+# Take care of displaying newline separated list
+echo "Building for $KERNELS" | tr '\n' ',' \
+    | sed -e 's/,/, /g; s/, $/\n/; s/, \([^,]\+\)$/ and \1/'
+
+if [ -n "$ARCH" ]; then
+    if which lsb_release >/dev/null && [ $(lsb_release -s -i) = "Ubuntu" ]; then
+        case $ARCH in
+            amd64)
+                ARCH="x86_64"
+                ;;
+            lpia|i?86)
+                ARCH="i686"
+                ;;
+        esac
+    fi
+    echo "Building for architecture $ARCH"
+    ARCH="-a $ARCH"
+fi
+
+for KERNEL in $KERNELS; do
+    dkms_status=`dkms status -m $NAME -v $VERSION -k $KERNEL $ARCH`
+    if [ `echo $KERNEL | grep -c "BOOT"` -gt 0 ]; then
+        echo ""
+        echo "Module build and install for $KERNEL was skipped as "
+        echo "it is a BOOT variant"
+        continue
+    fi
+
+
+    #if the module isn't yet built, try to build it
+    if [ `echo $dkms_status | grep -c ": built"` -eq 0 ]; then
+        if [ ! -L /var/lib/dkms/$NAME/$VERSION/source ]; then
+            echo "This package appears to be a binaries-only package"
+            echo " you will not be able to build against kernel $KERNEL"
+            echo " since the package source was not provided"
+            continue
+        fi
+        if _check_kernel_dir $KERNEL; then
+            echo "Building initial module for $KERNEL"
+            set +e
+            dkms build -m $NAME -v $VERSION -k $KERNEL $ARCH > /dev/null
+            case $? in
+            9)
+                set -e
+                echo "Skipped."
+                continue
+                ;;
+            0)
+                set -e
+                echo "Done."
+                ;;
+            *)
+                exit $?
+                ;;
+            esac
+            dkms_status=`dkms status -m $NAME -v $VERSION -k $KERNEL $ARCH`
+        else
+            echo "Module build for kernel $KERNEL was skipped since the"
+            echo "kernel headers for this kernel does not seem to be installed."
+        fi
+    fi
+
+    #if the module is built (either pre-built or just now), install it
+    if [ `echo $dkms_status | grep -c ": built"` -eq 1 ] && 
+       [ `echo $dkms_status | grep -c ": installed"` -eq 0 ]; then
+        dkms install -m $NAME -v $VERSION -k $KERNEL $ARCH
+    fi
+done
+

@@ -1,5 +1,5 @@
-LIB_MAJOR_VER ?= 1
-LIB_MINOR_VER ?= 4
+LIB_MAJOR_VER ?= $(shell awk '/\#define GDR_API_MAJOR_VERSION/ { print $$3 }' ../include/gdrapi.h | tr -d '\n')
+LIB_MINOR_VER ?= $(shell awk '/\#define GDR_API_MINOR_VERSION/ { print $$3 }' ../include/gdrapi.h | tr -d '\n')
 
 GDRAPI_ARCH ?= $(shell ../config_arch)
 GDRAPI_INC := ../include

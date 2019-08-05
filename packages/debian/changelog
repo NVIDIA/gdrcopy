@@ -1,0 +1,6 @@
+gdrcopy (@VERSION@) unstable; urgency=low
+
+  * Initial release of Debian package
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Fri, 07 Jun 2019 11:26:55 -0700
+
