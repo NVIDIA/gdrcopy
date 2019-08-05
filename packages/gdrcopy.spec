@@ -53,16 +53,11 @@ Kernel-mode driver for GDRCopy.
 
 %build
 echo "building"
-./autogen.sh
-mkdir build
-cd build
-../configure DESTDIR=$RPM_BUILD_ROOT --enable-test --prefix=%{_prefix} --libdir=%{_libdir} --enable-driver=$RPM_BUILD_ROOT%{driver_install_dir} --with-cuda=${CUDA}
-make
-
+make -j CUDA=${CUDA}
 
 %install
-cd build
-make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix}
+make install DESTDIR=$RPM_BUILD_ROOT PREFIX=%{_prefix}
+make drv_install DESTDIR=$RPM_BUILD_ROOT 
 
 # Install gdrdrv service script
 install -d $RPM_BUILD_ROOT/etc/init.d
@@ -95,11 +90,9 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{_prefix}/bin/copybw
 %{_prefix}/bin/basic
 %{_prefix}/bin/validate
-%{_libdir}/libgdrapi.so.?.?.?
+%{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so
-%{_libdir}/libgdrapi.a
-%{_libdir}/libgdrapi.la
 /etc/init.d/gdrcopy
 
 

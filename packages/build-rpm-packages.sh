@@ -50,7 +50,7 @@ ex cd ${TOP_DIR_PATH}
 
 ex mkdir -p $tmpdir/gdrcopy
 ex rm -rf $tmpdir/gdrcopy/*
-ex cp -r autogen.sh configure.ac packages/rhel/init.d insmod.sh Makefile.am README.md include src tests LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
+ex cp -r packages/rhel/init.d insmod.sh Makefile README.md include src tests config_arch LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
 ex rm -f $tmpdir/gdrcopy-$VERSION.tar.gz
 
 ex cd $tmpdir/gdrcopy
