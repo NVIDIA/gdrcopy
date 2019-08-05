@@ -51,7 +51,7 @@ A simple by-product of it is a copy library with the following characteristics:
   PCIE
 
 The library comes with two tests:
-- validate, which is a simple application testing the APIs.
+- sanity, which contains unit tests for the library and the driver.
 - copybw, a minimal application which calculates the R/W bandwidth.
 
 
