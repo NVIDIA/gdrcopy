@@ -19,6 +19,6 @@ int main(int argc, char *argv[])
 }
 EOF
 
-gcc -I $PWD $src -o $exe
+gcc -I $PWD -I $PWD/src $src -o $exe
 $exe 
 rm -rf $dir

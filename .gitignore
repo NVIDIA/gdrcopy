@@ -20,4 +20,6 @@
 *.out
 *.app
 
+# Editor files
 *~
+*.swp
