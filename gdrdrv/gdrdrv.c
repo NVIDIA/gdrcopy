@@ -339,7 +339,7 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
     }
     // Check that the caller is the same process that did gdrdrv_open
     if (info->pid != task_pid(current)) {
-        gdr_err("filp is not opened by the current process\n");
+        gdr_dbg("filp is not opened by the current process\n");
         return -EACCES;
     }
 
@@ -652,7 +652,7 @@ static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
             gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", retcode);
         }
     } else {
-        gdr_err("invoking unpin_buffer while callback has already been fired\n");
+        gdr_dbg("invoking unpin_buffer while callback has already been fired\n");
         // not returning an error here because further clean-up is
         // needed anyway
     }
@@ -748,7 +748,7 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
     }
     // Check that the caller is the same process that did gdrdrv_open
     if (info->pid != task_pid(current)) {
-        gdr_err("filp is not opened by the current process\n");
+        gdr_dbg("filp is not opened by the current process\n");
         return -EACCES;
     }
 
@@ -870,7 +870,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     }
     // Check that the caller is the same process that did gdrdrv_open
     if (info->pid != task_pid(current)) {
-        gdr_err("filp is not opened by the current process\n");
+        gdr_dbg("filp is not opened by the current process\n");
         return -EACCES;
     }
 
