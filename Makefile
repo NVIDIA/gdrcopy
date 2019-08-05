@@ -1,5 +1,7 @@
-PREFIX ?= /usr/local
-DESTLIB ?= $(PREFIX)/lib64
+DESTDIR ?= /usr/local
+PREFIX ?= 
+DESTLIB ?= $(DESTDIR)$(PREFIX)/lib64
+DESTBIN ?= $(DESTDIR)$(PREFIX)/bin
 CUDA ?= /usr/local/cuda
 
 LIB_MAJOR_VER ?= $(shell awk '/\#define GDR_API_MAJOR_VERSION/ { print $$3 }' include/gdrapi.h | tr -d '\n')
@@ -29,21 +31,24 @@ lib:
 	cd src && \
 	$(MAKE) LIB_MAJOR_VER=$(LIB_MAJOR_VER) LIB_MINOR_VER=$(LIB_MINOR_VER)
 
-exes:
+exes: lib
 	cd tests && \
 	$(MAKE) CUDA=$(CUDA)
 
-install: lib_install #drv_install
+install: lib_install exes_install
 
-lib_install:
-	@ echo "installing in $(PREFIX)..." && \
+lib_install: lib
+	@ echo "installing in $(DESTDIR)$(PREFIX)..." && \
 	install -D -v -m u=rw,g=rw,o=r src/$(LIB_DYNAMIC) -t $(DESTLIB) && \
-	install -D -v -m u=rw,g=rw,o=r include/* -t $(PREFIX)/include/; \
+	install -D -v -m u=rw,g=rw,o=r include/* -t $(DESTDIR)$(PREFIX)/include/; \
 	cd $(DESTLIB); \
 	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME); \
 	ln -sf $(LIB_SONAME) $(LIB_BASENAME);
 
-drv_install:
+exes_install: exes
+	cd tests && $(MAKE) install DESTBIN=$(DESTBIN)
+
+drv_install: driver
 	cd src/gdrdrv && \
 	$(MAKE) install
 
@@ -55,5 +60,5 @@ clean:
 	cd src/gdrdrv && \
 	$(MAKE) clean
 
-.PHONY: driver clean all lib exes lib_install install
+.PHONY: driver clean all lib exes lib_install drv_install exes_install install
 

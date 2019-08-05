@@ -48,7 +48,7 @@ ex cd ${TOP_DIR_PATH}
 
 ex mkdir -p $tmpdir/gdrcopy
 ex rm -rf $tmpdir/gdrcopy/*
-ex cp -r autogen.sh configure.ac Makefile.am README.md include src tests LICENSE packages/debian $tmpdir/gdrcopy/
+ex cp -r Makefile README.md include src tests LICENSE config_arch packages/debian $tmpdir/gdrcopy/
 ex rm -f $tmpdir/gdrcopy_${VERSION}.orig.tar.gz
 
 ex cd $tmpdir/gdrcopy
@@ -63,8 +63,8 @@ ex debuild --set-envvar=CUDA=$CUDA -us -uc
 
 echo
 echo "Building dkms module ..."
-ex cd $tmpdir/gdrcopy-$VERSION
-ex ./configure --with-cuda=$CUDA
+ex cd $tmpdir/gdrcopy-$VERSION/src/gdrdrv
+ex make clean
 
 ex mkdir -p $tmpdir/gdrdrv-dkms-$VERSION/
 ex cp -r $tmpdir/gdrcopy-$VERSION/src/gdrdrv $tmpdir/gdrdrv-dkms-$VERSION/gdrdrv-$VERSION

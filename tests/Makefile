@@ -1,3 +1,4 @@
+DESTBIN ?= 
 CUDA ?= /usr/local/cuda
 
 GDRAPI_INC := ../include
@@ -36,4 +37,10 @@ copybw: copybw.o
 clean:
 	rm -f *.o $(EXES) *~ core.*
 
-.PHONY: clean all exes 
+install: exes
+	@ echo "installing exes in $(DESTBIN)..." && \
+	install -D -v -m u=rwx,g=rx,o=rx basic -t $(DESTBIN) && \
+	install -D -v -m u=rwx,g=rx,o=rx copybw -t $(DESTBIN) && \
+	install -D -v -m u=rwx,g=rx,o=rx validate -t $(DESTBIN)
+
+.PHONY: clean all exes install
