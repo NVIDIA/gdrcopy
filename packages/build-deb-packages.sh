@@ -49,6 +49,8 @@ ex cd ${TOP_DIR_PATH}
 ex mkdir -p $tmpdir/gdrcopy
 ex rm -rf $tmpdir/gdrcopy/*
 ex cp -r Makefile README.md include src tests LICENSE config_arch packages/debian $tmpdir/gdrcopy/
+ex cp README.md $tmpdir/gdrcopy/debian/README.Debian
+ex cp README.md $tmpdir/gdrcopy/debian/README.source
 ex rm -f $tmpdir/gdrcopy_${VERSION}.orig.tar.gz
 
 ex cd $tmpdir/gdrcopy
