@@ -9,7 +9,7 @@ ex()
 {
     local rc
     echo "+ $@"
-    eval "$@"
+    $@
     rc=$?
     
     if [[ $rc -ne 0 ]]; then
@@ -25,6 +25,8 @@ fi
 echo "Building rpm package ..."
 
 ex cd ${SCRIPT_DIR_PATH}
+
+MODULE_SUBDIR=$(awk '/MODULE_SUBDIR \?=/ { print $3 }' ${TOP_DIR_PATH}/src/gdrdrv/Makefile | tr -d '\n')
 
 MAJOR_VERSION=$(awk '/#define GDR_API_MAJOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
 MINOR_VERSION=$(awk '/#define GDR_API_MINOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
@@ -64,7 +66,7 @@ ex mkdir -p $tmpdir/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
 ex cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
 ex cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
 
-rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' --define "CUDA $CUDA" --define "KVERSION $(uname -r)" $tmpdir/topdir/SPECS/gdrcopy.spec
+rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' --define "CUDA $CUDA" --define "KVERSION $(uname -r)" --define "MODULE_LOCATION ${MODULE_SUBDIR}" $tmpdir/topdir/SPECS/gdrcopy.spec
 rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
 srpm=`ls -1 $tmpdir/topdir/SRPMS/`
 echo $srpm $rpms

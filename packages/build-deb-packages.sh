@@ -9,7 +9,7 @@ ex()
 {
     local rc
     echo "+ $@"
-    eval "$@"
+    $@
     rc=$?
     
     if [[ $rc -ne 0 ]]; then
@@ -25,6 +25,8 @@ fi
 echo "Building debian package for the gdrcopy library ..."
 
 ex cd ${SCRIPT_DIR_PATH}
+
+MODULE_SUBDIR=$(awk '/MODULE_SUBDIR \?=/ { print $3 }' ${TOP_DIR_PATH}/src/gdrdrv/Makefile | tr -d '\n')
 
 MAJOR_VERSION=$(awk '/#define GDR_API_MAJOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
 MINOR_VERSION=$(awk '/#define GDR_API_MINOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
@@ -74,6 +76,7 @@ ex cp ${SCRIPT_DIR_PATH}/dkms.conf $tmpdir/gdrdrv-dkms-$VERSION/gdrdrv-$VERSION/
 ex cd $tmpdir/gdrdrv-dkms-$VERSION/
 ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
 
 ex dpkg-buildpackage -S -us -uc
 ex dpkg-buildpackage -rfakeroot -d -b -us -uc

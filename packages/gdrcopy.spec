@@ -1,10 +1,11 @@
 %{!?_release: %define _release 2}
 %{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?KVERSION: %define KVERSION %(uname -r)}
+%{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
 %global debug_package %{nil}
 %global krelver %(echo -n %{KVERSION} | sed -e 's/-/_/g')
 %define MODPROBE %(if ( /sbin/modprobe -c | grep -q '^allow_unsupported_modules  *0'); then echo -n "/sbin/modprobe --allow-unsupported-modules"; else echo -n "/sbin/modprobe"; fi )
-%define driver_install_dir /lib/modules/%{KVERSION}/extra
+%define driver_install_dir /lib/modules/%{KVERSION}/%{MODULE_LOCATION}
 %global kmod kmod
 #modules-%{krelver}
 
