@@ -1,5 +1,6 @@
 %{!?_release: %define _release 2}
 %{!?CUDA: %define CUDA /usr/local/cuda}
+%{!?GDR_VERSION: %define GDR_VERSION 1.4}
 %{!?KVERSION: %define KVERSION %(uname -r)}
 %{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
 %global debug_package %{nil}
@@ -11,7 +12,7 @@
 
 
 Name:           gdrcopy
-Version:        @VERSION@
+Version:        %{GDR_VERSION}
 Release:        %{_release}%{?dist}
 Summary:        GDRcopy library and companion kernel-mode driver    
 Group:          System Environment/Libraries

@@ -66,7 +66,7 @@ ex mkdir -p $tmpdir/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
 ex cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
 ex cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
 
-rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' --define "CUDA $CUDA" --define "KVERSION $(uname -r)" --define "MODULE_LOCATION ${MODULE_SUBDIR}" $tmpdir/topdir/SPECS/gdrcopy.spec
+rpmbuild -ba --nodeps --define "_topdir $tmpdir/topdir" --define 'dist %{nil}' --define "CUDA $CUDA" --define "GDR_VERSION ${VERSION}" --define "KVERSION $(uname -r)" --define "MODULE_LOCATION ${MODULE_SUBDIR}" $tmpdir/topdir/SPECS/gdrcopy.spec
 rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
 srpm=`ls -1 $tmpdir/topdir/SRPMS/`
 echo $srpm $rpms
