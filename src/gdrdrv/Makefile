@@ -57,7 +57,7 @@ help:
 	$(MAKE) -C $(KDIR) M=$$PWD help
 
 clean:
-	rm -rf *.o *.ko* *.mod.* .*.cmd Module.symvers modules.order .tmp_versions/ *~ core .depend TAGS .cache.mk 
+	rm -rf *.o .*.o.d *.ko* *.mod.* .*.cmd Module.symvers modules.order .tmp_versions/ *~ core .depend TAGS .cache.mk 
 
 TAGS:
 	find $(KERNELDIR) -follow -name \*.h -o -name \*.c  |xargs etags

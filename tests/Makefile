@@ -39,6 +39,7 @@ clean:
 
 install: exes
 	@ echo "installing exes in $(DESTBIN)..." && \
+	mkdir -p $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx basic -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx copybw -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx validate -t $(DESTBIN)

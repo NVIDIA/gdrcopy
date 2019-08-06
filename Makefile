@@ -39,7 +39,9 @@ install: lib_install exes_install
 
 lib_install: lib
 	@ echo "installing in $(DESTDIR)$(PREFIX)..." && \
+	mkdir -p $(DESTLIB) && \
 	install -D -v -m u=rw,g=rw,o=r src/$(LIB_DYNAMIC) -t $(DESTLIB) && \
+	mkdir -p $(DESTDIR)$(PREFIX)/include/ && \
 	install -D -v -m u=rw,g=rw,o=r include/* -t $(DESTDIR)$(PREFIX)/include/; \
 	cd $(DESTLIB); \
 	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME); \
