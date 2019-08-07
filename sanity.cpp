@@ -230,6 +230,7 @@ START_TEST(data_validation)
 
     unsigned int flag = 1;
     ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+    ASSERTDRV(cuCtxSynchronize());
 
     uint32_t *init_buf = new uint32_t[size];
     uint32_t *copy_buf = new uint32_t[size];
@@ -269,6 +270,7 @@ START_TEST(data_validation)
     ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
     gdr_copy_to_bar(buf_ptr, init_buf, size);
@@ -276,6 +278,7 @@ START_TEST(data_validation)
     ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
     gdr_copy_to_bar(buf_ptr, init_buf, size);
@@ -283,6 +286,7 @@ START_TEST(data_validation)
     ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     int extra_dwords = 5;
     int extra_off = extra_dwords * sizeof(uint32_t);
@@ -292,6 +296,7 @@ START_TEST(data_validation)
     ck_assert_int_eq(compare_buf(init_buf, copy_buf, size - extra_off), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     extra_off = 11;
     print_dbg("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
