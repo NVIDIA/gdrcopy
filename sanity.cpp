@@ -212,6 +212,9 @@ END_TEST
 
 START_TEST(data_validation)
 {
+    expecting_exception_signal = false;
+    FENCE();
+
     print_dbg("Start data_validation\n");
 
     void *dummy;
@@ -265,18 +268,21 @@ START_TEST(data_validation)
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
     compare_buf(init_buf, copy_buf, size);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
 
     print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
     gdr_copy_to_bar(buf_ptr, init_buf, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
     compare_buf(init_buf, copy_buf, size);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
 
     print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
     gdr_copy_to_bar(buf_ptr, init_buf, size);
     gdr_copy_from_bar(copy_buf, buf_ptr, size);
     compare_buf(init_buf, copy_buf, size);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
 
     int extra_dwords = 5;
     int extra_off = extra_dwords * sizeof(uint32_t);
@@ -285,6 +291,7 @@ START_TEST(data_validation)
     gdr_copy_from_bar(copy_buf, buf_ptr + extra_dwords, size - extra_off);
     compare_buf(init_buf, copy_buf, size - extra_off);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
+    ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
 
     extra_off = 11;
     print_dbg("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
