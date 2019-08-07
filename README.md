@@ -7,8 +7,10 @@ technology.
 ## Introduction
 
 While GPUDirect RDMA is meant for direct access to GPU memory from
-third-party devices, it is possible to use these same APIs to create
-perfectly valid CPU mappings of the GPU memory.
+third-party devices, it is possible to use those same APIs to create
+perfectly valid CPU mappings of the GPU memory. Once created, those
+mappings can be used by the CPU to directly copy in and out of GPU memory
+buffers.
 
 The advantage of a CPU driven copy is the very small overhead
 involved. That might be useful when low latencies are required.
@@ -41,14 +43,14 @@ A simple by-product of it is a copy library with the following characteristics:
   cudaMemcpy can incur in a 6-7us overhead.
 
 - An initial memory *pinning* phase is required, which is potentially expensive,
-  10us-1ms depending on the buffer size.
+  e.g. 10us-1ms depending on the buffer size.
 
-- Fast H-D, because of write-combining. H-D bandwidth is 6-8GB/s on Ivy
+- High performance host to device (H-D) copy. For example, H-D bandwidth is 6-8GB/s on Ivy
   Bridge Xeon but it is subject to NUMA effects.
 
-- Slow D-H, because the GPU BAR, which backs the mappings, can't be
-  prefetched and so burst reads transactions are not generated through
-  PCIE
+- Device to host (D-H) copy. On x86 platforms, where the GPU is connected to the CPU solely 
+  via PCIe, D-H copies run at relatively low bandwidth. That is because the GPU BAR, which backs the
+  mappings, can't be prefetched and so burst reads transactions are not generated over PCIE.
 
 The library comes with two tests:
 - validate, which is a simple application testing the APIs.
