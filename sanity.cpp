@@ -43,9 +43,16 @@ using namespace std;
 
 #include "gdrapi.h"
 #include "gdrapi_internal.h"
+#include "gdrconfig.h"
 #include "common.hpp"
 
+#if defined(GDRAPI_X86)
 #define FENCE() asm volatile("mfence":::"memory")
+#elif defined(GDRAPI_POWER)
+#define FENCE() asm volatile("sync":::"memory")
+#else
+#define FENCE() asm volatile("":::"memory")
+#endif
 
 static bool _print_dbg_msg = false;
 
