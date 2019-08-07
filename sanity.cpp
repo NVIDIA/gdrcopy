@@ -45,6 +45,8 @@ using namespace std;
 #include "gdrapi_internal.h"
 #include "common.hpp"
 
+#define FENCE() asm volatile("mfence":::"memory")
+
 static bool _print_dbg_msg = false;
 
 static void print_dbg(const char* fmt, ...)
@@ -159,6 +161,7 @@ int recvfd(int socket) {
 START_TEST(basic)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start basic\n");
 
@@ -308,6 +311,7 @@ END_TEST
 START_TEST(invalidation_access_after_gdr_close)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start invalidation_access_after_gdr_close\n");
 
@@ -365,8 +369,11 @@ START_TEST(invalidation_access_after_gdr_close)
     
     print_dbg("Trying to read buf_ptr[0] after gdr_close\n");
     expecting_exception_signal = true;
+    FENCE();
     int data_from_buf_ptr = buf_ptr[0];
+    FENCE();
     expecting_exception_signal = false;
+    FENCE();
 
     ck_assert_msg(data_from_buf_ptr != mydata, "Got the same data after gdr_close!!");
     
@@ -387,6 +394,7 @@ END_TEST
 START_TEST(invalidation_access_after_cumemfree)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start invalidation_access_after_cumemfree\n");
 
@@ -444,8 +452,11 @@ START_TEST(invalidation_access_after_cumemfree)
     
     print_dbg("Trying to read buf_ptr[0] after cuMemFree\n");
     expecting_exception_signal = true;
+    FENCE();
     int data_from_buf_ptr = buf_ptr[0];
+    FENCE();
     expecting_exception_signal = false;
+    FENCE();
 
     ck_assert_msg(data_from_buf_ptr != mydata, "Got the same data after cuMemFree!!");
     
@@ -472,6 +483,7 @@ END_TEST
 START_TEST(invalidation_two_mappings)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start invalidation_two_mappings\n");
 
@@ -575,6 +587,7 @@ END_TEST
 START_TEST(invalidation_fork_access_after_cumemfree)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start invalidation_fork_access_after_cumemfree\n");
 
@@ -695,8 +708,11 @@ START_TEST(invalidation_fork_access_after_cumemfree)
 
         print_dbg("%s: trying to read buf_ptr[0]\n", myname);
         expecting_exception_signal = true;
+        FENCE();
         int data_from_buf_ptr = buf_ptr[0];
+        FENCE();
         expecting_exception_signal = false;
+        FENCE();
 
         print_dbg("%s: read buf_ptr[0] after child write get %d\n", myname, data_from_buf_ptr);
         print_dbg("%s: child data is %d\n", myname, child_data);
@@ -731,6 +747,7 @@ END_TEST
 START_TEST(invalidation_fork_after_gdr_map)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start invalidation_fork_after_gdr_map\n");
 
@@ -825,12 +842,15 @@ START_TEST(invalidation_fork_after_gdr_map)
         sigaction(SIGSEGV, &act, 0);
 
         expecting_exception_signal = true;
+        FENCE();
     }
     print_dbg("%s: trying to read buf_ptr[0]\n", myname);
     int data_from_buf_ptr = buf_ptr[0];
     print_dbg("%s: read buf_ptr[0] get %d\n", myname, data_from_buf_ptr);
     if (pid == 0) {
+        FENCE();
         expecting_exception_signal = false;
+        FENCE();
         print_dbg("%s: should not be able to read buf_ptr[0] anymore!! aborting!!\n", myname);
         exit(EXIT_FAILURE);
     }
@@ -877,6 +897,7 @@ END_TEST
 START_TEST(invalidation_fork_child_gdr_map_parent)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start invalidation_fork_child_gdr_map_parent\n");
 
@@ -953,6 +974,7 @@ END_TEST
 START_TEST(invalidation_fork_map_and_free)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start invalidation_fork_map_and_free\n");
 
@@ -1084,6 +1106,7 @@ END_TEST
 START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start invalidation_unix_sock_shared_fd_gdr_pin_buffer\n");
 
@@ -1178,6 +1201,7 @@ END_TEST
 START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 {
     expecting_exception_signal = false;
+    FENCE();
 
     print_dbg("Start invalidation_unix_sock_shared_fd_gdr_map\n");
 
