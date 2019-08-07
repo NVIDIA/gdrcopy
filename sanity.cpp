@@ -266,21 +266,21 @@ START_TEST(data_validation)
     print_dbg("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
     init_hbuf_walking_bit(buf_ptr, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    compare_buf(init_buf, copy_buf, size);
+    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
 
     print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
     gdr_copy_to_bar(buf_ptr, init_buf, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    compare_buf(init_buf, copy_buf, size);
+    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
 
     print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
     gdr_copy_to_bar(buf_ptr, init_buf, size);
     gdr_copy_from_bar(copy_buf, buf_ptr, size);
-    compare_buf(init_buf, copy_buf, size);
+    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
 
@@ -289,7 +289,7 @@ START_TEST(data_validation)
     print_dbg("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset\n", extra_dwords);
     gdr_copy_to_bar(buf_ptr + extra_dwords, init_buf, size - extra_off);
     gdr_copy_from_bar(copy_buf, buf_ptr + extra_dwords, size - extra_off);
-    compare_buf(init_buf, copy_buf, size - extra_off);
+    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size - extra_off), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
 
@@ -297,7 +297,7 @@ START_TEST(data_validation)
     print_dbg("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
     gdr_copy_to_bar((char*)buf_ptr + extra_off, init_buf, size);
     gdr_copy_from_bar(copy_buf, (char*)buf_ptr + extra_off, size);
-    compare_buf(init_buf, copy_buf, size);
+    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
 
     print_dbg("unampping\n");
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);

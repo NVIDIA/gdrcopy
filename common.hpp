@@ -59,7 +59,7 @@ static const gdr_mh_t null_mh = {0};
 #define BEGIN_CHECK do
 #define END_CHECK while(0)
 
-static void compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
+static int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
 {
     int diff = 0;
     ASSERT_EQ(size % 4, 0U);
@@ -75,6 +75,7 @@ static void compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
     if (diff) {
         cout << "check error: diff(s)=" << diff << endl;
     }
+    return diff;
 }
 
 static void init_hbuf_walking_bit(uint32_t *h_buf, size_t size)
