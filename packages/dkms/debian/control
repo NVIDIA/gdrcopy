@@ -1,0 +1,12 @@
+Source: gdrdrv-dkms
+Section: misc
+Priority: optional
+Maintainer: Pak Markthub <pmarkthub@nvidia.com>
+Build-Depends: debhelper (>= 10), dkms
+Standards-Version: @VERSION@
+
+Package: gdrdrv-dkms
+Architecture: any
+Multi-Arch: same
+Depends: dkms (>= 1.95), ${misc:Depends}
+Description: gdrdrv driver in DKMS format.

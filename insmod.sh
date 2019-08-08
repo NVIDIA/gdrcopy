@@ -25,7 +25,7 @@ THIS_DIR=$(dirname $0)
 grep gdrdrv /proc/devices >/dev/null && sudo /sbin/rmmod gdrdrv
 
 # insert driver
-sudo /sbin/insmod gdrdrv/gdrdrv.ko dbg_enabled=0 info_enabled=0
+sudo /sbin/insmod src/gdrdrv/gdrdrv.ko dbg_enabled=0 info_enabled=0
 
 # create device inodes
 major=`fgrep gdrdrv /proc/devices | cut -b 1-4`

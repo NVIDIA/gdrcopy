@@ -1,0 +1,147 @@
+#!/bin/bash
+#
+# Startup/shutdown script for GDRcopy driver
+# chkconfig: 2345 20 80
+# description: Startup/shutdown script for GDRcopy kernel-mode driver
+
+### BEGIN INIT INFO
+# Provides:       gdrcopy
+# Required-Start:
+# Required-Stop:
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Description: GDRcopy kernel-mode driver init script
+### END INIT INFO
+
+# Source function library.
+. /lib/lsb/init-functions
+
+
+DRIVER=gdrdrv
+RETVAL=0
+
+is_module()
+{
+    local RC
+
+    /sbin/lsmod | grep -w "$1" > /dev/null 2>&1
+    RC=$?
+
+    return $RC
+}
+
+log_msg()
+{
+    logger -i "$modname: $@"
+}
+
+function req_modules_loaded() {
+    local RC
+    local reqmods="nvidia"
+    for mod in $reqmods; do
+        if ! is_module $mod; then
+            echo "module $mod is not loaded"
+            RC=1
+            break
+        fi
+    done
+    return $RC
+}
+
+# Create /dev nodes for device
+function createnodes() {
+    local module=$1
+    local RC
+    local inode=/dev/$module
+
+    major=`fgrep $module /proc/devices | cut -b 1-4`
+    log_msg "$module: driver major is $major"
+
+    [ -e $inode ] && rm -f $inode
+    mknod -m 666 $inode c $major 0
+    RC=$?
+
+    return $RC
+}
+
+# Remove /dev nodes for device
+function removenodes() {
+    rm -f /dev/gdrdrv*
+}
+
+load_module()
+{
+    local RC
+    local module=$1
+    filename=`modinfo $module | grep filename | awk '{print $NF}'`
+
+    if [ ! -n "$filename" ]; then
+        echo "Module $module does not exist"
+        log_msg "Error: Module $module does not exist"
+        return 1
+    fi
+
+    echo -n $"Loading $DRIVER kernel module: "
+    /sbin/modprobe $module && log_success_msg || log_failure_msg
+    RC=$?
+
+    return $RC
+}
+
+# Start daemon
+function start() {
+
+    echo -n $"Checking required modules: "
+    req_modules_loaded && log_success_msg || log_failure_msg
+    RETVAL=$?
+    echo
+    [ "$RETVAL" = 0 ] || exit $RETVAL
+
+    if is_module $DRIVER ; then
+        echo "module already loaded"
+    else
+        load_module $DRIVER
+        RETVAL=$?
+        echo
+        [ "$RETVAL" = 0 ] || exit $RETVAL
+    fi
+
+    echo -n $"Initializing GDRcopy /dev entries: "
+    createnodes $DRIVER && log_success_msg || log_failure_msg
+    RETVAL=$?
+    echo
+    [ "$RETVAL" = 0 ] || exit $RETVAL
+}
+
+# Stop daemon
+function stop() {
+    echo -n $"Unloading $DRIVER kernel module: "
+    /sbin/rmmod $DRIVER && log_success_msg || log_failure_msg
+    RETVAL=$?
+    echo
+    [ "$RETVAL" = 0 ] || exit $RETVAL
+
+    echo -n $"Removing GDRcopy /dev entries: "
+    removenodes $DRIVER && log_success_msg || log_failure_msg
+    RETVAL=$?
+    echo
+    [ "$RETVAL" = 0 ] || exit $RETVAL
+}
+
+# See how we were called
+case "$1" in
+   start)
+       start
+      ;;
+   stop)
+       stop
+      ;;
+   restart)
+       stop
+       start
+      ;;
+   *)
+       echo $"Usage: $0 {start|stop|restart}"
+       RETVAL=1
+esac
+exit $RETVAL
