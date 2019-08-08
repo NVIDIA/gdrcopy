@@ -45,6 +45,7 @@
 #include "gdrapi.h"
 #include "gdrdrv.h"
 #include "gdrconfig.h"
+#include "gdrapi_internal.h"
 
 // TODO either use page_size = sysconf(_SC_PAGESIZE) or check the assumption below
 #ifdef GDRAPI_POWER
@@ -95,13 +96,6 @@ static void gdr_msg(enum gdrcopy_msg_level lvl, const char* fmt, ...)
 #define gdr_warn(FMT, ARGS...) gdr_msg(GDRCOPY_MSG_WARN,  "WARN: " FMT, ## ARGS)
 #define gdr_err(FMT, ARGS...)  gdr_msg(GDRCOPY_MSG_ERROR, "ERR:  " FMT, ## ARGS)
 
-typedef struct gdr_memh_t { 
-    gdr_hnd_t handle;
-    LIST_ENTRY(gdr_memh_t) entries;
-    unsigned mapped:1;
-    unsigned wc_mapping:1;
-} gdr_memh_t;
-
 static gdr_memh_t *to_memh(gdr_mh_t mh) {
     return (gdr_memh_t *)mh.h;
 }
@@ -112,10 +106,6 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
     return mh;
 }
 
-struct gdr {
-    int fd;
-    LIST_HEAD(memh_list, gdr_memh_t) memhs;
-};
 
 gdr_t gdr_open()
 {
