@@ -24,12 +24,6 @@ exes: $(EXES)
 copybw.o: copybw.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 sanity.o: sanity.cpp $(GDRAPI_INC)/gdrapi.h $(GDRAPI_SRC)/gdrapi_internal.h common.hpp
 
-basic: basic.o
-	$(LINK.cc)  -o $@ $^ $(LIBS)
-
-validate: validate.o
-	$(LINK.cc)  -o $@ $^ $(LIBS)
-
 copybw: copybw.o
 	$(LINK.cc)  -o $@ $^ $(LIBS)
 
@@ -42,8 +36,7 @@ clean:
 install: exes
 	@ echo "installing exes in $(DESTBIN)..." && \
 	mkdir -p $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx basic -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx copybw -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx validate -t $(DESTBIN)
+	install -D -v -m u=rwx,g=rx,o=rx sanity -t $(DESTBIN)
 
 .PHONY: clean all exes install

@@ -90,8 +90,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %files
 %{_prefix}/bin/copybw
-%{_prefix}/bin/basic
-%{_prefix}/bin/validate
+%{_prefix}/bin/sanity
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so
