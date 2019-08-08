@@ -26,9 +26,16 @@
 #include <stdint.h> // for standard [u]intX_t types
 #include <stddef.h>
 
+#define MAJOR_VERSION_SHIFT     16
+#define MINOR_VERSION_MASK      (((uint32_t)1 << MAJOR_VERSION_SHIFT) - 1)
+
 #define GDR_API_MAJOR_VERSION    1
 #define GDR_API_MINOR_VERSION    4
-#define GDR_API_VERSION          ((GDR_API_MAJOR_VERSION << 16) | GDR_API_MINOR_VERSION)
+#define GDR_API_VERSION          ((GDR_API_MAJOR_VERSION << MAJOR_VERSION_SHIFT) | GDR_API_MINOR_VERSION)
+
+#define MINIMUM_GDRDRV_MAJOR_VERSION    1
+#define MINIMUM_GDRDRV_MINOR_VERSION    4
+#define MINIMUM_GDRDRV_VERSION          ((MINIMUM_GDRDRV_MAJOR_VERSION << MAJOR_VERSION_SHIFT) | MINIMUM_GDRDRV_MINOR_VERSION)
 
 
 #define GPU_PAGE_SHIFT   16
@@ -117,6 +124,12 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size);
 // i.e. one returned by gdr_map()
 int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size);
 int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size);
+
+// Query the version of libgdrapi
+void gdr_runtime_get_version(int *major, int *minor);
+
+// Query the version of gdrdrv driver
+int gdr_driver_get_version(gdr_t g, int *major, int *minor);
 
 #ifdef __cplusplus
 }

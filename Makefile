@@ -73,7 +73,7 @@ memcpy_sse.o: memcpy_sse.c
 memcpy_sse41.o: memcpy_sse41.c
 	$(COMPILE.c) -msse4.1 -o $@ $^
 
-gdrapi.o: gdrapi.c gdrapi.h gdrapi_internal.h
+gdrapi.o: gdrapi.c gdrapi.h gdrapi_internal.h gdrdrv/gdrdrv.h
 copybw.o: copybw.cpp gdrapi.h common.hpp
 sanity.o: sanity.cpp gdrapi.h gdrapi_internal.h common.hpp
 
