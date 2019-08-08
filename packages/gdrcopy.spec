@@ -98,7 +98,6 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %files devel
-%{_libdir}/libgdrapi.so
 %{_prefix}/include/gdrapi.h
 %doc README.md
 
