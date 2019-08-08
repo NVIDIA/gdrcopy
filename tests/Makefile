@@ -25,7 +25,7 @@ copybw.o: copybw.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 sanity.o: sanity.cpp $(GDRAPI_INC)/gdrapi.h $(GDRAPI_SRC)/gdrapi_internal.h common.hpp
 
 copybw: copybw.o
-	$(LINK.cc)  -o $@ $^ $(LIBS)
+	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
 sanity: sanity.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) `pkg-config --libs check`
