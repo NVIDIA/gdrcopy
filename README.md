@@ -14,27 +14,11 @@ The advantage of a CPU driven copy is the very small overhead
 involved. That might be useful when low latencies are required.
 
 
-## Disclaimer
-
-This is just for technology demonstration purposes. In particular this
-is not an NVIDIA-supported product. 
-
-For bugs or feature requests, feel free to
-[file an issue](https://github.com/NVIDIA/gdrcopy/issues). 
-No guarantee is given that the team will follow up on any of those. 
-Alternatively, see [Bug filing](#bug-filing) section below for the official bug filing procedure.
-
-The library relies on a small kernel-mode driver (gdrdrv) which has
-bug(s) and can even crash your machine.  In particular, there is a
-latent bug related to the concurrent invalidation of mappings and
-memory deallocation.
-
-
 ## What is inside
 
-Basically, gdrcopy offers the infrastructure to create user-space
-mappings of GPU memory, which can then be manipulated as if it was
-plain host memory (caveats apply here).
+GDRCopy offers the infrastructure to create user-space mappings of GPU memory,
+which can then be manipulated as if it was plain host memory (caveats apply
+here).
 
 A simple by-product of it is a copy library with the following characteristics:
 - very low overhead, as it is driven by the CPU. As a reference, currently a 
@@ -65,8 +49,8 @@ In particular, it does not work with CUDA managed memory.
 
 ## Requirements
 
-GPUDirect RDMA requires an NVIDIA Tesla and Quadro class GPUs based on
-Kepler/Maxwell, see [GPUDirect
+GPUDirect RDMA requires an NVIDIA Tesla and Quadro class GPUs based on Kepler,
+Pascal, Volta, or Turing, see [GPUDirect
 RDMA](http://developer.nvidia.com/gpudirect). 
 
 For more technical informations, please refer to the official
@@ -79,39 +63,54 @@ The library and tests require CUDA >= 6.0 and/or display driver >= 331.14.
 The _sanity_ test requires check >= 0.9.8 and subunit >= 1.2.0. The development
 packages are also needed for compilation.
 
-Developed and tested on RH6.x. The only supported architecture is
-Linux x86_64 so far.
+Developed and tested on RH7.x and Ubuntu18_04. The supported architectures are
+Linux x86_64 and ppc64le.
 
-root priviledges are necessary to load/install the kernel-mode device
+root privileges are necessary to load/install the kernel-mode device
 driver.
 
 
-## Build & execution
+## Build and installation
 
-Build:
+We provide three ways for building and installing GDRCopy
+
+### rpm package
+
 ```shell
-$ cd gdrcopy
-$ make PREFIX=<install path dir> CUDA=<cuda install path> all install
+$ cd packages
+$ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
+$ sudo rpm -Uvh gdrcopy-kmod-<version>.<platform>.rpm
+$ sudo rpm -Uvh gdrcopy-<version>.<platform>.rpm
+$ sudo rpm -Uvh gdrcopy-devel-<version>.<platform>.rpm
 ```
 
-Install kernel-mode driver (root/sudo caps required):
+### deb package
+
 ```shell
-$ ./insmod.sh
+$ cd packages
+$ CUDA=<cuda-install-top-dir> ./build-deb-packages.sh
+$ sudo dpkg -i gdrdrv-dkms_<version>_<platform>.deb
+$ sudo dpkg -i gdrcopy_<version>_<platform>.deb
 ```
 
-Prepare environment:
+### from source
+
 ```shell
-$ export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
+$ make PREFIX=<install-to-this-location> CUDA=<cuda-install-top-dir> all install
+$ sudo ./insmod.sh
 ```
+
+
+## Tests
 
 Execute provided tests:
 ```shell
-$ ./sanity
+$ sanity
 Running suite(s): Sanity
 100%: Checks: 11, Failures: 0, Errors: 0
 
 
-$ ./copybw
+$ copybw
 testing size: 4096
 rounded size: 65536
 device ptr: 5046c0000
@@ -213,11 +212,3 @@ GPUDirect in the "Relevant Area" field.
 You can later track their progress using the __My Bugs__ link on the left of
 this [view](https://developer.nvidia.com/user).
 
-
-## TODO
-
-- add RPM specs for both library and kernel-mode driver
-- explore use of DKMS for kernel-mode driver
-- Conditionally use P2P tokens, to be compatible with CUDA 5.x.
-- Implement an event-queue mechanism in gdrdrv to deliver mapping
-  invalidation events to user-space applications.
