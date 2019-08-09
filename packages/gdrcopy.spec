@@ -1,6 +1,6 @@
 %{!?_release: %define _release 2}
 %{!?CUDA: %define CUDA /usr/local/cuda}
-%{!?GDR_VERSION: %define GDR_VERSION 1.4}
+%{!?GDR_VERSION: %define GDR_VERSION 2.0}
 %{!?KVERSION: %define KVERSION %(uname -r)}
 %{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
 %global debug_package %{nil}
