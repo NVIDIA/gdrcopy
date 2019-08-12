@@ -1,7 +1,7 @@
 Source: gdrcopy
 Priority: optional
 Maintainer: Pak Markthub <pmarkthub@nvidia.com>
-Build-Depends: debhelper (>= 10), check, subunit
+Build-Depends: debhelper (>= 10), check, libsubunit-dev
 Standards-Version: @VERSION@
 Section: libs
 Homepage: https://github.com/NVIDIA/gdrcopy
