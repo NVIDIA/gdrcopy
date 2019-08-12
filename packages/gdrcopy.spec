@@ -65,7 +65,7 @@ make drv_install DESTDIR=$RPM_BUILD_ROOT
 install -d $RPM_BUILD_ROOT/etc/init.d
 install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
 
-%post
+%post %{kmod}
 /sbin/depmod -a
 %{MODPROBE} -rq gdrdrv||:
 %{MODPROBE} gdrdrv||:
@@ -76,11 +76,17 @@ fi
 
 /sbin/chkconfig --add gdrcopy
 
-%preun
-%{MODPROBE} -rq gdrcopy
+/usr/bin/systemctl start gdrcopy
+
+%preun %{kmod}
+/usr/bin/systemctl stop gdrcopy
+%{MODPROBE} -rq gdrdrv
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
    true
 fi              
+
+%postun %{kmod}
+/usr/bin/systemctl daemon-reload
 
 
 %clean
@@ -94,7 +100,6 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so
-/etc/init.d/gdrcopy
 
 
 %files devel
@@ -104,6 +109,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %files %{kmod}
 %defattr(-,root,root,-)
+/etc/init.d/gdrcopy
 %{driver_install_dir}/gdrdrv.ko
 
 
