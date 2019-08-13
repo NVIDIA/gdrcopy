@@ -59,7 +59,7 @@ subunit.
 
 ```shell
 # On RHEL
-$ sudo yum install check subunit subunit-devel
+$ sudo yum install check check-devel subunit subunit-devel
 
 # On Debian
 $ sudo apt install check libsubunit0 libsubunit-dev
