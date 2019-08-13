@@ -47,7 +47,7 @@ cudaMalloc. In particular, it does not work with CUDA managed memory.
 
 ## Requirements
 
-GPUDirect RDMA requires an NVIDIA Tesla and Quadro class GPUs based on Kepler,
+GPUDirect RDMA requires NVIDIA Tesla or Quadro class GPUs based on Kepler,
 Pascal, Volta, or Turing, see [GPUDirect
 RDMA](http://developer.nvidia.com/gpudirect).  For more technical informations,
 please refer to the official GPUDirect RDMA [design
@@ -68,7 +68,7 @@ $ sudo apt install check libsubunit0 libsubunit-dev
 Developed and tested on RH7.x and Ubuntu18_04. The supported architectures are
 Linux x86_64 and ppc64le.
 
-root privileges are necessary to load/install the kernel-mode device
+Root privileges are necessary to load/install the kernel-mode device
 driver.
 
 
