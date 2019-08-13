@@ -42,26 +42,28 @@ The library comes with two tests:
 ## Restrictions
 
 This library only works with regular CUDA device memory, as returned by
-cudaMalloc.
-
-In particular, it does not work with CUDA managed memory.
+cudaMalloc. In particular, it does not work with CUDA managed memory.
 
 
 ## Requirements
 
 GPUDirect RDMA requires an NVIDIA Tesla and Quadro class GPUs based on Kepler,
 Pascal, Volta, or Turing, see [GPUDirect
-RDMA](http://developer.nvidia.com/gpudirect). 
-
-For more technical informations, please refer to the official
-GPUDirect RDMA [design
+RDMA](http://developer.nvidia.com/gpudirect).  For more technical informations,
+please refer to the official GPUDirect RDMA [design
 document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 
-The device driver requires CUDA >= 5.0.
-The library and tests require CUDA >= 6.0 and/or display driver >= 331.14.
+The device driver requires GPU display driver >= 331.14. The library and tests
+require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
+subunit.
 
-The _sanity_ test requires check >= 0.9.8 and subunit >= 1.2.0. The development
-packages are also needed for compilation.
+```shell
+# On RHEL
+$ sudo yum install check subunit subunit-devel
+
+# On Debian
+$ sudo apt install check libsubunit0 libsubunit-dev
+```
 
 Developed and tested on RH7.x and Ubuntu18_04. The supported architectures are
 Linux x86_64 and ppc64le.
