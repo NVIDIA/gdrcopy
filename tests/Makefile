@@ -14,7 +14,7 @@ CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
 LIBS     := -lcudart -lcuda -lpthread -ldl -lgdrapi
 
-SRCS := copybw.cpp sanity.cpp
+SRCS := copybw.cpp sanity.cpp copylat.cpp
 EXES := $(SRCS:.cpp=)
 
 all: exes
@@ -23,12 +23,16 @@ exes: $(EXES)
 
 copybw.o: copybw.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 sanity.o: sanity.cpp $(GDRAPI_INC)/gdrapi.h $(GDRAPI_SRC)/gdrapi_internal.h common.hpp
+copylat.o: copylat.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 
 copybw: copybw.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
 sanity: sanity.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) `pkg-config --libs check`
+
+copylat: copylat.o
+	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
 clean:
 	rm -f *.o $(EXES) *~ core.*
