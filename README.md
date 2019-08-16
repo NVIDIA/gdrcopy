@@ -39,12 +39,6 @@ The library comes with two tests:
 - copybw, a minimal application which calculates the R/W bandwidth.
 
 
-## Restrictions
-
-This library only works with regular CUDA device memory, as returned by
-cudaMalloc. In particular, it does not work with CUDA managed memory.
-
-
 ## Requirements
 
 GPUDirect RDMA requires NVIDIA Tesla or Quadro class GPUs based on Kepler,
@@ -196,6 +190,17 @@ unmapping buffer
 unpinning buffer
 closing gdrdrv
 ```
+
+
+## Restrictions and known issues
+
+GDRCopy works with regular CUDA device memory only, as returned by cudaMalloc.
+In particular, it does not work with CUDA managed memory.
+
+On POWER9 where CPU and GPU are connected via NVLink, CUDA9.2 and GPU Driver
+v396.37 are the minimum requirements in order to achieve the full performance.
+GDRCopy works with ealier CUDA and GPU driver versions but the achievable
+bandwidth is substantially lower.
 
 
 ## Bug filing
