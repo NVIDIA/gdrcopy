@@ -1,4 +1,4 @@
-# gdrcopy
+# GDRCopy
 
 A low-latency GPU memory copy library based on NVIDIA GPUDirect RDMA
 technology.
@@ -39,34 +39,30 @@ The library comes with two tests:
 - copybw, a minimal application which calculates the R/W bandwidth.
 
 
-## Restrictions
-
-This library only works with regular CUDA device memory, as returned by
-cudaMalloc.
-
-In particular, it does not work with CUDA managed memory.
-
-
 ## Requirements
 
-GPUDirect RDMA requires an NVIDIA Tesla and Quadro class GPUs based on Kepler,
+GPUDirect RDMA requires NVIDIA Tesla or Quadro class GPUs based on Kepler,
 Pascal, Volta, or Turing, see [GPUDirect
-RDMA](http://developer.nvidia.com/gpudirect). 
-
-For more technical informations, please refer to the official
-GPUDirect RDMA [design
+RDMA](http://developer.nvidia.com/gpudirect).  For more technical informations,
+please refer to the official GPUDirect RDMA [design
 document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 
-The device driver requires CUDA >= 5.0.
-The library and tests require CUDA >= 6.0 and/or display driver >= 331.14.
+The device driver requires GPU display driver >= 331.14. The library and tests
+require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
+subunit.
 
-The _sanity_ test requires check >= 0.9.8 and subunit >= 1.2.0. The development
-packages are also needed for compilation.
+```shell
+# On RHEL
+$ sudo yum install check check-devel subunit subunit-devel
+
+# On Debian
+$ sudo apt install check libsubunit0 libsubunit-dev
+```
 
 Developed and tested on RH7.x and Ubuntu18_04. The supported architectures are
 Linux x86_64 and ppc64le.
 
-root privileges are necessary to load/install the kernel-mode device
+Root privileges are necessary to load/install the kernel-mode device
 driver.
 
 
@@ -194,6 +190,17 @@ unmapping buffer
 unpinning buffer
 closing gdrdrv
 ```
+
+
+## Restrictions and known issues
+
+GDRCopy works with regular CUDA device memory only, as returned by cudaMalloc.
+In particular, it does not work with CUDA managed memory.
+
+On POWER9 where CPU and GPU are connected via NVLink, CUDA9.2 and GPU Driver
+v396.37 are the minimum requirements in order to achieve the full performance.
+GDRCopy works with ealier CUDA and GPU driver versions but the achievable
+bandwidth is substantially lower.
 
 
 ## Bug filing
