@@ -76,17 +76,19 @@ fi
 
 /sbin/chkconfig --add gdrcopy
 
-/usr/bin/systemctl start gdrcopy
+service gdrcopy start
 
 %preun %{kmod}
-/usr/bin/systemctl stop gdrcopy
+service gdrcopy stop
 %{MODPROBE} -rq gdrdrv
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
    true
 fi              
 
 %postun %{kmod}
-/usr/bin/systemctl daemon-reload
+if [ -e /usr/bin/systemctl ]; then
+    /usr/bin/systemctl daemon-reload
+fi
 
 
 %clean
