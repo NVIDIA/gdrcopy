@@ -19,7 +19,7 @@ Group:          System Environment/Libraries
 License:        MIT
 URL:            https://github.com/NVIDIA/gdrcopy
 Source0:        %{name}-%{version}.tar.gz
-BuildRequires:  gcc kernel-headers check-devel
+BuildRequires:  gcc kernel-headers check-devel systemd-rpm-macros
 Requires:       %{name}-%{kmod} check
 
 # to get rid of libcuda/libcudart
@@ -69,25 +69,32 @@ install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT
 /sbin/depmod -a
 %{MODPROBE} -rq gdrdrv||:
 %{MODPROBE} gdrdrv||:
-
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
    true
 fi              
-
 /sbin/chkconfig --add gdrcopy
-
+if [ -e /usr/bin/systemctl ]; then
+    %systemd_post gdrcopy.service
+fi
 service gdrcopy start
 
 %preun %{kmod}
-service gdrcopy stop
-%{MODPROBE} -rq gdrdrv
+if [ -e /usr/bin/systemctl ]; then
+    %systemd_preun gdrcopy.service
+fi
+if ! ( service gdrcopy stop > /dev/null 2>&1 ); then
+    true
+fi
+if ! ( %{MODPROBE} -rq gdrdrv > /dev/null 2>&1 ); then
+    true
+fi
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
-   true
+    true
 fi              
 
 %postun %{kmod}
 if [ -e /usr/bin/systemctl ]; then
-    /usr/bin/systemctl daemon-reload
+    %systemd_postun gdrcopy.service
 fi
 
 
