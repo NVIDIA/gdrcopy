@@ -300,11 +300,11 @@ START_TEST(data_validation)
 
     extra_off = 11;
     print_dbg("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
-    gdr_copy_to_mapping(mh, (char*)buf_ptr + extra_off, init_buf, size);
-    gdr_copy_from_mapping(mh, copy_buf, (char*)buf_ptr + extra_off, size);
-    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
+    gdr_copy_to_mapping(mh, (char*)buf_ptr + extra_off, init_buf, size - extra_off);
+    gdr_copy_from_mapping(mh, copy_buf, (char*)buf_ptr + extra_off, size - extra_off);
+    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size - extra_off), 0);
 
-    print_dbg("unampping\n");
+    print_dbg("unmapping\n");
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
     print_dbg("unpinning\n");
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
