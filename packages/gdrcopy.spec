@@ -136,3 +136,4 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 - add basic test
 * Thu Sep 15 2016 Davide Rossetti <davide.rossetti@gmail.com> 1.2-1
 - First version of RPM spec
+
