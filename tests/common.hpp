@@ -46,10 +46,7 @@ static inline CUresult alignedCUMemAlloc(CUdeviceptr *pptr, size_t psize, bool s
         }
     }
 
-    if (ptr & GPU_PAGE_MASK != ptr)
-        *pptr = (ptr + GPU_PAGE_SIZE) & GPU_PAGE_MASK;
-    else
-        *pptr = ptr;
+    *pptr = (ptr + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     // Record the actual pointer for doing alignedCUMemFree later.
     _allocations[*pptr] = ptr;
