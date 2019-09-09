@@ -79,8 +79,8 @@ fi
 service gdrcopy start
 
 %preun %{kmod}
-service gdrcopy stop
-%{MODPROBE} -rq gdrdrv
+service gdrcopy stop||:
+%{MODPROBE} -rq gdrdrv||:
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
    true
 fi              
