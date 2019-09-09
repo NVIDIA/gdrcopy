@@ -174,7 +174,7 @@ static int info_enabled = 0;
 MODULE_AUTHOR("drossetti@nvidia.com");
 MODULE_LICENSE("MIT");
 MODULE_DESCRIPTION("GDRCopy kernel-mode driver");
-MODULE_VERSION("1.1");
+MODULE_VERSION(GDRDRV_VERSION_STRING);
 module_param(dbg_enabled, int, 0000);
 MODULE_PARM_DESC(dbg_enabled, "enable debug tracing");
 module_param(info_enabled, int, 0000);
