@@ -31,7 +31,7 @@ static inline CUresult alignedCUMemAlloc(CUdeviceptr *pptr, size_t psize, bool s
 {
     CUresult ret = CUDA_SUCCESS;
     CUdeviceptr ptr;
-    size_t size = psize + GPU_PAGE_SIZE;
+    size_t size = psize + GPU_PAGE_SIZE - 1;
 
     ret = cuMemAlloc(&ptr, size);
     if (ret != CUDA_SUCCESS)
