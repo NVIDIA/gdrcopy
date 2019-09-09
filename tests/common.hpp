@@ -22,6 +22,57 @@
 
 #pragma once
 
+#include <map>
+#include <cuda.h>
+
+static std::map<CUdeviceptr, CUdeviceptr> _allocations;
+
+static inline CUresult alignedCUMemAlloc(CUdeviceptr *pptr, size_t psize, bool set_sync_memops)
+{
+    CUresult ret = CUDA_SUCCESS;
+    CUdeviceptr ptr;
+    size_t size = psize + GPU_PAGE_SIZE;
+
+    ret = cuMemAlloc(&ptr, size);
+    if (ret != CUDA_SUCCESS)
+        return ret;
+
+    if (set_sync_memops) {
+        unsigned int flag = 1;
+        ret = cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, ptr);
+        if (ret != CUDA_SUCCESS) {
+            cuMemFree(ptr);
+            return ret;
+        }
+    }
+
+    if (ptr & GPU_PAGE_MASK != ptr)
+        *pptr = (ptr + GPU_PAGE_SIZE) & GPU_PAGE_MASK;
+    else
+        *pptr = ptr;
+
+    // Record the actual pointer for doing alignedCUMemFree later.
+    _allocations[*pptr] = ptr;
+
+    return CUDA_SUCCESS;
+}
+
+static inline CUresult alignedCUMemFree(CUdeviceptr pptr)
+{
+    CUresult ret = CUDA_SUCCESS;
+    CUdeviceptr ptr;
+
+    if (_allocations.count(pptr) > 0) {
+        ptr = _allocations[pptr];
+        ret = cuMemFree(ptr);
+        if (ret == CUDA_SUCCESS)
+            _allocations.erase(ptr);
+        return ret;
+    }
+    else
+        return CUDA_ERROR_INVALID_VALUE;
+}
+
 #define ASSERT(x)                                                       \
     do                                                                  \
         {                                                               \
