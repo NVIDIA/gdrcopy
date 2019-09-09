@@ -185,12 +185,6 @@ START_TEST(basic)
     unsigned int flag = 1;
     ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
-    uint32_t *init_buf = new uint32_t[size];
-    uint32_t *copy_buf = new uint32_t[size];
-
-    init_hbuf_walking_bit(init_buf, size);
-    memset(copy_buf, 0, sizeof(*copy_buf) * sizeof(uint32_t));
-
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
 
@@ -207,6 +201,109 @@ START_TEST(basic)
     ASSERTDRV(cuMemFree(d_A));
 
     print_dbg("End basic\n");
+}
+END_TEST
+
+/**
+ * This unit test ensures that gdrcopy returns error when trying to map
+ * unaligned addresses. In addition, it tests that mapping hand-aligned
+ * addresses by users are successful.
+ *
+ */
+START_TEST(basic_unaligned_mapping)
+{
+    expecting_exception_signal = false;
+    FENCE();
+
+    print_dbg("Start basic_unaligned_mapping\n");
+
+    void *dummy;
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    // Allocate for a few bytes so that cuMemAlloc returns an unaligned address
+    // in the next allocation. This behavior is observed in GPU Driver 410 and
+    // above.
+    const size_t fa_size = 4;
+    CUdeviceptr d_fa;
+    ASSERTDRV(cuMemAlloc(&d_fa, fa_size));
+    print_dbg("First allocation: d_fa=0x%llx, size=%zu\n", d_fa, fa_size);
+
+    const size_t A_size = GPU_PAGE_SIZE + sizeof(int);
+
+    CUdeviceptr d_A, d_A_boundary;
+    ASSERTDRV(cuMemAlloc(&d_A, A_size));
+
+    d_A_boundary = d_A & GPU_PAGE_MASK;
+    print_dbg("Second allocation: d_A=0x%llx, size=%zu, GPU-page-boundary 0x%llx\n", d_A, A_size, d_A_boundary);
+    if (d_A == d_A_boundary) {
+        print_dbg("d_A is aligned. Waiving this test.\n");
+        ASSERTDRV(cuMemFree(d_A));
+
+        print_dbg("End basic_unaligned_mapping\n");
+        return;
+    }
+    print_dbg("d_A is unaligned\n");
+
+    unsigned int flag = 1;
+    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    // Try mapping with unaligned address. This should fail.
+    print_dbg("Try mapping d_A as is.\n");
+    gdr_mh_t A_mh = null_mh;
+
+    ck_assert_int_eq(gdr_pin_buffer(g, d_A, A_size, 0, 0, &A_mh), 0);
+    ASSERT_NEQ(A_mh, null_mh);
+
+    void *A_bar_ptr  = NULL;
+    // Expect gdr_map to fail with unaligned address
+    ASSERT_NEQ(gdr_map(g, A_mh, &A_bar_ptr, A_size), 0);
+    ASSERT_EQ(gdr_unpin_buffer(g, A_mh), 0);
+    print_dbg("Mapping d_A failed as expected.\n");
+
+    print_dbg("Align d_A and try mapping it again.\n");
+    // In order to align d_A, we move to the next GPU page. The reason is that
+    // the first GPU page may belong to another allocation.
+    CUdeviceptr d_aligned_A = (d_A + GPU_PAGE_SIZE) & GPU_PAGE_MASK;
+    off_t aligned_A_offset = d_aligned_A - d_A;
+    size_t aligned_A_size = A_size - aligned_A_offset;
+
+    print_dbg("Pin and map aligned address: d_aligned_A=0x%llx, offset=%lld, size=%zu\n", d_aligned_A, aligned_A_offset, aligned_A_size);
+
+    gdr_mh_t aligned_A_mh = null_mh;
+    void *aligned_A_bar_ptr = NULL;
+    ck_assert_int_eq(gdr_pin_buffer(g, d_aligned_A, aligned_A_size, 0, 0, &aligned_A_mh), 0);
+    ASSERT_NEQ(aligned_A_mh, null_mh);
+    // expect gdr_map to success
+    ASSERT_EQ(gdr_map(g, aligned_A_mh, &aligned_A_bar_ptr, aligned_A_size), 0);
+
+    // Test accessing the mapping
+    int *aligned_A_map_ptr = (int *)aligned_A_bar_ptr;
+    aligned_A_map_ptr[0] = 7;
+
+    // The first allocation and d_A should share a GPU page. We should make
+    // sure that freeing the first allocation would not accidentally unmap
+    // d_aligned_A as the d_aligned_A mapping starts from the next GPU page.
+    gdr_mh_t fa_mh = null_mh;
+    ck_assert_int_eq(gdr_pin_buffer(g, d_fa, fa_size, 0, 0, &fa_mh), 0);
+    ASSERT_NEQ(fa_mh, null_mh);
+
+    void *fa_bar_ptr = NULL;
+    ASSERT_EQ(gdr_map(g, fa_mh, &fa_bar_ptr, fa_size), 0);
+
+    ASSERTDRV(cuMemFree(d_fa));
+
+    // Test accessing aligned_A_map_ptr again. This should not cause segmentation fault.
+    aligned_A_map_ptr[0] = 9;
+
+    ASSERT_EQ(gdr_unpin_buffer(g, aligned_A_mh), 0);
+    ASSERT_EQ(gdr_close(g), 0);
+
+    ASSERTDRV(cuMemFree(d_A));
+
+    print_dbg("End basic_unaligned_mapping\n");
 }
 END_TEST
 
@@ -1375,6 +1472,7 @@ int main(int argc, char *argv[])
 
     suite_add_tcase(s, tc_basic);
 	tcase_add_test(tc_basic, basic);
+	tcase_add_test(tc_basic, basic_unaligned_mapping);
 
     suite_add_tcase(s, tc_data_validation);
 	tcase_add_test(tc_data_validation, data_validation);
