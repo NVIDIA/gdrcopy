@@ -46,6 +46,8 @@ using namespace std;
 #include "gdrconfig.h"
 #include "common.hpp"
 
+using namespace gdrcopy::test;
+
 #if defined(GDRAPI_X86)
 #define FENCE() asm volatile("mfence":::"memory")
 #elif defined(GDRAPI_POWER)
@@ -180,16 +182,7 @@ START_TEST(basic)
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
-
-    uint32_t *init_buf = new uint32_t[size];
-    uint32_t *copy_buf = new uint32_t[size];
-
-    init_hbuf_walking_bit(init_buf, size);
-    memset(copy_buf, 0, sizeof(*copy_buf) * sizeof(uint32_t));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -204,9 +197,114 @@ START_TEST(basic)
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
 
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
 
     print_dbg("End basic\n");
+}
+END_TEST
+
+/**
+ * This unit test ensures that gdrcopy returns error when trying to map
+ * unaligned addresses. In addition, it tests that mapping hand-aligned
+ * addresses by users are successful.
+ *
+ */
+START_TEST(basic_unaligned_mapping)
+{
+    expecting_exception_signal = false;
+    FENCE();
+
+    print_dbg("Start basic_unaligned_mapping\n");
+
+    void *dummy;
+    ASSERTRT(cudaMalloc(&dummy, 0));
+
+    // Allocate for a few bytes so that cuMemAlloc returns an unaligned address
+    // in the next allocation. This behavior is observed in GPU Driver 410 and
+    // above.
+    const size_t fa_size = 4;
+    CUdeviceptr d_fa;
+    ASSERTDRV(gpuMemAlloc(&d_fa, fa_size));
+    print_dbg("First allocation: d_fa=0x%llx, size=%zu\n", d_fa, fa_size);
+
+    const size_t A_size = GPU_PAGE_SIZE + sizeof(int);
+
+    CUdeviceptr d_A, d_A_boundary;
+
+    // Try until we get an unaligned address. Give up after 100 times.
+    for (int i = 0; i < 100; ++i) {
+        ASSERTDRV(gpuMemAlloc(&d_A, A_size, false, true));
+        d_A_boundary = d_A & GPU_PAGE_MASK;
+        if (d_A != d_A_boundary)
+            break;
+    }
+    print_dbg("Second allocation: d_A=0x%llx, size=%zu, GPU-page-boundary 0x%llx\n", d_A, A_size, d_A_boundary);
+    if (d_A == d_A_boundary) {
+        print_dbg("d_A is aligned. Waiving this test.\n");
+        ASSERTDRV(cuMemFree(d_A));
+
+        print_dbg("End basic_unaligned_mapping\n");
+        return;
+    }
+    print_dbg("d_A is unaligned\n");
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    // Try mapping with unaligned address. This should fail.
+    print_dbg("Try mapping d_A as is.\n");
+    gdr_mh_t A_mh = null_mh;
+
+    ck_assert_int_eq(gdr_pin_buffer(g, d_A, A_size, 0, 0, &A_mh), 0);
+    ASSERT_NEQ(A_mh, null_mh);
+
+    void *A_bar_ptr  = NULL;
+    // Expect gdr_map to fail with unaligned address
+    ASSERT_NEQ(gdr_map(g, A_mh, &A_bar_ptr, A_size), 0);
+    ASSERT_EQ(gdr_unpin_buffer(g, A_mh), 0);
+    print_dbg("Mapping d_A failed as expected.\n");
+
+    print_dbg("Align d_A and try mapping it again.\n");
+    // In order to align d_A, we move to the next GPU page. The reason is that
+    // the first GPU page may belong to another allocation.
+    CUdeviceptr d_aligned_A = (d_A + GPU_PAGE_SIZE) & GPU_PAGE_MASK;
+    off_t aligned_A_offset = d_aligned_A - d_A;
+    size_t aligned_A_size = A_size - aligned_A_offset;
+
+    print_dbg("Pin and map aligned address: d_aligned_A=0x%llx, offset=%lld, size=%zu\n", d_aligned_A, aligned_A_offset, aligned_A_size);
+
+    gdr_mh_t aligned_A_mh = null_mh;
+    void *aligned_A_bar_ptr = NULL;
+    ck_assert_int_eq(gdr_pin_buffer(g, d_aligned_A, aligned_A_size, 0, 0, &aligned_A_mh), 0);
+    ASSERT_NEQ(aligned_A_mh, null_mh);
+    // expect gdr_map to success
+    ASSERT_EQ(gdr_map(g, aligned_A_mh, &aligned_A_bar_ptr, aligned_A_size), 0);
+
+    // Test accessing the mapping
+    int *aligned_A_map_ptr = (int *)aligned_A_bar_ptr;
+    aligned_A_map_ptr[0] = 7;
+
+    // The first allocation and d_A should share a GPU page. We should make
+    // sure that freeing the first allocation would not accidentally unmap
+    // d_aligned_A as the d_aligned_A mapping starts from the next GPU page.
+    gdr_mh_t fa_mh = null_mh;
+    ck_assert_int_eq(gdr_pin_buffer(g, d_fa, fa_size, 0, 0, &fa_mh), 0);
+    ASSERT_NEQ(fa_mh, null_mh);
+
+    void *fa_bar_ptr = NULL;
+    ASSERT_EQ(gdr_map(g, fa_mh, &fa_bar_ptr, fa_size), 0);
+
+    ASSERTDRV(gpuMemFree(d_fa));
+
+    // Test accessing aligned_A_map_ptr again. This should not cause segmentation fault.
+    aligned_A_map_ptr[0] = 9;
+
+    ASSERT_EQ(gdr_unpin_buffer(g, aligned_A_mh), 0);
+    ASSERT_EQ(gdr_close(g), 0);
+
+    ASSERTDRV(gpuMemFree(d_A));
+
+    print_dbg("End basic_unaligned_mapping\n");
 }
 END_TEST
 
@@ -225,11 +323,8 @@ START_TEST(data_validation)
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
     ASSERTDRV(cuCtxSynchronize());
 
     uint32_t *init_buf = new uint32_t[size];
@@ -311,7 +406,7 @@ START_TEST(data_validation)
 
     ASSERT_EQ(gdr_close(g), 0);
 
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
 
     print_dbg("End data_validation\n");
 }
@@ -352,11 +447,8 @@ START_TEST(invalidation_access_after_gdr_close)
     ASSERTRT(cudaMalloc(&dummy, 0));
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -435,11 +527,8 @@ START_TEST(invalidation_access_after_cumemfree)
     ASSERTRT(cudaMalloc(&dummy, 0));
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -467,7 +556,7 @@ START_TEST(invalidation_access_after_cumemfree)
     buf_ptr[0] = mydata;
 
     print_dbg("Calling cuMemFree\n");
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
     
     print_dbg("Trying to read buf_ptr[0] after cuMemFree\n");
     expecting_exception_signal = true;
@@ -520,11 +609,8 @@ START_TEST(invalidation_two_mappings)
     CUdeviceptr d_A[2];
 
     for (int i = 0; i < 2; ++i) {
-        ASSERTDRV(cuMemAlloc(&d_A[i], size));
+        ASSERTDRV(gpuMemAlloc(&d_A[i], size));
         ASSERTDRV(cuMemsetD8(d_A[i], 0x95, size));
-
-        unsigned int flag = 1;
-        ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A[i]));
     }
 
     gdr_t g = gdr_open();
@@ -565,12 +651,12 @@ START_TEST(invalidation_two_mappings)
     ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
 
     print_dbg("cuMemFree and thus destroying the first mapping\n");
-    ASSERTDRV(cuMemFree(d_A[0]));
+    ASSERTDRV(gpuMemFree(d_A[0]));
 
     print_dbg("Trying to read and validate the data from the second mapping after the first mapping has been destroyed\n");
     ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
 
-    ASSERTDRV(cuMemFree(d_A[1]));
+    ASSERTDRV(gpuMemFree(d_A[1]));
     
     for (int i = 0; i < 2; ++i) {
         ASSERT_EQ(gdr_unmap(g, mh[i], bar_ptr[i], size), 0);
@@ -670,11 +756,8 @@ START_TEST(invalidation_fork_access_after_cumemfree)
     ASSERTRT(cudaMalloc(&dummy, 0));
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -714,7 +797,7 @@ START_TEST(invalidation_fork_access_after_cumemfree)
     print_dbg("%s: read buf_ptr[0] before cuMemFree get %d\n", myname, buf_ptr[0]);
 
     print_dbg("%s: calling cuMemFree\n", myname);
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
 
     if (pid > 0) {
         int msg = 1;
@@ -785,11 +868,8 @@ START_TEST(invalidation_fork_after_gdr_map)
     ASSERTRT(cudaMalloc(&dummy, 0));
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -889,7 +969,7 @@ START_TEST(invalidation_fork_after_gdr_map)
         ck_assert_int_eq(data_from_buf_ptr, mynumber);
         ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
-        ASSERTDRV(cuMemFree(d_A));
+        ASSERTDRV(gpuMemFree(d_A));
         ASSERT_EQ(gdr_close(g), 0);
     }
 
@@ -928,11 +1008,8 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
     ASSERTRT(cudaMalloc(&dummy, 0));
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -965,7 +1042,7 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
         ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
 
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
-        ASSERTDRV(cuMemFree(d_A));
+        ASSERTDRV(gpuMemFree(d_A));
         ASSERT_EQ(gdr_close(g), 0);
     }
     print_dbg("End invalidation_fork_child_gdr_map_parent\n");
@@ -1040,11 +1117,8 @@ START_TEST(invalidation_fork_map_and_free)
     ASSERTRT(cudaMalloc(&dummy, 0));
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -1072,7 +1146,7 @@ START_TEST(invalidation_fork_map_and_free)
 
     if (pid == 0) {
         print_dbg("%s: calling cuMemFree\n", myname);
-        ASSERTDRV(cuMemFree(d_A));
+        ASSERTDRV(gpuMemFree(d_A));
 
         print_dbg("%s: signal parent that I have called cuMemFree\n", myname);
         int msg = 1;
@@ -1096,7 +1170,7 @@ START_TEST(invalidation_fork_map_and_free)
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
 
     if (pid > 0)
-        ASSERTDRV(cuMemFree(d_A));
+        ASSERTDRV(gpuMemFree(d_A));
 
     ASSERT_EQ(gdr_close(g), 0);
 
@@ -1148,11 +1222,8 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
     ASSERTRT(cudaMalloc(&dummy, 0));
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     CUdeviceptr d_ptr = d_A;
 
@@ -1266,11 +1337,8 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
     ASSERTRT(cudaMalloc(&dummy, 0));
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     CUdeviceptr d_ptr = d_A;
 
@@ -1375,6 +1443,7 @@ int main(int argc, char *argv[])
 
     suite_add_tcase(s, tc_basic);
 	tcase_add_test(tc_basic, basic);
+	tcase_add_test(tc_basic, basic_unaligned_mapping);
 
     suite_add_tcase(s, tc_data_validation);
 	tcase_add_test(tc_data_validation, data_validation);

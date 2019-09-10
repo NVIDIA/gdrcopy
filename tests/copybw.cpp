@@ -34,6 +34,8 @@ using namespace std;
 #include "gdrapi.h"
 #include "common.hpp"
 
+using namespace gdrcopy::test;
+
 #define OUT cout
 //#define OUT TESTSTACK
 
@@ -123,11 +125,8 @@ main(int argc, char *argv[])
     OUT << "rounded size: " << size << endl;
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     OUT << "device ptr: " << hex << d_A << dec << endl;
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     uint32_t *init_buf = NULL;
     init_buf = (uint32_t *)malloc(size);
@@ -210,7 +209,7 @@ main(int argc, char *argv[])
     OUT << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
 
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
 }
 
 /*
