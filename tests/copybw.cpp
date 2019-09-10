@@ -34,6 +34,8 @@ using namespace std;
 #include "gdrapi.h"
 #include "common.hpp"
 
+using namespace gdrcopy::test;
+
 #define OUT cout
 //#define OUT TESTSTACK
 
@@ -123,7 +125,7 @@ main(int argc, char *argv[])
     OUT << "rounded size: " << size << endl;
 
     CUdeviceptr d_A;
-    ASSERTDRV(alignedCUMemAlloc(&d_A, size, true));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     OUT << "device ptr: " << hex << d_A << dec << endl;
 
     uint32_t *init_buf = NULL;
@@ -207,7 +209,7 @@ main(int argc, char *argv[])
     OUT << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
 
-    ASSERTDRV(alignedCUMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
 }
 
 /*
