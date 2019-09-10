@@ -79,8 +79,8 @@ fi
 service gdrcopy start
 
 %preun %{kmod}
-service gdrcopy stop
-%{MODPROBE} -rq gdrdrv
+service gdrcopy stop||:
+%{MODPROBE} -rq gdrdrv||:
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
    true
 fi              
@@ -136,3 +136,4 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 - add basic test
 * Thu Sep 15 2016 Davide Rossetti <davide.rossetti@gmail.com> 1.2-1
 - First version of RPM spec
+

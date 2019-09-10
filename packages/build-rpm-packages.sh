@@ -46,8 +46,6 @@ echo "Building gdrcopy rpm packages version ${VERSION} ..."
 
 echo "Working in $tmpdir ..."
 
-#cp gdrcopy.spec ~/work/mellanox/rpmbuild/SPECS/
-
 ex cd ${TOP_DIR_PATH}
 
 ex mkdir -p $tmpdir/gdrcopy
