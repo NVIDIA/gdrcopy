@@ -230,9 +230,14 @@ START_TEST(basic_unaligned_mapping)
     const size_t A_size = GPU_PAGE_SIZE + sizeof(int);
 
     CUdeviceptr d_A, d_A_boundary;
-    ASSERTDRV(gpuMemAlloc(&d_A, A_size, false, true));
 
-    d_A_boundary = d_A & GPU_PAGE_MASK;
+    // Try until we get an unaligned address. Give up after 100 times.
+    for (int i = 0; i < 100; ++i) {
+        ASSERTDRV(gpuMemAlloc(&d_A, A_size, false, true));
+        d_A_boundary = d_A & GPU_PAGE_MASK;
+        if (d_A != d_A_boundary)
+            break;
+    }
     print_dbg("Second allocation: d_A=0x%llx, size=%zu, GPU-page-boundary 0x%llx\n", d_A, A_size, d_A_boundary);
     if (d_A == d_A_boundary) {
         print_dbg("d_A is aligned. Waiving this test.\n");
