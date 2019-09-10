@@ -961,7 +961,7 @@ START_TEST(invalidation_fork_after_gdr_map)
         print_dbg("%s: waiting for child to exit\n", myname);
         // Child should exit because of sigbus
         int child_exit_status = -EINVAL;
-        ck_assert_int_eq(wait(&child_exit_status), pid);
+        ck_assert(wait(&child_exit_status) == pid);
         ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
         print_dbg("%s: trying to read buf_ptr[0] after child exits\n", myname);
         data_from_buf_ptr = buf_ptr[0];
@@ -1038,7 +1038,7 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
     }
     else {
         int child_exit_status = -EINVAL;
-        ck_assert_int_eq(wait(&child_exit_status), pid);
+        ck_assert(wait(&child_exit_status) == pid);
         ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
 
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
@@ -1261,7 +1261,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 
         print_dbg("%s: Waiting for child to finish\n", myname);
         int child_exit_status = -EINVAL;
-        ck_assert_int_eq(wait(&child_exit_status), pid);
+        ck_assert(wait(&child_exit_status) == pid);
         ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
     }
 
@@ -1396,7 +1396,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 
         print_dbg("%s: Waiting for child to finish\n", myname);
         int child_exit_status = -EINVAL;
-        ck_assert_int_eq(wait(&child_exit_status), pid);
+        ck_assert(wait(&child_exit_status) == pid);
         ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
     }
 
