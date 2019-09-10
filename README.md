@@ -197,11 +197,11 @@ closing gdrdrv
 GDRCopy works with regular CUDA device memory only, as returned by cudaMalloc.
 In particular, it does not work with CUDA managed memory.
 
-gdr\_pin\_buffer() accepts any addresses returned by cudaMalloc and its family.
-In contrast, gdr\_map requires that the pinned address is aligned with GPU page.
+`gdr_pin_buffer()` accepts any addresses returned by cudaMalloc and its family.
+In contrast, `gdr_map()` requires that the pinned address is aligned to the GPU page.
 Neither CUDA Runtime nor Driver APIs guarantees that GPU memory allocation
-functions return aligned addresses. Users are responsible for handling the
-address alignment before passing to GDRCopy.
+functions return aligned addresses. Users are responsible for proper alignment
+of addresses passed to the library.
 
 On POWER9 where CPU and GPU are connected via NVLink, CUDA9.2 and GPU Driver
 v396.37 are the minimum requirements in order to achieve the full performance.
