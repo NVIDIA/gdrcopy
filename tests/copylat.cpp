@@ -204,9 +204,12 @@ main(int argc, char *argv[])
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
+            uint32_t dat;
             clock_gettime(MYCLOCK, &beg);
-            for (iter = 0; iter < num_write_iters; ++iter)
+            for (iter = 0; iter < num_write_iters; ++iter) {
                 gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
+                dat = *(volatile uint32_t *)buf_ptr;
+            }
             clock_gettime(MYCLOCK, &end);
             lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
             printf("gdrcopy_H2D \t %8zu \t %11.4f\n", copy_size, lat_us);
