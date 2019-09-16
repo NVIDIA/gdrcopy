@@ -116,17 +116,18 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Fri Aug 16 2019 Pak Markthub <pmarkthub@nvidia.com> 2.0-3
+* Mon Sep 16 2019 Pak Markthub <pmarkthub@nvidia.com> 2.0-3
 - Harden security in gdrdrv.
 - Enable cached mappings in POWER9.
 - Improve copy performance with unrolling in POWERPC.
-- Creates sanity unit test for testing the functionality and security.
-- Consolidate basic and validate into sanity unit test.
+- Creates _sanity_ unit test for testing the functionality and security.
+- Consolidate basic and _validate_ into sanity unit test.
 - Introduce compile time and runtime version checking in libgdrapi.
 - Improve rpm packaging.
 - Introduce deb packaging for the userspace library and the applications.
 - Introduce dkms packaging for the gdrdrv driver.
 - Rename gdr_copy_from/to_bar to gdr_copy_from/to_mapping.
+- Update README
 * Thu Jul 26 2018 Davide Rossetti <davide.rossetti@gmail.com> 1.4-2
 - bumped minor version
 * Fri Jun 29 2018 Davide Rossetti <davide.rossetti@gmail.com> 1.3-2

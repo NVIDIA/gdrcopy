@@ -3,5 +3,5 @@ gdrdrv-dkms (@VERSION@) stable; urgency=low
   * Harden security in gdrdrv.
   * Enable cached mappings in POWER9.
 
- -- Pak Markthub <pmarkthub@nvidia.com>  Fri, 16 Aug 2019 11:59:59 -0700
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 16 Sep 2019 11:59:59 -0700
 
