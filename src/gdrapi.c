@@ -287,8 +287,6 @@ int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_t *info)
         info->va          = params.va;
         info->mapped_size = params.mapped_size;
         info->page_size   = params.page_size;
-        info->tm_cycles   = params.tm_cycles;
-        info->cycles_per_ms = params.tsc_khz;
         info->mapped      = params.mapped;
         info->wc_mapping  = params.wc_mapping;
     }
@@ -381,9 +379,9 @@ static inline void wc_store_fence(void) { _mm_sfence(); }
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
 #define PREFERS_LOAD_UNROLL8  0
-#endif // GDRAPI_X86
+// GDRAPI_X86
 
-#if defined(GDRAPI_POWER)
+#elif defined(GDRAPI_POWER)
 static int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
 static int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
 static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
@@ -394,7 +392,21 @@ static inline void wc_store_fence(void) { asm volatile("sync") ; }
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
 #define PREFERS_LOAD_UNROLL8  1
-#endif // GDRAPI_POWER
+// GDRAPI_POWER
+
+#elif defined(GDRAPI_ARM64)
+static int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
+static int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
+static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
+static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
+static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
+static inline void wc_store_fence(void) { asm volatile("DMB ishld") ; }
+#define PREFERS_STORE_UNROLL4 0
+#define PREFERS_STORE_UNROLL8 0
+#define PREFERS_LOAD_UNROLL4  0
+#define PREFERS_LOAD_UNROLL8  0
+// GDRAPI_ARM64
+#endif
 
 static int first_time = 1;
 static int has_sse = 0;

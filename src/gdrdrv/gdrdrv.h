@@ -86,8 +86,6 @@ struct GDRDRV_IOC_GET_INFO_PARAMS
     __u64 va;
     __u64 mapped_size;
     __u32 page_size;
-    __u32 tsc_khz;
-    __u64 tm_cycles;
     __u32 mapped;
     __u32 wc_mapping;
 };

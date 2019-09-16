@@ -100,8 +100,6 @@ struct gdr_info {
     uint64_t va;
     uint64_t mapped_size;
     uint32_t page_size;
-    uint64_t tm_cycles;
-    uint32_t cycles_per_ms;
     unsigned mapped:1;
     unsigned wc_mapping:1;
 };

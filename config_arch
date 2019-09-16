@@ -12,6 +12,8 @@ int main(int argc, char *argv[])
   printf("X86\n");
 #elif defined(GDRAPI_POWER)
   printf("POWER\n");
+#elif defined(GDRAPI_ARM64)
+  printf("ARM64\n");
 #else
   printf("ERROR\n");
 #endif
