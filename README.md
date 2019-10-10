@@ -47,7 +47,7 @@ RDMA](http://developer.nvidia.com/gpudirect).  For more technical informations,
 please refer to the official GPUDirect RDMA [design
 document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 
-The device driver requires GPU display driver >= 331.14. The library and tests
+The device driver requires GPU display driver >= 418.40 on ppc64le and >= 331.14 on other platforms. The library and tests
 require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
 subunit.
 
