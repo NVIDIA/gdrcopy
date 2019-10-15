@@ -118,7 +118,8 @@ main(int argc, char *argv[])
     OUT << "selecting device " << dev_id << endl;
     ASSERTRT(cudaSetDevice(dev_id));
 
-    ASSERTRT(cudaFree(0));
+    void *dummy;
+    ASSERTRT(cudaMalloc(&dummy, 0));
 
     OUT << "testing size: " << _size << endl;
     OUT << "rounded size: " << size << endl;
