@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <iostream>
+#include <iomanip>
 #include <cuda.h>
 
 using namespace std;
@@ -83,7 +84,7 @@ main(int argc, char *argv[])
             exit(EXIT_FAILURE);
             break;
         default:
-            printf("ERROR: invalid option\n");
+            fprintf(stderr, "ERROR: invalid option\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -92,16 +93,18 @@ main(int argc, char *argv[])
         copy_size = _size;
 
     if (copy_offset % sizeof(uint32_t) != 0) {
-        printf("ERROR: offset must be multiple of 4 bytes\n");
+        fprintf(stderr, "ERROR: offset must be multiple of 4 bytes\n");
         exit(EXIT_FAILURE);
     }
 
     if (copy_offset + copy_size > _size) {
-        printf("ERROR: offset + copy size run past the end of the buffer\n");
+        fprintf(stderr, "ERROR: offset + copy size run past the end of the buffer\n");
         exit(EXIT_FAILURE);
     }
 
     size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    ASSERTDRV(cuInit(0));
 
     int n_devices = 0;
     ASSERTDRV(cuDeviceGetCount(&n_devices));
@@ -120,16 +123,21 @@ main(int argc, char *argv[])
         ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
         ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
 
-        OUT << "GPU id:" << n << " name:" << dev_name 
-            << " PCI domain: " << std::hex << dev_pci_domain_id
-            << " bus: " << std::hex << dev_pci_bus_id
-            << " device: " << std::hex << dev_pci_device_id << endl;
+        OUT << "GPU id:" << n << "; name: " << dev_name 
+            << "; Bus id: "
+            << std::hex 
+            << std::setfill('0') << std::setw(4) << dev_pci_domain_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_bus_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_device_id
+            << std::dec
+            << endl;
     }
     OUT << "selecting device " << dev_id << endl;
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
     CUcontext dev_ctx;
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
+    ASSERTDRV(cuCtxSetCurrent(dev_ctx));
 
     OUT << "testing size: " << _size << endl;
     OUT << "rounded size: " << size << endl;
