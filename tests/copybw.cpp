@@ -27,7 +27,6 @@
 #include <math.h>
 #include <iostream>
 #include <cuda.h>
-#include <cuda_runtime_api.h>
 
 using namespace std;
 
@@ -105,21 +104,32 @@ main(int argc, char *argv[])
     size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     int n_devices = 0;
-    ASSERTRT(cudaGetDeviceCount(&n_devices));
+    ASSERTDRV(cuDeviceGetCount(&n_devices));
 
-    cudaDeviceProp prop;
+    CUdevice dev;
     for (int n=0; n<n_devices; ++n) {
-        ASSERTRT(cudaGetDeviceProperties(&prop,n));
-        OUT << "GPU id:" << n << " name:" << prop.name 
-            << " PCI domain: " << prop.pciDomainID 
-            << " bus: " << prop.pciBusID 
-            << " device: " << prop.pciDeviceID << endl;
+        
+        char dev_name[256];
+        int dev_pci_domain_id;
+        int dev_pci_bus_id;
+        int dev_pci_device_id;
+
+        ASSERTDRV(cuDeviceGet(&dev, n));
+        ASSERTDRV(cuDeviceGetName(dev_name, sizeof(dev_name) / sizeof(dev_name[0]), dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_domain_id, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
+
+        OUT << "GPU id:" << n << " name:" << dev_name 
+            << " PCI domain: " << std::hex << dev_pci_domain_id
+            << " bus: " << std::hex << dev_pci_bus_id
+            << " device: " << std::hex << dev_pci_device_id << endl;
     }
     OUT << "selecting device " << dev_id << endl;
-    ASSERTRT(cudaSetDevice(dev_id));
+    ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    CUcontext dev_ctx;
+    ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
 
     OUT << "testing size: " << _size << endl;
     OUT << "rounded size: " << size << endl;
@@ -210,6 +220,8 @@ main(int argc, char *argv[])
     ASSERT_EQ(gdr_close(g), 0);
 
     ASSERTDRV(gpuMemFree(d_A));
+
+    ASSERTDRV(cuDevicePrimaryCtxRelease(dev));
 }
 
 /*
