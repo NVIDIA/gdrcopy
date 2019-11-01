@@ -102,13 +102,6 @@ namespace gdrcopy {
                     ASSERT(CUDA_SUCCESS == result);     \
                 } while (0)
 
-        #define ASSERTRT(stmt)				\
-            do                                          \
-                {                                       \
-                    cudaError_t result = (stmt);           \
-                    ASSERT(cudaSuccess == result);     \
-                } while (0)
-
         static inline bool operator==(const gdr_mh_t &a, const gdr_mh_t &b) {
             return a.h == b.h;
         }
