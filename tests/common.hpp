@@ -85,7 +85,7 @@ namespace gdrcopy {
                 {                                                               \
                     if (!(x))                                                   \
                         {                                                       \
-                            fprintf(stdout, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
+                            fprintf(stderr, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
                             exit(EXIT_FAILURE);                                 \
                         }                                                       \
                 } while (0)
@@ -94,14 +94,12 @@ namespace gdrcopy {
             do                                          \
                 {                                       \
                     CUresult result = (stmt);           \
+                    if (result != CUDA_SUCCESS) {       \
+                        const char *_err_name;          \
+                        cuGetErrorName(result, &_err_name); \
+                        fprintf(stderr, "CUDA error: %s\n", _err_name);   \
+                    }                                   \
                     ASSERT(CUDA_SUCCESS == result);     \
-                } while (0)
-
-        #define ASSERTRT(stmt)				\
-            do                                          \
-                {                                       \
-                    cudaError_t result = (stmt);           \
-                    ASSERT(cudaSuccess == result);     \
                 } while (0)
 
         static inline bool operator==(const gdr_mh_t &a, const gdr_mh_t &b) {
