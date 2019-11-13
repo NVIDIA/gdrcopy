@@ -12,7 +12,7 @@ LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64 -L $(GDRAPI_SRC)
 COMMONCFLAGS := -O2
 CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
-LIBS     := -lcudart -lcuda -lpthread -ldl -lgdrapi
+LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
 SRCS := copybw.cpp sanity.cpp
 EXES := $(SRCS:.cpp=)

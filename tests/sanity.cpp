@@ -79,6 +79,23 @@ void exception_signal_handle(int sig)
     ck_abort_msg("Unexpectedly get exception signal");
 }
 
+static void init_cuda(int dev_id)
+{
+    CUdevice dev;
+    CUcontext dev_ctx;
+    ASSERTDRV(cuInit(0));
+    ASSERTDRV(cuDeviceGet(&dev, dev_id));
+    ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
+    ASSERTDRV(cuCtxSetCurrent(dev_ctx));
+}
+
+static void finalize_cuda(int dev_id)
+{
+    CUdevice dev;
+    ASSERTDRV(cuDeviceGet(&dev, dev_id));
+    ASSERTDRV(cuDevicePrimaryCtxRelease(dev));
+}
+
 /**
  * Sends given file descriptior via given socket
  *
@@ -174,8 +191,7 @@ START_TEST(basic)
 
     print_dbg("Start basic\n");
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+	init_cuda(0);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -199,6 +215,7 @@ START_TEST(basic)
 
     ASSERTDRV(gpuMemFree(d_A));
 
+	finalize_cuda(0);
     print_dbg("End basic\n");
 }
 END_TEST
@@ -216,8 +233,7 @@ START_TEST(basic_unaligned_mapping)
 
     print_dbg("Start basic_unaligned_mapping\n");
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+	init_cuda(0);
 
     // Allocate for a few bytes so that cuMemAlloc returns an unaligned address
     // in the next allocation. This behavior is observed in GPU Driver 410 and
@@ -304,6 +320,8 @@ START_TEST(basic_unaligned_mapping)
 
     ASSERTDRV(gpuMemFree(d_A));
 
+	finalize_cuda(0);
+
     print_dbg("End basic_unaligned_mapping\n");
 }
 END_TEST
@@ -315,8 +333,7 @@ START_TEST(data_validation)
 
     print_dbg("Start data_validation\n");
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+	init_cuda(0);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -408,6 +425,8 @@ START_TEST(data_validation)
 
     ASSERTDRV(gpuMemFree(d_A));
 
+	finalize_cuda(0);
+
     print_dbg("End data_validation\n");
 }
 END_TEST
@@ -442,9 +461,7 @@ START_TEST(invalidation_access_after_gdr_close)
 
     int mydata = (rand() % 1000) + 1;
 
-    void *dummy;
-    // Let libcudart initialize CUDA for us
-    ASSERTRT(cudaMalloc(&dummy, 0));
+	init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -488,6 +505,8 @@ START_TEST(invalidation_access_after_gdr_close)
 
     ck_assert_msg(data_from_buf_ptr != mydata, "Got the same data after gdr_close!!");
     
+	finalize_cuda(0);
+
     print_dbg("End invalidation_access_after_gdr_close\n");
 }
 END_TEST
@@ -522,9 +541,7 @@ START_TEST(invalidation_access_after_cumemfree)
 
     int mydata = (rand() % 1000) + 1;
 
-    void *dummy;
-    // Let libcudart initialize CUDA for us
-    ASSERTRT(cudaMalloc(&dummy, 0));
+	init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -572,6 +589,8 @@ START_TEST(invalidation_access_after_cumemfree)
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
 
+    finalize_cuda(0);
+
     print_dbg("End invalidation_access_after_cumemfree\n");
 }
 END_TEST
@@ -602,9 +621,7 @@ START_TEST(invalidation_two_mappings)
 
     int mydata = (rand() % 1000) + 1;
 
-    void *dummy;
-    // Let libcudart initialize CUDA for us
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A[2];
 
@@ -664,6 +681,8 @@ START_TEST(invalidation_two_mappings)
     }
 
     ASSERT_EQ(gdr_close(g), 0);
+
+    finalize_cuda(0);
 
     print_dbg("End invalidation_two_mappings\n");
 }
@@ -752,8 +771,7 @@ START_TEST(invalidation_fork_access_after_cumemfree)
     if (pid == 0)
         mydata += 10;
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -827,6 +845,8 @@ START_TEST(invalidation_fork_access_after_cumemfree)
 
     ASSERT_EQ(gdr_close(g), 0);
 
+    finalize_cuda(0);
+
     print_dbg("End invalidation_fork_access_after_cumemfree\n");
 }
 END_TEST
@@ -864,8 +884,7 @@ START_TEST(invalidation_fork_after_gdr_map)
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -973,6 +992,8 @@ START_TEST(invalidation_fork_after_gdr_map)
         ASSERT_EQ(gdr_close(g), 0);
     }
 
+    finalize_cuda(0);
+
     print_dbg("End invalidation_fork_after_gdr_map\n");
 }
 END_TEST
@@ -1004,8 +1025,7 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -1044,7 +1064,10 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
         ASSERTDRV(gpuMemFree(d_A));
         ASSERT_EQ(gdr_close(g), 0);
+
+        finalize_cuda(0);
     }
+
     print_dbg("End invalidation_fork_child_gdr_map_parent\n");
 }
 END_TEST
@@ -1113,8 +1136,7 @@ START_TEST(invalidation_fork_map_and_free)
 
     int mydata = (rand() % 1000) + 1;
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -1174,6 +1196,8 @@ START_TEST(invalidation_fork_map_and_free)
 
     ASSERT_EQ(gdr_close(g), 0);
 
+    finalize_cuda(0);
+
     print_dbg("End invalidation_fork_map_and_free\n");
 }
 END_TEST
@@ -1218,8 +1242,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 
     print_dbg("%s: Start\n", myname);
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -1264,6 +1287,8 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
         ck_assert(wait(&child_exit_status) == pid);
         ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
     }
+
+    finalize_cuda(0);
 
     print_dbg("End invalidation_unix_sock_shared_fd_gdr_pin_buffer\n");
 }
@@ -1333,8 +1358,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
         write_fd = filedes_1[1];
     }
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -1399,6 +1423,8 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
         ck_assert(wait(&child_exit_status) == pid);
         ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
     }
+
+    finalize_cuda(0);
 
     print_dbg("End invalidation_unix_sock_shared_fd_gdr_map\n");
 }
