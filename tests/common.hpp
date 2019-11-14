@@ -22,8 +22,10 @@
 
 #pragma once
 
+#include <stdarg.h>
 #include <map>
 #include <cuda.h>
+#include <check.h>
 
 namespace gdrcopy {
     namespace test {
@@ -80,12 +82,35 @@ namespace gdrcopy {
                 return CUDA_ERROR_INVALID_VALUE;
         }
 
+        bool print_dbg_msg = false;
+
+        static void print_dbg(const char* fmt, ...)
+        {
+            if (print_dbg_msg) {
+                va_list ap;
+                va_start(ap, fmt);
+                vfprintf(stdout, fmt, ap);
+            }
+        }
+
+        const char *testname = "";
+
+        #define BEGIN_TEST(__testname)                                          \
+        START_TEST(__testname)                                                  \
+        testname = #__testname;                                                 \
+        print_dbg("&&&& RUNNING " # __testname "\n");
+
+        #define TEST_PASSED print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);
+        #define TEST_FAILED print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);
+        #define TEST_WAIVED print_dbg("&&&& WAIVED %s\n", gdrcopy::test::testname);
+
         #define ASSERT(x)                                                       \
             do                                                                  \
                 {                                                               \
                     if (!(x))                                                   \
                         {                                                       \
                             fprintf(stderr, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
+                            TEST_FAILED;                                        \
                             exit(EXIT_FAILURE);                                 \
                         }                                                       \
                 } while (0)

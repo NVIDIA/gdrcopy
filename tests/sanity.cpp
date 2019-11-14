@@ -20,7 +20,6 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <stdarg.h>
 #include <ctype.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -56,27 +55,17 @@ using namespace gdrcopy::test;
 #define FENCE() asm volatile("":::"memory")
 #endif
 
-static bool _print_dbg_msg = false;
-
-static void print_dbg(const char* fmt, ...)
-{
-    if (_print_dbg_msg) {
-        va_list ap;
-        va_start(ap, fmt);
-        vfprintf(stderr, fmt, ap);
-    }
-}
-
-
 volatile bool expecting_exception_signal = false;
 
 void exception_signal_handle(int sig)
 {
     if (expecting_exception_signal) {
         print_dbg("Get signal %d as expected\n", sig);
+        TEST_PASSED;
         exit(EXIT_SUCCESS);
     }
-    ck_abort_msg("Unexpectedly get exception signal");
+    print_dbg("Unexpectedly get exception signal");
+    TEST_FAILED;
 }
 
 static void init_cuda(int dev_id)
@@ -184,12 +173,10 @@ int recvfd(int socket) {
     return fd;
 }
 
-START_TEST(basic)
+BEGIN_TEST(basic)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start basic\n");
 
 	init_cuda(0);
 
@@ -216,7 +203,7 @@ START_TEST(basic)
     ASSERTDRV(gpuMemFree(d_A));
 
 	finalize_cuda(0);
-    print_dbg("End basic\n");
+    TEST_PASSED;
 }
 END_TEST
 
@@ -226,12 +213,10 @@ END_TEST
  * addresses by users are successful.
  *
  */
-START_TEST(basic_unaligned_mapping)
+BEGIN_TEST(basic_unaligned_mapping)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start basic_unaligned_mapping\n");
 
 	init_cuda(0);
 
@@ -259,7 +244,7 @@ START_TEST(basic_unaligned_mapping)
         print_dbg("d_A is aligned. Waiving this test.\n");
         ASSERTDRV(cuMemFree(d_A));
 
-        print_dbg("End basic_unaligned_mapping\n");
+        TEST_WAIVED;
         return;
     }
     print_dbg("d_A is unaligned\n");
@@ -322,16 +307,14 @@ START_TEST(basic_unaligned_mapping)
 
 	finalize_cuda(0);
 
-    print_dbg("End basic_unaligned_mapping\n");
+    TEST_PASSED;
 }
 END_TEST
 
-START_TEST(data_validation)
+BEGIN_TEST(data_validation)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start data_validation\n");
 
 	init_cuda(0);
 
@@ -427,7 +410,7 @@ START_TEST(data_validation)
 
 	finalize_cuda(0);
 
-    print_dbg("End data_validation\n");
+    TEST_PASSED;
 }
 END_TEST
 
@@ -441,12 +424,10 @@ END_TEST
  * 3. Do gdr_close
  * 4. Attempt to access to bar_ptr after 3. should fail
  */
-START_TEST(invalidation_access_after_gdr_close)
+BEGIN_TEST(invalidation_access_after_gdr_close)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start invalidation_access_after_gdr_close\n");
 
     struct sigaction act;
     act.sa_handler = exception_signal_handle;
@@ -507,7 +488,7 @@ START_TEST(invalidation_access_after_gdr_close)
     
 	finalize_cuda(0);
 
-    print_dbg("End invalidation_access_after_gdr_close\n");
+    TEST_PASSED;
 }
 END_TEST
 
@@ -521,12 +502,10 @@ END_TEST
  * 3. Do cuMemFree
  * 4. Attempt to access to bar_ptr after 3. should fail
  */
-START_TEST(invalidation_access_after_cumemfree)
+BEGIN_TEST(invalidation_access_after_cumemfree)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start invalidation_access_after_cumemfree\n");
 
     struct sigaction act;
     act.sa_handler = exception_signal_handle;
@@ -591,7 +570,7 @@ START_TEST(invalidation_access_after_cumemfree)
 
     finalize_cuda(0);
 
-    print_dbg("End invalidation_access_after_cumemfree\n");
+    TEST_PASSED;
 }
 END_TEST
 
@@ -607,12 +586,10 @@ END_TEST
  * 5. Do cuMemFree(d_A)
  * 6. Verify that bar_ptr_B is still accessible 
  */
-START_TEST(invalidation_two_mappings)
+BEGIN_TEST(invalidation_two_mappings)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start invalidation_two_mappings\n");
 
     srand(time(NULL));
 
@@ -684,7 +661,7 @@ START_TEST(invalidation_two_mappings)
 
     finalize_cuda(0);
 
-    print_dbg("End invalidation_two_mappings\n");
+    TEST_PASSED;
 }
 END_TEST
 
@@ -708,12 +685,10 @@ END_TEST
  *     compare with the data written by child. If gdrdrv does not handle
  *     invalidation properly, child's data will be leaked to parent.
  */
-START_TEST(invalidation_fork_access_after_cumemfree)
+BEGIN_TEST(invalidation_fork_access_after_cumemfree)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start invalidation_fork_access_after_cumemfree\n");
 
     int filedes_0[2];
     int filedes_1[2];
@@ -727,6 +702,9 @@ START_TEST(invalidation_fork_access_after_cumemfree)
     const size_t _size = sizeof(int) * 16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
+
+    fflush(stdout);
+    fflush(stderr);
 
     pid_t pid = fork();
     ck_assert(pid >= 0);
@@ -847,7 +825,7 @@ START_TEST(invalidation_fork_access_after_cumemfree)
 
     finalize_cuda(0);
 
-    print_dbg("End invalidation_fork_access_after_cumemfree\n");
+    TEST_PASSED;
 }
 END_TEST
 
@@ -866,12 +844,10 @@ END_TEST
  *     parent writes into that region. If gdrdrv does not invalidate the
  *     mapping correctly, child can spy on parent.
  */
-START_TEST(invalidation_fork_after_gdr_map)
+BEGIN_TEST(invalidation_fork_after_gdr_map)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start invalidation_fork_after_gdr_map\n");
 
     int filedes_0[2];
     int filedes_1[2];
@@ -910,6 +886,9 @@ START_TEST(invalidation_fork_after_gdr_map)
     int off = d_ptr - info.va;
 
     volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
+
+    fflush(stdout);
+    fflush(stderr);
 
     pid_t pid = fork();
     ck_assert(pid >= 0);
@@ -993,8 +972,6 @@ START_TEST(invalidation_fork_after_gdr_map)
     }
 
     finalize_cuda(0);
-
-    print_dbg("End invalidation_fork_after_gdr_map\n");
 }
 END_TEST
 
@@ -1014,12 +991,10 @@ END_TEST
  *     expected to prevent this case so that the child process cannot spy on
  *     the parent's GPU data.
  */
-START_TEST(invalidation_fork_child_gdr_map_parent)
+BEGIN_TEST(invalidation_fork_child_gdr_map_parent)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start invalidation_fork_child_gdr_map_parent\n");
 
     const size_t _size = sizeof(int) * 16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -1042,6 +1017,9 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
     // wave out the test if GPUDirectRDMA is not enabled
     ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
+
+    fflush(stdout);
+    fflush(stderr);
 
     pid_t pid = fork();
     ck_assert(pid >= 0);
@@ -1066,9 +1044,9 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
         ASSERT_EQ(gdr_close(g), 0);
 
         finalize_cuda(0);
-    }
 
-    print_dbg("End invalidation_fork_child_gdr_map_parent\n");
+        TEST_PASSED;
+    }
 }
 END_TEST
 
@@ -1090,12 +1068,10 @@ END_TEST
  *     does not implement correctly, it might invalidate parent's mapping as
  *     well.
  */
-START_TEST(invalidation_fork_map_and_free)
+BEGIN_TEST(invalidation_fork_map_and_free)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start invalidation_fork_map_and_free\n");
 
     int filedes_0[2];
     int filedes_1[2];
@@ -1109,6 +1085,9 @@ START_TEST(invalidation_fork_map_and_free)
     const size_t _size = sizeof(int) * 16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
+
+    fflush(stdout);
+    fflush(stderr);
 
     pid_t pid = fork();
     ck_assert(pid >= 0);
@@ -1198,7 +1177,8 @@ START_TEST(invalidation_fork_map_and_free)
 
     finalize_cuda(0);
 
-    print_dbg("End invalidation_fork_map_and_free\n");
+    if (pid != 0)
+        TEST_PASSED;
 }
 END_TEST
 
@@ -1220,12 +1200,10 @@ END_TEST
  * 4.C Child: Attempt to do gdr_pin_buffer using this fd. gdrdrv should not
  *     allow it.
  */
-START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
+BEGIN_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start invalidation_unix_sock_shared_fd_gdr_pin_buffer\n");
 
     pid_t pid;
     int pair[2];
@@ -1235,6 +1213,9 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     ck_assert_int_eq(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
+
+    fflush(stdout);
+    fflush(stderr);
 
     pid = fork();
     ck_assert(pid >= 0);
@@ -1290,7 +1271,8 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 
     finalize_cuda(0);
 
-    print_dbg("End invalidation_unix_sock_shared_fd_gdr_pin_buffer\n");
+    if (pid != 0)
+        TEST_PASSED;
 }
 END_TEST
 
@@ -1313,12 +1295,10 @@ END_TEST
  * 4.C Child: Attempt to do gdr_map using this fd and handle. gdrdrv should not
  *     allow it.
  */
-START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
+BEGIN_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 {
     expecting_exception_signal = false;
     FENCE();
-
-    print_dbg("Start invalidation_unix_sock_shared_fd_gdr_map\n");
 
     int filedes_0[2];
     int filedes_1[2];
@@ -1335,6 +1315,9 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     ck_assert_int_eq(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
+
+    fflush(stdout);
+    fflush(stderr);
 
     pid = fork();
     ck_assert(pid >= 0);
@@ -1426,7 +1409,8 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 
     finalize_cuda(0);
 
-    print_dbg("End invalidation_unix_sock_shared_fd_gdr_map\n");
+    if (pid != 0)
+        TEST_PASSED;
 }
 END_TEST
 
@@ -1438,8 +1422,7 @@ int main(int argc, char *argv[])
     while ((c = getopt(argc, argv, "h::v::")) != -1) {
         switch (c) {
             case 'v':
-                _print_dbg_msg = true;
-                print_dbg("Enable debug message\n");
+                gdrcopy::test::print_dbg_msg = true;
                 break;
             case 'h':
                 cout << "Usage: " << argv[0] << " [-v] [-h]" << endl;
@@ -1484,10 +1467,6 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_invalidation, invalidation_fork_map_and_free);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map);
-
-    tcase_set_timeout(tc_basic, 60);
-    tcase_set_timeout(tc_data_validation, 60);
-    tcase_set_timeout(tc_invalidation, 180);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
