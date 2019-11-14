@@ -23,6 +23,8 @@
 #pragma once
 
 #include <stdarg.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <map>
 #include <cuda.h>
 #include <check.h>
@@ -93,16 +95,40 @@ namespace gdrcopy {
             }
         }
 
+        #define EXIT_WAIVED 2
+
         const char *testname = "";
 
-        #define BEGIN_TEST(__testname)                                          \
+        #define BEGIN_GDRCOPY_TEST(__testname)                                  \
         START_TEST(__testname)                                                  \
         testname = #__testname;                                                 \
-        print_dbg("&&&& RUNNING " # __testname "\n");
+        print_dbg("&&&& RUNNING " # __testname "\n");                           \
+        fflush(stdout);                                                         \
+        fflush(stderr);                                                         \
+        pid_t __pid = fork();                                                   \
+        if (__pid < 0) {                                                        \
+            print_dbg("Cannot fork\n");                                         \
+            print_dbg("&&&& FAILED " # __testname "\n");                        \
+            exit(EXIT_FAILURE);                                                 \
+        }                                                                       \
+        if (__pid == 0)
 
-        #define TEST_PASSED print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);
-        #define TEST_FAILED print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);
-        #define TEST_WAIVED print_dbg("&&&& WAIVED %s\n", gdrcopy::test::testname);
+        #define END_GDRCOPY_TEST                                                \
+        if (__pid) {                                                            \
+            int __child_exit_status = -EINVAL;                                  \
+            if (waitpid(__pid, &__child_exit_status, 0) == -1) {                \
+                print_dbg("waitpid returned an error\n");                       \
+                print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);         \
+                exit(EXIT_FAILURE);                                             \
+            }                                                                   \
+            if (__child_exit_status == EXIT_SUCCESS)                            \
+                print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);         \
+            else if (__child_exit_status == EXIT_WAIVED)                        \
+                print_dbg("&&&& WAIVED %s\n", gdrcopy::test::testname);         \
+            else                                                                \
+                print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);         \
+        }                                                                       \
+        END_TEST
 
         #define ASSERT(x)                                                       \
             do                                                                  \
@@ -110,7 +136,6 @@ namespace gdrcopy {
                     if (!(x))                                                   \
                         {                                                       \
                             fprintf(stderr, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
-                            TEST_FAILED;                                        \
                             exit(EXIT_FAILURE);                                 \
                         }                                                       \
                 } while (0)

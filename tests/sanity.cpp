@@ -61,11 +61,9 @@ void exception_signal_handle(int sig)
 {
     if (expecting_exception_signal) {
         print_dbg("Get signal %d as expected\n", sig);
-        TEST_PASSED;
         exit(EXIT_SUCCESS);
     }
     print_dbg("Unexpectedly get exception signal");
-    TEST_FAILED;
 }
 
 static void init_cuda(int dev_id)
@@ -173,7 +171,7 @@ int recvfd(int socket) {
     return fd;
 }
 
-BEGIN_TEST(basic)
+BEGIN_GDRCOPY_TEST(basic)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -203,9 +201,8 @@ BEGIN_TEST(basic)
     ASSERTDRV(gpuMemFree(d_A));
 
 	finalize_cuda(0);
-    TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test ensures that gdrcopy returns error when trying to map
@@ -213,7 +210,7 @@ END_TEST
  * addresses by users are successful.
  *
  */
-BEGIN_TEST(basic_unaligned_mapping)
+BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -244,8 +241,7 @@ BEGIN_TEST(basic_unaligned_mapping)
         print_dbg("d_A is aligned. Waiving this test.\n");
         ASSERTDRV(cuMemFree(d_A));
 
-        TEST_WAIVED;
-        return;
+        exit(EXIT_WAIVED);
     }
     print_dbg("d_A is unaligned\n");
 
@@ -306,12 +302,10 @@ BEGIN_TEST(basic_unaligned_mapping)
     ASSERTDRV(gpuMemFree(d_A));
 
 	finalize_cuda(0);
-
-    TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
-BEGIN_TEST(data_validation)
+BEGIN_GDRCOPY_TEST(data_validation)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -409,10 +403,8 @@ BEGIN_TEST(data_validation)
     ASSERTDRV(gpuMemFree(d_A));
 
 	finalize_cuda(0);
-
-    TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test ensures that accessing to gdr_map'ed region is not possible
@@ -424,7 +416,7 @@ END_TEST
  * 3. Do gdr_close
  * 4. Attempt to access to bar_ptr after 3. should fail
  */
-BEGIN_TEST(invalidation_access_after_gdr_close)
+BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -487,10 +479,8 @@ BEGIN_TEST(invalidation_access_after_gdr_close)
     ASSERT_NEQ(data_from_buf_ptr, mydata);
     
 	finalize_cuda(0);
-
-    TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test ensures that accessing to gdr_map'ed region is not possible
@@ -502,7 +492,7 @@ END_TEST
  * 3. Do cuMemFree
  * 4. Attempt to access to bar_ptr after 3. should fail
  */
-BEGIN_TEST(invalidation_access_after_cumemfree)
+BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -569,10 +559,8 @@ BEGIN_TEST(invalidation_access_after_cumemfree)
     ASSERT_EQ(gdr_close(g), 0);
 
     finalize_cuda(0);
-
-    TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test ensures that cuMemFree destroys only the mapping it is
@@ -586,7 +574,7 @@ END_TEST
  * 5. Do cuMemFree(d_A)
  * 6. Verify that bar_ptr_B is still accessible 
  */
-BEGIN_TEST(invalidation_two_mappings)
+BEGIN_GDRCOPY_TEST(invalidation_two_mappings)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -660,10 +648,8 @@ BEGIN_TEST(invalidation_two_mappings)
     ASSERT_EQ(gdr_close(g), 0);
 
     finalize_cuda(0);
-
-    TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test is intended to check the security hole originated from not
@@ -685,7 +671,7 @@ END_TEST
  *     compare with the data written by child. If gdrdrv does not handle
  *     invalidation properly, child's data will be leaked to parent.
  */
-BEGIN_TEST(invalidation_fork_access_after_cumemfree)
+BEGIN_GDRCOPY_TEST(invalidation_fork_access_after_cumemfree)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -824,10 +810,8 @@ BEGIN_TEST(invalidation_fork_access_after_cumemfree)
     ASSERT_EQ(gdr_close(g), 0);
 
     finalize_cuda(0);
-
-    TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test makes sure that child processes cannot spy on the parent
@@ -844,7 +828,7 @@ END_TEST
  *     parent writes into that region. If gdrdrv does not invalidate the
  *     mapping correctly, child can spy on parent.
  */
-BEGIN_TEST(invalidation_fork_after_gdr_map)
+BEGIN_GDRCOPY_TEST(invalidation_fork_after_gdr_map)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -973,7 +957,7 @@ BEGIN_TEST(invalidation_fork_after_gdr_map)
 
     finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test ensures that child cannot do gdr_map on what parent has
@@ -991,7 +975,7 @@ END_TEST
  *     expected to prevent this case so that the child process cannot spy on
  *     the parent's GPU data.
  */
-BEGIN_TEST(invalidation_fork_child_gdr_map_parent)
+BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_map_parent)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -1044,11 +1028,9 @@ BEGIN_TEST(invalidation_fork_child_gdr_map_parent)
         ASSERT_EQ(gdr_close(g), 0);
 
         finalize_cuda(0);
-
-        TEST_PASSED;
     }
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test verifies that cuMemFree of one process will not
@@ -1068,7 +1050,7 @@ END_TEST
  *     does not implement correctly, it might invalidate parent's mapping as
  *     well.
  */
-BEGIN_TEST(invalidation_fork_map_and_free)
+BEGIN_GDRCOPY_TEST(invalidation_fork_map_and_free)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -1176,11 +1158,8 @@ BEGIN_TEST(invalidation_fork_map_and_free)
     ASSERT_EQ(gdr_close(g), 0);
 
     finalize_cuda(0);
-
-    if (pid != 0)
-        TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * Process A can intentionally share fd with Process B through unix socket.
@@ -1200,7 +1179,7 @@ END_TEST
  * 4.C Child: Attempt to do gdr_pin_buffer using this fd. gdrdrv should not
  *     allow it.
  */
-BEGIN_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
+BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -1270,11 +1249,8 @@ BEGIN_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
     }
 
     finalize_cuda(0);
-
-    if (pid != 0)
-        TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * Process A can intentionally share fd with Process B through unix socket.
@@ -1295,7 +1271,7 @@ END_TEST
  * 4.C Child: Attempt to do gdr_map using this fd and handle. gdrdrv should not
  *     allow it.
  */
-BEGIN_TEST(invalidation_unix_sock_shared_fd_gdr_map)
+BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 {
     expecting_exception_signal = false;
     FENCE();
@@ -1408,11 +1384,8 @@ BEGIN_TEST(invalidation_unix_sock_shared_fd_gdr_map)
     }
 
     finalize_cuda(0);
-
-    if (pid != 0)
-        TEST_PASSED;
 }
-END_TEST
+END_GDRCOPY_TEST
 
 
 int main(int argc, char *argv[])
