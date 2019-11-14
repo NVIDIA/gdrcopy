@@ -89,7 +89,7 @@ namespace gdrcopy {
             if (print_dbg_msg) {
                 va_list ap;
                 va_start(ap, fmt);
-                vfprintf(stdout, fmt, ap);
+                vfprintf(stderr, fmt, ap);
             }
         }
 
