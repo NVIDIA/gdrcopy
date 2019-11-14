@@ -1485,6 +1485,10 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map);
 
+    tcase_set_timeout(tc_basic, 60);
+    tcase_set_timeout(tc_data_validation, 60);
+    tcase_set_timeout(tc_invalidation, 180);
+
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
     srunner_free(sr);
