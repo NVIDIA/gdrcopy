@@ -1424,11 +1424,11 @@ int main(int argc, char *argv[])
     int nf;
 
     suite_add_tcase(s, tc_basic);
-	tcase_add_test(tc_basic, basic);
-	tcase_add_test(tc_basic, basic_unaligned_mapping);
+    tcase_add_test(tc_basic, basic);
+    tcase_add_test(tc_basic, basic_unaligned_mapping);
 
     suite_add_tcase(s, tc_data_validation);
-	tcase_add_test(tc_data_validation, data_validation);
+    tcase_add_test(tc_data_validation, data_validation);
 
     suite_add_tcase(s, tc_invalidation);
     tcase_add_test(tc_invalidation, invalidation_access_after_gdr_close);
@@ -1440,6 +1440,10 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_invalidation, invalidation_fork_map_and_free);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map);
+
+    tcase_set_timeout(tc_basic, 60);
+    tcase_set_timeout(tc_data_validation, 60);
+    tcase_set_timeout(tc_invalidation, 180);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);
