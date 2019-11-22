@@ -21,13 +21,14 @@ all: exes
 
 exes: $(EXES)
 
+common.o: common.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 copybw.o: copybw.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 sanity.o: sanity.cpp $(GDRAPI_INC)/gdrapi.h $(GDRAPI_SRC)/gdrapi_internal.h common.hpp
 
-copybw: copybw.o
+copybw: copybw.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
-sanity: sanity.o
+sanity: sanity.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) `pkg-config --libs check`
 
 clean:

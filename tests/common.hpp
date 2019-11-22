@@ -22,12 +22,17 @@
 
 #pragma once
 
-#include <map>
+#include <stdarg.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <cuda.h>
+#include <check.h>
+#include <map>
+#include <gdrapi.h>
 
 namespace gdrcopy {
     namespace test {
-        static std::map<CUdeviceptr, CUdeviceptr> _allocations;
+        extern std::map<CUdeviceptr, CUdeviceptr> _allocations;
 
         static inline CUresult gpuMemAlloc(CUdeviceptr *pptr, size_t psize, bool align_to_gpu_page = true, bool set_sync_memops = true)
         {
@@ -80,6 +85,45 @@ namespace gdrcopy {
                 return CUDA_ERROR_INVALID_VALUE;
         }
 
+        extern bool print_dbg_msg;
+
+        void print_dbg(const char* fmt, ...);
+
+        #define EXIT_WAIVED 2
+
+        extern const char *testname;
+
+        #define BEGIN_GDRCOPY_TEST(__testname)                                  \
+        START_TEST(__testname)                                                  \
+        testname = #__testname;                                                 \
+        print_dbg("&&&& RUNNING " # __testname "\n");                           \
+        fflush(stdout);                                                         \
+        fflush(stderr);                                                         \
+        pid_t __pid = fork();                                                   \
+        if (__pid < 0) {                                                        \
+            print_dbg("Cannot fork\n");                                         \
+            print_dbg("&&&& FAILED " # __testname "\n");                        \
+            exit(EXIT_FAILURE);                                                 \
+        }                                                                       \
+        if (__pid == 0)
+
+        #define END_GDRCOPY_TEST                                                \
+        if (__pid) {                                                            \
+            int __child_exit_status = -EINVAL;                                  \
+            if (waitpid(__pid, &__child_exit_status, 0) == -1) {                \
+                print_dbg("waitpid returned an error\n");                       \
+                print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);         \
+                exit(EXIT_FAILURE);                                             \
+            }                                                                   \
+            if (__child_exit_status == EXIT_SUCCESS)                            \
+                print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);         \
+            else if (__child_exit_status == EXIT_WAIVED)                        \
+                print_dbg("&&&& WAIVED %s\n", gdrcopy::test::testname);         \
+            else                                                                \
+                print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);         \
+        }                                                                       \
+        END_TEST
+
         #define ASSERT(x)                                                       \
             do                                                                  \
                 {                                                               \
@@ -115,51 +159,10 @@ namespace gdrcopy {
         #define BEGIN_CHECK do
         #define END_CHECK while(0)
 
-        static int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
-        {
-            int diff = 0;
-            if (size % 4 != 0U) {
-                printf("warning: buffer size %zu is not dword aligned, ignoring trailing bytes\n", size);
-                size -= (size % 4);
-            }
-            unsigned ndwords = size/sizeof(uint32_t);
-            for(unsigned  w = 0; w < ndwords; ++w) {
-                if (ref_buf[w] != buf[w]) {
-                    if (!diff) {
-                        printf("%10.10s %8.8s %8.8s\n", "word", "content", "expected");
-                    }
-                    if (diff < 10) {
-                        printf("%10d %08x %08x\n", w, buf[w], ref_buf[w]);
-                    }
-                    ++diff;
-                }
-            }
-            if (diff) {
-                printf("check error: %d different dwords out of %d\n", diff, ndwords);
-            }
-            return diff;
-        }
+        int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size);
 
-        static void init_hbuf_walking_bit(uint32_t *h_buf, size_t size)
-        {
-            uint32_t base_value = 0x3F4C5E6A; // 0xa55ad33d;
-            unsigned w;
-            ASSERT_NEQ(h_buf, (void*)0);
-            ASSERT_EQ(size % 4, 0U);
-            //OUT << "filling mem with walking bit " << endl;
-            for(w = 0; w<size/sizeof(uint32_t); ++w)
-                h_buf[w] = base_value ^ (1<< (w%32));
-        }
+        void init_hbuf_walking_bit(uint32_t *h_buf, size_t size);
 
-        static void init_hbuf_linear_ramp(uint32_t *h_buf, size_t size)
-        {
-            uint32_t base_value = 0x3F4C5E6A; // 0xa55ad33d;
-            unsigned w;
-            ASSERT_NEQ(h_buf, (void*)0);
-            ASSERT_EQ(size % 4, 0U);
-            //OUT << "filling mem with walking bit " << endl;
-            for(w = 0; w<size/sizeof(uint32_t); ++w)
-                h_buf[w] = w;
-        }
+        void init_hbuf_linear_ramp(uint32_t *h_buf, size_t size);
     }
 }
