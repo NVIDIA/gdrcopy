@@ -48,11 +48,11 @@ using namespace std;
 using namespace gdrcopy::test;
 
 #if defined(GDRAPI_X86)
-#define FENCE() asm volatile("mfence":::"memory")
+#define MB() asm volatile("mfence":::"memory")
 #elif defined(GDRAPI_POWER)
-#define FENCE() asm volatile("sync":::"memory")
+#define MB() asm volatile("sync":::"memory")
 #else
-#define FENCE() asm volatile("":::"memory")
+#define MB() asm volatile("":::"memory")
 #endif
 
 volatile bool expecting_exception_signal = false;
@@ -174,7 +174,7 @@ int recvfd(int socket) {
 BEGIN_GDRCOPY_TEST(basic)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
 	init_cuda(0);
 
@@ -213,7 +213,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
 	init_cuda(0);
 
@@ -308,7 +308,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(data_validation)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
 	init_cuda(0);
 
@@ -419,7 +419,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     struct sigaction act;
     act.sa_handler = exception_signal_handle;
@@ -470,11 +470,11 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
     
     print_dbg("Trying to read buf_ptr[0] after gdr_close\n");
     expecting_exception_signal = true;
-    FENCE();
+    MB();
     int data_from_buf_ptr = buf_ptr[0];
-    FENCE();
+    MB();
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     ASSERT_NEQ(data_from_buf_ptr, mydata);
     
@@ -495,7 +495,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     struct sigaction act;
     act.sa_handler = exception_signal_handle;
@@ -546,11 +546,11 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
     
     print_dbg("Trying to read buf_ptr[0] after cuMemFree\n");
     expecting_exception_signal = true;
-    FENCE();
+    MB();
     int data_from_buf_ptr = buf_ptr[0];
-    FENCE();
+    MB();
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     ASSERT_NEQ(data_from_buf_ptr, mydata);
     
@@ -577,7 +577,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(invalidation_two_mappings)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     srand(time(NULL));
 
@@ -674,7 +674,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(invalidation_fork_access_after_cumemfree)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     int filedes_0[2];
     int filedes_1[2];
@@ -792,11 +792,11 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_access_after_cumemfree)
 
         print_dbg("%s: trying to read buf_ptr[0]\n", myname);
         expecting_exception_signal = true;
-        FENCE();
+        MB();
         int data_from_buf_ptr = buf_ptr[0];
-        FENCE();
+        MB();
         expecting_exception_signal = false;
-        FENCE();
+        MB();
 
         print_dbg("%s: read buf_ptr[0] after child write get %d\n", myname, data_from_buf_ptr);
         print_dbg("%s: child data is %d\n", myname, child_data);
@@ -831,7 +831,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(invalidation_fork_after_gdr_map)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     int filedes_0[2];
     int filedes_1[2];
@@ -923,15 +923,15 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_after_gdr_map)
         sigaction(SIGSEGV, &act, 0);
 
         expecting_exception_signal = true;
-        FENCE();
+        MB();
     }
     print_dbg("%s: trying to read buf_ptr[0]\n", myname);
     int data_from_buf_ptr = buf_ptr[0];
     print_dbg("%s: read buf_ptr[0] get %d\n", myname, data_from_buf_ptr);
     if (pid == 0) {
-        FENCE();
+        MB();
         expecting_exception_signal = false;
-        FENCE();
+        MB();
         print_dbg("%s: should not be able to read buf_ptr[0] anymore!! aborting!!\n", myname);
         exit(EXIT_FAILURE);
     }
@@ -978,7 +978,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_map_parent)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     const size_t _size = sizeof(int) * 16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -1053,7 +1053,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(invalidation_fork_map_and_free)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     int filedes_0[2];
     int filedes_1[2];
@@ -1182,7 +1182,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     pid_t pid;
     int pair[2];
@@ -1274,7 +1274,7 @@ END_GDRCOPY_TEST
 BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
     int filedes_0[2];
     int filedes_1[2];
