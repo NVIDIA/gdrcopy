@@ -20,6 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include <stdio.h>
 #include <stdarg.h>
 #include <sys/types.h>
 #include <unistd.h>
