@@ -61,12 +61,13 @@ int main(int argc, char *argv[])
     size_t _size = (size_t)1 << 24;
     size_t copy_size = 1;
     int dev_id = 0;
+    bool do_cumemcpy = false;
     struct timespec beg, end;
     double lat_us;
 
     while(1) {        
         int c;
-        c = getopt(argc, argv, "s:d:w:r:h");
+        c = getopt(argc, argv, "s:d:w:r:hc");
         if (c == -1)
             break;
 
@@ -83,8 +84,11 @@ int main(int argc, char *argv[])
             case 'r':
                 num_read_iters = strtol(optarg, NULL, 0);
                 break;
+            case 'c':
+                do_cumemcpy = true;
+                break;
             case 'h':
-                printf("syntax: %s -s <buf size> -d <gpu dev id> -w <write iters> -r <read iters> -h\n", argv[0]);
+                printf("syntax: %s -s <buf size> -d <gpu dev id> -w <write iters> -r <read iters> -h[help] -c[do-cuMemcpy]\n", argv[0]);
                 exit(EXIT_FAILURE);
                 break;
             default:
@@ -146,45 +150,48 @@ int main(int argc, char *argv[])
     ASSERT_NEQ(h_buf, (void*)0);
     init_hbuf_walking_bit(init_buf, size);
 
-    OUT << endl;
-    OUT << "cuMemcpy_H2D num iters for each size: " << num_write_iters << endl;
-    printf("Test \t\t Size(B) \t Time(us)\n");
-    BEGIN_CHECK {
-        // cuMemcpy H2D benchmark
-        copy_size = 1;
-        while (copy_size <= size) {
-            int iter = 0;
-            clock_gettime(MYCLOCK, &beg);
-            for (iter = 0; iter < num_write_iters; ++iter) {
-                ASSERTDRV(cuMemcpy(d_A, (CUdeviceptr)init_buf, copy_size));
+    if (do_cumemcpy) {
+        OUT << endl;
+        OUT << "cuMemcpy_H2D num iters for each size: " << num_write_iters << endl;
+        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
+        BEGIN_CHECK {
+            // cuMemcpy H2D benchmark
+            copy_size = 1;
+            while (copy_size <= size) {
+                int iter = 0;
+                clock_gettime(MYCLOCK, &beg);
+                for (iter = 0; iter < num_write_iters; ++iter) {
+                    ASSERTDRV(cuMemcpy(d_A, (CUdeviceptr)init_buf, copy_size));
+                }
+                clock_gettime(MYCLOCK, &end);
+                lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
+                printf("cuMemcpy_H2D \t %8zu \t %11.4f\n", copy_size, lat_us);
+                copy_size <<= 1;
             }
-            clock_gettime(MYCLOCK, &end);
-            lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
-            printf("cuMemcpy_H2D \t %8zu \t %11.4f\n", copy_size, lat_us);
-            copy_size <<= 1;
-        }
-    } END_CHECK;
+        } END_CHECK;
 
-    OUT << endl;
-    OUT << "cuMemcpy_D2H num iters for each size: " << num_read_iters << endl;
-    printf("Test \t\t Size(B) \t Time(us)\n");
-    BEGIN_CHECK {
-        // cuMemcpy D2H benchmark
-        copy_size = 1;
-        while (copy_size <= size) {
-            int iter = 0;
-            clock_gettime(MYCLOCK, &beg);
-            for (iter = 0; iter < num_read_iters; ++iter) {
-                ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
+        OUT << endl;
+        OUT << "cuMemcpy_D2H num iters for each size: " << num_read_iters << endl;
+        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
+        BEGIN_CHECK {
+            // cuMemcpy D2H benchmark
+            copy_size = 1;
+            while (copy_size <= size) {
+                int iter = 0;
+                clock_gettime(MYCLOCK, &beg);
+                for (iter = 0; iter < num_read_iters; ++iter) {
+                    ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
+                }
+                clock_gettime(MYCLOCK, &end);
+                lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
+                printf("cuMemcpy_D2H \t %8zu \t %11.4f\n", copy_size, lat_us);
+                copy_size <<= 1;
             }
-            clock_gettime(MYCLOCK, &end);
-            lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
-            printf("cuMemcpy_D2H \t %8zu \t %11.4f\n", copy_size, lat_us);
-            copy_size <<= 1;
-        }
-    } END_CHECK;
+        } END_CHECK;
 
-    OUT << endl;
+        OUT << endl;
+    }
+
     OUT << endl;
 
     gdr_t g = gdr_open();
@@ -221,7 +228,7 @@ int main(int argc, char *argv[])
         // gdr_copy H2D benchmark
         OUT << endl;
         OUT << "gdrcopy_H2D num iters for each size: " << num_write_iters << endl;
-        printf("Test \t\t Size(B) \t Time(us)\n");
+        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
@@ -242,7 +249,7 @@ int main(int argc, char *argv[])
         // gdr_copy D2H benchmark
         OUT << endl;
         OUT << "gdrcopy_D2H num iters for each size: " << num_read_iters << endl;
-        printf("Test \t\t Size(B) \t Time(us)\n");
+        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
