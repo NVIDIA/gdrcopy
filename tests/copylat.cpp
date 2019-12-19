@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <iostream>
+#include <iomanip>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 
@@ -33,6 +34,8 @@ using namespace std;
 
 #include "gdrapi.h"
 #include "common.hpp"
+
+using namespace gdrcopy::test;
 
 #if defined(GDRAPI_X86)
 #define FENCE() asm volatile("mfence":::"memory")
@@ -53,7 +56,7 @@ using namespace std;
 int num_write_iters = 10000;
 int num_read_iters = 100;
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     size_t _size = (size_t)1 << 24;
     size_t copy_size = 1;
@@ -92,22 +95,40 @@ main(int argc, char *argv[])
     
     size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
-    int n_devices = 0;
-    ASSERTRT(cudaGetDeviceCount(&n_devices));
+    ASSERTDRV(cuInit(0));
 
-    cudaDeviceProp prop;
+    int n_devices = 0;
+    ASSERTDRV(cuDeviceGetCount(&n_devices));
+
+    CUdevice dev;
     for (int n=0; n<n_devices; ++n) {
-        ASSERTRT(cudaGetDeviceProperties(&prop,n));
-        OUT << "GPU id:" << n << " name:" << prop.name 
-            << " PCI domain: " << prop.pciDomainID 
-            << " bus: " << prop.pciBusID 
-            << " device: " << prop.pciDeviceID << endl;
+        
+        char dev_name[256];
+        int dev_pci_domain_id;
+        int dev_pci_bus_id;
+        int dev_pci_device_id;
+
+        ASSERTDRV(cuDeviceGet(&dev, n));
+        ASSERTDRV(cuDeviceGetName(dev_name, sizeof(dev_name) / sizeof(dev_name[0]), dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_domain_id, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
+
+        OUT << "GPU id:" << n << "; name: " << dev_name 
+            << "; Bus id: "
+            << std::hex 
+            << std::setfill('0') << std::setw(4) << dev_pci_domain_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_bus_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_device_id
+            << std::dec
+            << endl;
     }
     OUT << "selecting device " << dev_id << endl;
-    ASSERTRT(cudaSetDevice(dev_id));
+    ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    CUcontext dev_ctx;
+    ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
+    ASSERTDRV(cuCtxSetCurrent(dev_ctx));
 
     CUdeviceptr d_A;
     ASSERTDRV(cuMemAlloc(&d_A, size));
@@ -245,6 +266,8 @@ main(int argc, char *argv[])
     ASSERT_EQ(gdr_close(g), 0);
 
     ASSERTDRV(cuMemFree(d_A));
+
+    return 0;
 }
 
 /*

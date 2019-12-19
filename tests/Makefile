@@ -32,7 +32,7 @@ copybw: copybw.o common.o
 sanity: sanity.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) `pkg-config --libs check`
 
-copylat: copylat.o
+copylat: copylat.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
 clean:
