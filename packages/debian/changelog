@@ -1,6 +1,14 @@
-gdrcopy (@VERSION@) unstable; urgency=low
+gdrcopy (@VERSION@) stable; urgency=low
 
-  * Initial release of Debian package
+  * Improve copy performance with unrolling in POWERPC.
+  * Creates sanity unit test for testing the functionality and security.
+  * Consolidate basic and validate into sanity unit test.
+  * Introduce compile time and runtime version checking in libgdrapi.
+  * Improve rpm packaging.
+  * Introduce deb packaging for the userspace library and the applications.
+  * Introduce dkms packaging for the gdrdrv driver.
+  * Rename gdr_copy_from/to_bar to gdr_copy_from/to_mapping.
+  * Update README
 
- -- Pak Markthub <pmarkthub@nvidia.com>  Fri, 07 Jun 2019 11:26:55 -0700
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 16 Sep 2019 11:59:59 -0700
 

@@ -20,7 +20,6 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <stdarg.h>
 #include <ctype.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -46,25 +45,15 @@ using namespace std;
 #include "gdrconfig.h"
 #include "common.hpp"
 
+using namespace gdrcopy::test;
+
 #if defined(GDRAPI_X86)
-#define FENCE() asm volatile("mfence":::"memory")
+#define MB() asm volatile("mfence":::"memory")
 #elif defined(GDRAPI_POWER)
-#define FENCE() asm volatile("sync":::"memory")
+#define MB() asm volatile("sync":::"memory")
 #else
-#define FENCE() asm volatile("":::"memory")
+#define MB() asm volatile("":::"memory")
 #endif
-
-static bool _print_dbg_msg = false;
-
-static void print_dbg(const char* fmt, ...)
-{
-    if (_print_dbg_msg) {
-        va_list ap;
-        va_start(ap, fmt);
-        vfprintf(stderr, fmt, ap);
-    }
-}
-
 
 volatile bool expecting_exception_signal = false;
 
@@ -74,7 +63,24 @@ void exception_signal_handle(int sig)
         print_dbg("Get signal %d as expected\n", sig);
         exit(EXIT_SUCCESS);
     }
-    ck_abort_msg("Unexpectedly get exception signal");
+    print_dbg("Unexpectedly get exception signal");
+}
+
+static void init_cuda(int dev_id)
+{
+    CUdevice dev;
+    CUcontext dev_ctx;
+    ASSERTDRV(cuInit(0));
+    ASSERTDRV(cuDeviceGet(&dev, dev_id));
+    ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
+    ASSERTDRV(cuCtxSetCurrent(dev_ctx));
+}
+
+static void finalize_cuda(int dev_id)
+{
+    CUdevice dev;
+    ASSERTDRV(cuDeviceGet(&dev, dev_id));
+    ASSERTDRV(cuDevicePrimaryCtxRelease(dev));
 }
 
 /**
@@ -165,31 +171,19 @@ int recvfd(int socket) {
     return fd;
 }
 
-START_TEST(basic)
+BEGIN_GDRCOPY_TEST(basic)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
-    print_dbg("Start basic\n");
-
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+	init_cuda(0);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
-
-    uint32_t *init_buf = new uint32_t[size];
-    uint32_t *copy_buf = new uint32_t[size];
-
-    init_hbuf_walking_bit(init_buf, size);
-    memset(copy_buf, 0, sizeof(*copy_buf) * sizeof(uint32_t));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -199,37 +193,132 @@ START_TEST(basic)
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
 
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
 
-    print_dbg("End basic\n");
+	finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
-START_TEST(data_validation)
+/**
+ * This unit test ensures that gdrcopy returns error when trying to map
+ * unaligned addresses. In addition, it tests that mapping hand-aligned
+ * addresses by users are successful.
+ *
+ */
+BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
 {
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
-    print_dbg("Start data_validation\n");
+	init_cuda(0);
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    // Allocate for a few bytes so that cuMemAlloc returns an unaligned address
+    // in the next allocation. This behavior is observed in GPU Driver 410 and
+    // above.
+    const size_t fa_size = 4;
+    CUdeviceptr d_fa;
+    ASSERTDRV(gpuMemAlloc(&d_fa, fa_size));
+    print_dbg("First allocation: d_fa=0x%llx, size=%zu\n", d_fa, fa_size);
+
+    const size_t A_size = GPU_PAGE_SIZE + sizeof(int);
+
+    CUdeviceptr d_A, d_A_boundary;
+
+    // Try until we get an unaligned address. Give up after 100 times.
+    for (int i = 0; i < 100; ++i) {
+        ASSERTDRV(gpuMemAlloc(&d_A, A_size, false, true));
+        d_A_boundary = d_A & GPU_PAGE_MASK;
+        if (d_A != d_A_boundary)
+            break;
+    }
+    print_dbg("Second allocation: d_A=0x%llx, size=%zu, GPU-page-boundary 0x%llx\n", d_A, A_size, d_A_boundary);
+    if (d_A == d_A_boundary) {
+        print_dbg("d_A is aligned. Waiving this test.\n");
+        ASSERTDRV(cuMemFree(d_A));
+
+        exit(EXIT_WAIVED);
+    }
+    print_dbg("d_A is unaligned\n");
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    // Try mapping with unaligned address. This should fail.
+    print_dbg("Try mapping d_A as is.\n");
+    gdr_mh_t A_mh = null_mh;
+
+    ASSERT_EQ(gdr_pin_buffer(g, d_A, A_size, 0, 0, &A_mh), 0);
+    ASSERT_NEQ(A_mh, null_mh);
+
+    void *A_bar_ptr  = NULL;
+    // Expect gdr_map to fail with unaligned address
+    ASSERT_NEQ(gdr_map(g, A_mh, &A_bar_ptr, A_size), 0);
+    ASSERT_EQ(gdr_unpin_buffer(g, A_mh), 0);
+    print_dbg("Mapping d_A failed as expected.\n");
+
+    print_dbg("Align d_A and try mapping it again.\n");
+    // In order to align d_A, we move to the next GPU page. The reason is that
+    // the first GPU page may belong to another allocation.
+    CUdeviceptr d_aligned_A = (d_A + GPU_PAGE_SIZE) & GPU_PAGE_MASK;
+    off_t aligned_A_offset = d_aligned_A - d_A;
+    size_t aligned_A_size = A_size - aligned_A_offset;
+
+    print_dbg("Pin and map aligned address: d_aligned_A=0x%llx, offset=%lld, size=%zu\n", d_aligned_A, aligned_A_offset, aligned_A_size);
+
+    gdr_mh_t aligned_A_mh = null_mh;
+    void *aligned_A_bar_ptr = NULL;
+    ASSERT_EQ(gdr_pin_buffer(g, d_aligned_A, aligned_A_size, 0, 0, &aligned_A_mh), 0);
+    ASSERT_NEQ(aligned_A_mh, null_mh);
+    // expect gdr_map to success
+    ASSERT_EQ(gdr_map(g, aligned_A_mh, &aligned_A_bar_ptr, aligned_A_size), 0);
+
+    // Test accessing the mapping
+    int *aligned_A_map_ptr = (int *)aligned_A_bar_ptr;
+    aligned_A_map_ptr[0] = 7;
+
+    // The first allocation and d_A should share a GPU page. We should make
+    // sure that freeing the first allocation would not accidentally unmap
+    // d_aligned_A as the d_aligned_A mapping starts from the next GPU page.
+    gdr_mh_t fa_mh = null_mh;
+    ASSERT_EQ(gdr_pin_buffer(g, d_fa, fa_size, 0, 0, &fa_mh), 0);
+    ASSERT_NEQ(fa_mh, null_mh);
+
+    void *fa_bar_ptr = NULL;
+    ASSERT_EQ(gdr_map(g, fa_mh, &fa_bar_ptr, fa_size), 0);
+
+    ASSERTDRV(gpuMemFree(d_fa));
+
+    // Test accessing aligned_A_map_ptr again. This should not cause segmentation fault.
+    aligned_A_map_ptr[0] = 9;
+
+    ASSERT_EQ(gdr_unpin_buffer(g, aligned_A_mh), 0);
+    ASSERT_EQ(gdr_close(g), 0);
+
+    ASSERTDRV(gpuMemFree(d_A));
+
+	finalize_cuda(0);
+}
+END_GDRCOPY_TEST
+
+BEGIN_GDRCOPY_TEST(data_validation)
+{
+    expecting_exception_signal = false;
+    MB();
+
+	init_cuda(0);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
     ASSERTDRV(cuCtxSynchronize());
 
     uint32_t *init_buf = new uint32_t[size];
@@ -247,7 +336,7 @@ START_TEST(data_validation)
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
 
     gdr_info_t info;
@@ -267,7 +356,7 @@ START_TEST(data_validation)
     print_dbg("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
     init_hbuf_walking_bit(buf_ptr, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
+    ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
@@ -275,7 +364,7 @@ START_TEST(data_validation)
     print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
+    ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
@@ -283,7 +372,7 @@ START_TEST(data_validation)
     print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     gdr_copy_from_mapping(mh, copy_buf, buf_ptr, size);
-    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
+    ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
@@ -293,29 +382,29 @@ START_TEST(data_validation)
     print_dbg("check 4: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset\n", extra_dwords);
     gdr_copy_to_mapping(mh, buf_ptr + extra_dwords, init_buf, size - extra_off);
     gdr_copy_from_mapping(mh, copy_buf, buf_ptr + extra_dwords, size - extra_off);
-    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size - extra_off), 0);
+    ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
 
     extra_off = 11;
     print_dbg("check 5: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset\n", extra_off);
-    gdr_copy_to_mapping(mh, (char*)buf_ptr + extra_off, init_buf, size);
-    gdr_copy_from_mapping(mh, copy_buf, (char*)buf_ptr + extra_off, size);
-    ck_assert_int_eq(compare_buf(init_buf, copy_buf, size), 0);
+    gdr_copy_to_mapping(mh, (char*)buf_ptr + extra_off, init_buf, size - extra_off);
+    gdr_copy_from_mapping(mh, copy_buf, (char*)buf_ptr + extra_off, size - extra_off);
+    ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
 
-    print_dbg("unampping\n");
+    print_dbg("unmapping\n");
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
     print_dbg("unpinning\n");
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
 
     ASSERT_EQ(gdr_close(g), 0);
 
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
 
-    print_dbg("End data_validation\n");
+	finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test ensures that accessing to gdr_map'ed region is not possible
@@ -327,12 +416,10 @@ END_TEST
  * 3. Do gdr_close
  * 4. Attempt to access to bar_ptr after 3. should fail
  */
-START_TEST(invalidation_access_after_gdr_close)
+BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
 {
     expecting_exception_signal = false;
-    FENCE();
-
-    print_dbg("Start invalidation_access_after_gdr_close\n");
+    MB();
 
     struct sigaction act;
     act.sa_handler = exception_signal_handle;
@@ -347,16 +434,11 @@ START_TEST(invalidation_access_after_gdr_close)
 
     int mydata = (rand() % 1000) + 1;
 
-    void *dummy;
-    // Let libcudart initialize CUDA for us
-    ASSERTRT(cudaMalloc(&dummy, 0));
+	init_cuda(0);
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -366,7 +448,7 @@ START_TEST(invalidation_access_after_gdr_close)
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
 
     print_dbg("Mapping bar1\n");
@@ -388,17 +470,17 @@ START_TEST(invalidation_access_after_gdr_close)
     
     print_dbg("Trying to read buf_ptr[0] after gdr_close\n");
     expecting_exception_signal = true;
-    FENCE();
+    MB();
     int data_from_buf_ptr = buf_ptr[0];
-    FENCE();
+    MB();
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
-    ck_assert_msg(data_from_buf_ptr != mydata, "Got the same data after gdr_close!!");
+    ASSERT_NEQ(data_from_buf_ptr, mydata);
     
-    print_dbg("End invalidation_access_after_gdr_close\n");
+	finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test ensures that accessing to gdr_map'ed region is not possible
@@ -410,12 +492,10 @@ END_TEST
  * 3. Do cuMemFree
  * 4. Attempt to access to bar_ptr after 3. should fail
  */
-START_TEST(invalidation_access_after_cumemfree)
+BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
 {
     expecting_exception_signal = false;
-    FENCE();
-
-    print_dbg("Start invalidation_access_after_cumemfree\n");
+    MB();
 
     struct sigaction act;
     act.sa_handler = exception_signal_handle;
@@ -430,16 +510,11 @@ START_TEST(invalidation_access_after_cumemfree)
 
     int mydata = (rand() % 1000) + 1;
 
-    void *dummy;
-    // Let libcudart initialize CUDA for us
-    ASSERTRT(cudaMalloc(&dummy, 0));
+	init_cuda(0);
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -449,7 +524,7 @@ START_TEST(invalidation_access_after_cumemfree)
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
 
     print_dbg("Mapping bar1\n");
@@ -467,25 +542,25 @@ START_TEST(invalidation_access_after_cumemfree)
     buf_ptr[0] = mydata;
 
     print_dbg("Calling cuMemFree\n");
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
     
     print_dbg("Trying to read buf_ptr[0] after cuMemFree\n");
     expecting_exception_signal = true;
-    FENCE();
+    MB();
     int data_from_buf_ptr = buf_ptr[0];
-    FENCE();
+    MB();
     expecting_exception_signal = false;
-    FENCE();
+    MB();
 
-    ck_assert_msg(data_from_buf_ptr != mydata, "Got the same data after cuMemFree!!");
+    ASSERT_NEQ(data_from_buf_ptr, mydata);
     
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
 
-    print_dbg("End invalidation_access_after_cumemfree\n");
+    finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test ensures that cuMemFree destroys only the mapping it is
@@ -499,12 +574,10 @@ END_TEST
  * 5. Do cuMemFree(d_A)
  * 6. Verify that bar_ptr_B is still accessible 
  */
-START_TEST(invalidation_two_mappings)
+BEGIN_GDRCOPY_TEST(invalidation_two_mappings)
 {
     expecting_exception_signal = false;
-    FENCE();
-
-    print_dbg("Start invalidation_two_mappings\n");
+    MB();
 
     srand(time(NULL));
 
@@ -513,18 +586,13 @@ START_TEST(invalidation_two_mappings)
 
     int mydata = (rand() % 1000) + 1;
 
-    void *dummy;
-    // Let libcudart initialize CUDA for us
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A[2];
 
     for (int i = 0; i < 2; ++i) {
-        ASSERTDRV(cuMemAlloc(&d_A[i], size));
+        ASSERTDRV(gpuMemAlloc(&d_A[i], size));
         ASSERTDRV(cuMemsetD8(d_A[i], 0x95, size));
-
-        unsigned int flag = 1;
-        ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A[i]));
     }
 
     gdr_t g = gdr_open();
@@ -541,7 +609,7 @@ START_TEST(invalidation_two_mappings)
 
         // tokens are optional in CUDA 6.0
         // wave out the test if GPUDirectRDMA is not enabled
-        ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh[i]), 0);
+        ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh[i]), 0);
         ASSERT_NEQ(mh[i], null_mh);
 
         bar_ptr[i] = NULL;
@@ -561,16 +629,16 @@ START_TEST(invalidation_two_mappings)
     buf_ptr[1][0] = mydata + 1;
 
     print_dbg("Validating that we can read the data back\n");
-    ck_assert_int_eq(buf_ptr[0][0], mydata);
-    ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
+    ASSERT_EQ(buf_ptr[0][0], mydata);
+    ASSERT_EQ(buf_ptr[1][0], mydata + 1);
 
     print_dbg("cuMemFree and thus destroying the first mapping\n");
-    ASSERTDRV(cuMemFree(d_A[0]));
+    ASSERTDRV(gpuMemFree(d_A[0]));
 
     print_dbg("Trying to read and validate the data from the second mapping after the first mapping has been destroyed\n");
-    ck_assert_int_eq(buf_ptr[1][0], mydata + 1);
+    ASSERT_EQ(buf_ptr[1][0], mydata + 1);
 
-    ASSERTDRV(cuMemFree(d_A[1]));
+    ASSERTDRV(gpuMemFree(d_A[1]));
     
     for (int i = 0; i < 2; ++i) {
         ASSERT_EQ(gdr_unmap(g, mh[i], bar_ptr[i], size), 0);
@@ -579,9 +647,9 @@ START_TEST(invalidation_two_mappings)
 
     ASSERT_EQ(gdr_close(g), 0);
 
-    print_dbg("End invalidation_two_mappings\n");
+    finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test is intended to check the security hole originated from not
@@ -603,19 +671,17 @@ END_TEST
  *     compare with the data written by child. If gdrdrv does not handle
  *     invalidation properly, child's data will be leaked to parent.
  */
-START_TEST(invalidation_fork_access_after_cumemfree)
+BEGIN_GDRCOPY_TEST(invalidation_fork_access_after_cumemfree)
 {
     expecting_exception_signal = false;
-    FENCE();
-
-    print_dbg("Start invalidation_fork_access_after_cumemfree\n");
+    MB();
 
     int filedes_0[2];
     int filedes_1[2];
     int read_fd;
     int write_fd;
-    ck_assert_int_ne(pipe(filedes_0), -1);
-    ck_assert_int_ne(pipe(filedes_1), -1);
+    ASSERT_NEQ(pipe(filedes_0), -1);
+    ASSERT_NEQ(pipe(filedes_1), -1);
 
     srand(time(NULL));
 
@@ -623,8 +689,11 @@ START_TEST(invalidation_fork_access_after_cumemfree)
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
 
+    fflush(stdout);
+    fflush(stderr);
+
     pid_t pid = fork();
-    ck_assert(pid >= 0);
+    ASSERT(pid >= 0);
 
     myname = pid == 0 ? "child" : "parent";
 
@@ -641,7 +710,7 @@ START_TEST(invalidation_fork_access_after_cumemfree)
 
         do {
             print_dbg("%s: waiting for cont signal from parent\n", myname);
-            ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
+            ASSERT_EQ(read(read_fd, &cont, sizeof(int)), sizeof(int));
             print_dbg("%s: receive cont signal %d from parent\n", myname, cont);
         } while (cont != 1);
     }
@@ -666,15 +735,11 @@ START_TEST(invalidation_fork_access_after_cumemfree)
     if (pid == 0)
         mydata += 10;
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -685,7 +750,7 @@ START_TEST(invalidation_fork_access_after_cumemfree)
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
 
     void *bar_ptr  = NULL;
@@ -702,41 +767,41 @@ START_TEST(invalidation_fork_access_after_cumemfree)
 
     if (pid == 0) {
         print_dbg("%s: signal parent that I have written\n", myname);
-        ck_assert_int_eq(write(write_fd, &mydata, sizeof(int)), sizeof(int));
+        ASSERT_EQ(write(write_fd, &mydata, sizeof(int)), sizeof(int));
 
         int cont = 0;
         print_dbg("%s: waiting for signal from parent before calling cuMemFree\n", myname);
         do {
-            ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
+            ASSERT_NEQ(read(read_fd, &cont, sizeof(int)), -1);
         } while (cont != 1);
     }
 
     print_dbg("%s: read buf_ptr[0] before cuMemFree get %d\n", myname, buf_ptr[0]);
 
     print_dbg("%s: calling cuMemFree\n", myname);
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
 
     if (pid > 0) {
         int msg = 1;
-        ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
+        ASSERT_EQ(write(write_fd, &msg, sizeof(int)), sizeof(int));
         int child_data = 0;
         print_dbg("%s: waiting for child write signal\n", myname);
         do {
-            ck_assert_int_eq(read(read_fd, &child_data, sizeof(int)), sizeof(int));
+            ASSERT_EQ(read(read_fd, &child_data, sizeof(int)), sizeof(int));
         } while (child_data == 0);
 
         print_dbg("%s: trying to read buf_ptr[0]\n", myname);
         expecting_exception_signal = true;
-        FENCE();
+        MB();
         int data_from_buf_ptr = buf_ptr[0];
-        FENCE();
+        MB();
         expecting_exception_signal = false;
-        FENCE();
+        MB();
 
         print_dbg("%s: read buf_ptr[0] after child write get %d\n", myname, data_from_buf_ptr);
         print_dbg("%s: child data is %d\n", myname, child_data);
-        ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
-        ck_assert_msg(child_data != data_from_buf_ptr, "Data from the child process should not be visible on the parent process via bar mapping!!! Security breached!!!");
+        ASSERT_EQ(write(write_fd, &msg, sizeof(int)), sizeof(int));
+        ASSERT_NEQ(child_data, data_from_buf_ptr);
     }
 
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
@@ -744,9 +809,9 @@ START_TEST(invalidation_fork_access_after_cumemfree)
 
     ASSERT_EQ(gdr_close(g), 0);
 
-    print_dbg("End invalidation_fork_access_after_cumemfree\n");
+    finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test makes sure that child processes cannot spy on the parent
@@ -763,33 +828,27 @@ END_TEST
  *     parent writes into that region. If gdrdrv does not invalidate the
  *     mapping correctly, child can spy on parent.
  */
-START_TEST(invalidation_fork_after_gdr_map)
+BEGIN_GDRCOPY_TEST(invalidation_fork_after_gdr_map)
 {
     expecting_exception_signal = false;
-    FENCE();
-
-    print_dbg("Start invalidation_fork_after_gdr_map\n");
+    MB();
 
     int filedes_0[2];
     int filedes_1[2];
     int read_fd;
     int write_fd;
-    ck_assert_int_ne(pipe(filedes_0), -1);
-    ck_assert_int_ne(pipe(filedes_1), -1);
+    ASSERT_NEQ(pipe(filedes_0), -1);
+    ASSERT_NEQ(pipe(filedes_1), -1);
 
     const size_t _size = sizeof(int) * 16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -800,7 +859,7 @@ START_TEST(invalidation_fork_after_gdr_map)
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
 
     void *bar_ptr  = NULL;
@@ -812,8 +871,11 @@ START_TEST(invalidation_fork_after_gdr_map)
 
     volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
 
+    fflush(stdout);
+    fflush(stderr);
+
     pid_t pid = fork();
-    ck_assert(pid >= 0);
+    ASSERT(pid >= 0);
 
     myname = pid == 0 ? "child" : "parent";
 
@@ -835,7 +897,7 @@ START_TEST(invalidation_fork_after_gdr_map)
 
         do {
             print_dbg("%s: waiting for cont signal from parent\n", myname);
-            ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
+            ASSERT_EQ(read(read_fd, &cont, sizeof(int)), sizeof(int));
             print_dbg("%s: receive cont signal %d from parent\n", myname, cont);
         } while (cont != 1);
     }
@@ -861,15 +923,15 @@ START_TEST(invalidation_fork_after_gdr_map)
         sigaction(SIGSEGV, &act, 0);
 
         expecting_exception_signal = true;
-        FENCE();
+        MB();
     }
     print_dbg("%s: trying to read buf_ptr[0]\n", myname);
     int data_from_buf_ptr = buf_ptr[0];
     print_dbg("%s: read buf_ptr[0] get %d\n", myname, data_from_buf_ptr);
     if (pid == 0) {
-        FENCE();
+        MB();
         expecting_exception_signal = false;
-        FENCE();
+        MB();
         print_dbg("%s: should not be able to read buf_ptr[0] anymore!! aborting!!\n", myname);
         exit(EXIT_FAILURE);
     }
@@ -877,25 +939,25 @@ START_TEST(invalidation_fork_after_gdr_map)
     if (pid > 0) {
         print_dbg("%s: signaling child\n", myname);
         int msg = 1;
-        ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
+        ASSERT_EQ(write(write_fd, &msg, sizeof(int)), sizeof(int));
         print_dbg("%s: waiting for child to exit\n", myname);
         // Child should exit because of sigbus
         int child_exit_status = -EINVAL;
-        ck_assert_int_eq(wait(&child_exit_status), pid);
-        ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
+        ASSERT(wait(&child_exit_status) == pid);
+        ASSERT_EQ(child_exit_status, EXIT_SUCCESS);
         print_dbg("%s: trying to read buf_ptr[0] after child exits\n", myname);
         data_from_buf_ptr = buf_ptr[0];
         print_dbg("%s: read buf_ptr[0] after child exits get %d\n", myname, data_from_buf_ptr);
-        ck_assert_int_eq(data_from_buf_ptr, mynumber);
+        ASSERT_EQ(data_from_buf_ptr, mynumber);
         ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
-        ASSERTDRV(cuMemFree(d_A));
+        ASSERTDRV(gpuMemFree(d_A));
         ASSERT_EQ(gdr_close(g), 0);
     }
 
-    print_dbg("End invalidation_fork_after_gdr_map\n");
+    finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test ensures that child cannot do gdr_map on what parent has
@@ -913,26 +975,20 @@ END_TEST
  *     expected to prevent this case so that the child process cannot spy on
  *     the parent's GPU data.
  */
-START_TEST(invalidation_fork_child_gdr_map_parent)
+BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_map_parent)
 {
     expecting_exception_signal = false;
-    FENCE();
-
-    print_dbg("Start invalidation_fork_child_gdr_map_parent\n");
+    MB();
 
     const size_t _size = sizeof(int) * 16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -943,11 +999,14 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
 
+    fflush(stdout);
+    fflush(stderr);
+
     pid_t pid = fork();
-    ck_assert(pid >= 0);
+    ASSERT(pid >= 0);
 
     myname = pid == 0 ? "child" : "parent";
 
@@ -956,21 +1015,22 @@ START_TEST(invalidation_fork_child_gdr_map_parent)
     if (pid == 0) {
         void *bar_ptr  = NULL;
         print_dbg("%s: attempting to gdr_map parent's pinned GPU memory\n", myname);
-        ck_assert_int_ne(gdr_map(g, mh, &bar_ptr, size), 0);
+        ASSERT_NEQ(gdr_map(g, mh, &bar_ptr, size), 0);
         print_dbg("%s: cannot do gdr_map as expected\n", myname);
     }
     else {
         int child_exit_status = -EINVAL;
-        ck_assert_int_eq(wait(&child_exit_status), pid);
-        ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
+        ASSERT(wait(&child_exit_status) == pid);
+        ASSERT_EQ(child_exit_status, EXIT_SUCCESS);
 
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
-        ASSERTDRV(cuMemFree(d_A));
+        ASSERTDRV(gpuMemFree(d_A));
         ASSERT_EQ(gdr_close(g), 0);
+
+        finalize_cuda(0);
     }
-    print_dbg("End invalidation_fork_child_gdr_map_parent\n");
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * This unit test verifies that cuMemFree of one process will not
@@ -990,19 +1050,17 @@ END_TEST
  *     does not implement correctly, it might invalidate parent's mapping as
  *     well.
  */
-START_TEST(invalidation_fork_map_and_free)
+BEGIN_GDRCOPY_TEST(invalidation_fork_map_and_free)
 {
     expecting_exception_signal = false;
-    FENCE();
-
-    print_dbg("Start invalidation_fork_map_and_free\n");
+    MB();
 
     int filedes_0[2];
     int filedes_1[2];
     int read_fd;
     int write_fd;
-    ck_assert_int_ne(pipe(filedes_0), -1);
-    ck_assert_int_ne(pipe(filedes_1), -1);
+    ASSERT_NEQ(pipe(filedes_0), -1);
+    ASSERT_NEQ(pipe(filedes_1), -1);
 
     srand(time(NULL));
 
@@ -1010,8 +1068,11 @@ START_TEST(invalidation_fork_map_and_free)
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
 
+    fflush(stdout);
+    fflush(stderr);
+
     pid_t pid = fork();
-    ck_assert(pid >= 0);
+    ASSERT(pid >= 0);
 
     myname = pid == 0 ? "child" : "parent";
 
@@ -1036,15 +1097,11 @@ START_TEST(invalidation_fork_map_and_free)
 
     int mydata = (rand() % 1000) + 1;
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -1055,7 +1112,7 @@ START_TEST(invalidation_fork_map_and_free)
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
 
     void *bar_ptr  = NULL;
@@ -1072,37 +1129,37 @@ START_TEST(invalidation_fork_map_and_free)
 
     if (pid == 0) {
         print_dbg("%s: calling cuMemFree\n", myname);
-        ASSERTDRV(cuMemFree(d_A));
+        ASSERTDRV(gpuMemFree(d_A));
 
         print_dbg("%s: signal parent that I have called cuMemFree\n", myname);
         int msg = 1;
-        ck_assert_int_eq(write(write_fd, &msg, sizeof(int)), sizeof(int));
+        ASSERT_EQ(write(write_fd, &msg, sizeof(int)), sizeof(int));
     }
     else {
         int cont = 0;
         do {
             print_dbg("%s: waiting for signal from child\n", myname);
-            ck_assert_int_eq(read(read_fd, &cont, sizeof(int)), sizeof(int));
+            ASSERT_EQ(read(read_fd, &cont, sizeof(int)), sizeof(int));
             print_dbg("%s: received cont signal %d from child\n", myname, cont);
         } while (cont == 0);
 
         print_dbg("%s: trying to read buf_ptr[0]\n", myname);
         int data_from_buf_ptr = buf_ptr[0];
         print_dbg("%s: read buf_ptr[0] get %d\n", myname, data_from_buf_ptr);
-        ck_assert_int_eq(data_from_buf_ptr, mydata);
+        ASSERT_EQ(data_from_buf_ptr, mydata);
     }
 
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
 
     if (pid > 0)
-        ASSERTDRV(cuMemFree(d_A));
+        ASSERTDRV(gpuMemFree(d_A));
 
     ASSERT_EQ(gdr_close(g), 0);
 
-    print_dbg("End invalidation_fork_map_and_free\n");
+    finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * Process A can intentionally share fd with Process B through unix socket.
@@ -1122,12 +1179,10 @@ END_TEST
  * 4.C Child: Attempt to do gdr_pin_buffer using this fd. gdrdrv should not
  *     allow it.
  */
-START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
+BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 {
     expecting_exception_signal = false;
-    FENCE();
-
-    print_dbg("Start invalidation_unix_sock_shared_fd_gdr_pin_buffer\n");
+    MB();
 
     pid_t pid;
     int pair[2];
@@ -1136,23 +1191,22 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
     const size_t _size = sizeof(int) * 16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
-    ck_assert_int_eq(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
+    ASSERT_EQ(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
+
+    fflush(stdout);
+    fflush(stderr);
 
     pid = fork();
-    ck_assert(pid >= 0);
+    ASSERT(pid >= 0);
     const char *myname = pid == 0 ? "child" : "parent";
 
     print_dbg("%s: Start\n", myname);
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     CUdeviceptr d_ptr = d_A;
 
@@ -1161,7 +1215,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 
         print_dbg("%s: Receiving fd from parent via unix socket\n", myname);
         fd = recvfd(pair[0]);
-        ck_assert(fd >= 0);
+        ASSERT(fd >= 0);
 
         print_dbg("%s: Got fd %d\n", myname, fd);
 
@@ -1172,7 +1226,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 
         print_dbg("%s: Trying to do gdr_pin_buffer with the received fd\n", myname);
         gdr_mh_t mh;
-        ck_assert_int_ne(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+        ASSERT_NEQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
         print_dbg("%s: Cannot do gdr_pin_buffer with the received fd as expected\n", myname);
     }
     else {
@@ -1186,17 +1240,17 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
         print_dbg("%s: Extracted fd from gdr_t got fd %d\n", myname, fd);
         
         print_dbg("%s: Sending fd to child via unix socket\n", myname);
-        ck_assert(sendfd(pair[1], fd) >= 0);
+        ASSERT(sendfd(pair[1], fd) >= 0);
 
         print_dbg("%s: Waiting for child to finish\n", myname);
         int child_exit_status = -EINVAL;
-        ck_assert_int_eq(wait(&child_exit_status), pid);
-        ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
+        ASSERT(wait(&child_exit_status) == pid);
+        ASSERT_EQ(child_exit_status, EXIT_SUCCESS);
     }
 
-    print_dbg("End invalidation_unix_sock_shared_fd_gdr_pin_buffer\n");
+    finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 /**
  * Process A can intentionally share fd with Process B through unix socket.
@@ -1217,19 +1271,17 @@ END_TEST
  * 4.C Child: Attempt to do gdr_map using this fd and handle. gdrdrv should not
  *     allow it.
  */
-START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
+BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 {
     expecting_exception_signal = false;
-    FENCE();
-
-    print_dbg("Start invalidation_unix_sock_shared_fd_gdr_map\n");
+    MB();
 
     int filedes_0[2];
     int filedes_1[2];
     int read_fd;
     int write_fd;
-    ck_assert_int_ne(pipe(filedes_0), -1);
-    ck_assert_int_ne(pipe(filedes_1), -1);
+    ASSERT_NEQ(pipe(filedes_0), -1);
+    ASSERT_NEQ(pipe(filedes_1), -1);
 
     pid_t pid;
     int pair[2];
@@ -1238,10 +1290,13 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
     const size_t _size = sizeof(int) * 16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
-    ck_assert_int_eq(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
+    ASSERT_EQ(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
+
+    fflush(stdout);
+    fflush(stderr);
 
     pid = fork();
-    ck_assert(pid >= 0);
+    ASSERT(pid >= 0);
     const char *myname = pid == 0 ? "child" : "parent";
 
     print_dbg("%s: Start\n", myname);
@@ -1262,15 +1317,11 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
         write_fd = filedes_1[1];
     }
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    init_cuda(0);
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     CUdeviceptr d_ptr = d_A;
 
@@ -1279,7 +1330,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 
         print_dbg("%s: Receiving fd from parent via unix socket\n", myname);
         fd = recvfd(pair[0]);
-        ck_assert(fd >= 0);
+        ASSERT(fd >= 0);
 
         print_dbg("%s: Got fd %d\n", myname, fd);
 
@@ -1290,7 +1341,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 
         print_dbg("%s: Receiving gdr_memh_t from parent\n", myname);
         gdr_memh_t memh;
-        ck_assert_int_eq(read(read_fd, &memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
+        ASSERT_EQ(read(read_fd, &memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
         print_dbg("%s: Got handle 0x%lx\n", myname, memh.handle);
 
         print_dbg("%s: Converting gdr_memh_t to gdr_mh_t\n", myname);
@@ -1299,7 +1350,7 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 
         print_dbg("%s: Attempting gdr_map\n", myname);
         void *bar_ptr  = NULL;
-        ck_assert_int_ne(gdr_map(g, mh, &bar_ptr, size), 0);
+        ASSERT_NEQ(gdr_map(g, mh, &bar_ptr, size), 0);
         print_dbg("%s: Cannot do gdr_map as expected\n", myname);
     }
     else {
@@ -1311,30 +1362,30 @@ START_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 
         print_dbg("%s: Calling gdr_pin_buffer\n", myname);
         gdr_mh_t mh;
-        ck_assert_int_eq(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+        ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
         ASSERT_NEQ(mh, null_mh);
 
         fd = g->fd;
         print_dbg("%s: Extracted fd from gdr_t got fd %d\n", myname, fd);
 
         print_dbg("%s: Sending fd to child via unix socket\n", myname);
-        ck_assert(sendfd(pair[1], fd) >= 0);
+        ASSERT(sendfd(pair[1], fd) >= 0);
 
         gdr_memh_t *memh = (gdr_memh_t *)mh.h;
         print_dbg("%s: Extracted gdr_memh_t from gdr_mh_t got handle 0x%lx\n", myname, memh->handle);
 
         print_dbg("%s: Sending gdr_memh_t to child\n", myname);
-        ck_assert_int_eq(write(write_fd, memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
+        ASSERT_EQ(write(write_fd, memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
 
         print_dbg("%s: Waiting for child to finish\n", myname);
         int child_exit_status = -EINVAL;
-        ck_assert_int_eq(wait(&child_exit_status), pid);
-        ck_assert_int_eq(child_exit_status, EXIT_SUCCESS);
+        ASSERT(wait(&child_exit_status) == pid);
+        ASSERT_EQ(child_exit_status, EXIT_SUCCESS);
     }
 
-    print_dbg("End invalidation_unix_sock_shared_fd_gdr_map\n");
+    finalize_cuda(0);
 }
-END_TEST
+END_GDRCOPY_TEST
 
 
 int main(int argc, char *argv[])
@@ -1344,8 +1395,7 @@ int main(int argc, char *argv[])
     while ((c = getopt(argc, argv, "h::v::")) != -1) {
         switch (c) {
             case 'v':
-                _print_dbg_msg = true;
-                print_dbg("Enable debug message\n");
+                gdrcopy::test::print_dbg_msg = true;
                 break;
             case 'h':
                 cout << "Usage: " << argv[0] << " [-v] [-h]" << endl;
@@ -1374,10 +1424,11 @@ int main(int argc, char *argv[])
     int nf;
 
     suite_add_tcase(s, tc_basic);
-	tcase_add_test(tc_basic, basic);
+    tcase_add_test(tc_basic, basic);
+    tcase_add_test(tc_basic, basic_unaligned_mapping);
 
     suite_add_tcase(s, tc_data_validation);
-	tcase_add_test(tc_data_validation, data_validation);
+    tcase_add_test(tc_data_validation, data_validation);
 
     suite_add_tcase(s, tc_invalidation);
     tcase_add_test(tc_invalidation, invalidation_access_after_gdr_close);
@@ -1389,6 +1440,10 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_invalidation, invalidation_fork_map_and_free);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map);
+
+    tcase_set_timeout(tc_basic, 60);
+    tcase_set_timeout(tc_data_validation, 60);
+    tcase_set_timeout(tc_invalidation, 180);
 
     srunner_run_all(sr, CK_ENV);
     nf = srunner_ntests_failed(sr);

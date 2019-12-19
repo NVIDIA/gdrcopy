@@ -12,7 +12,7 @@ LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64 -L $(GDRAPI_SRC)
 COMMONCFLAGS := -O2
 CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
-LIBS     := -lcudart -lcuda -lpthread -ldl -lgdrapi
+LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
 SRCS := copybw.cpp sanity.cpp copylat.cpp
 EXES := $(SRCS:.cpp=)
@@ -21,14 +21,15 @@ all: exes
 
 exes: $(EXES)
 
+common.o: common.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 copybw.o: copybw.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 sanity.o: sanity.cpp $(GDRAPI_INC)/gdrapi.h $(GDRAPI_SRC)/gdrapi_internal.h common.hpp
 copylat.o: copylat.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 
-copybw: copybw.o
+copybw: copybw.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
-sanity: sanity.o
+sanity: sanity.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) `pkg-config --libs check`
 
 copylat: copylat.o

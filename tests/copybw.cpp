@@ -26,13 +26,15 @@
 #include <stdio.h>
 #include <math.h>
 #include <iostream>
+#include <iomanip>
 #include <cuda.h>
-#include <cuda_runtime_api.h>
 
 using namespace std;
 
 #include "gdrapi.h"
 #include "common.hpp"
+
+using namespace gdrcopy::test;
 
 #define OUT cout
 //#define OUT TESTSTACK
@@ -82,7 +84,7 @@ main(int argc, char *argv[])
             exit(EXIT_FAILURE);
             break;
         default:
-            printf("ERROR: invalid option\n");
+            fprintf(stderr, "ERROR: invalid option\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -91,43 +93,58 @@ main(int argc, char *argv[])
         copy_size = _size;
 
     if (copy_offset % sizeof(uint32_t) != 0) {
-        printf("ERROR: offset must be multiple of 4 bytes\n");
+        fprintf(stderr, "ERROR: offset must be multiple of 4 bytes\n");
         exit(EXIT_FAILURE);
     }
 
     if (copy_offset + copy_size > _size) {
-        printf("ERROR: offset + copy size run past the end of the buffer\n");
+        fprintf(stderr, "ERROR: offset + copy size run past the end of the buffer\n");
         exit(EXIT_FAILURE);
     }
 
     size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
-    int n_devices = 0;
-    ASSERTRT(cudaGetDeviceCount(&n_devices));
+    ASSERTDRV(cuInit(0));
 
-    cudaDeviceProp prop;
+    int n_devices = 0;
+    ASSERTDRV(cuDeviceGetCount(&n_devices));
+
+    CUdevice dev;
     for (int n=0; n<n_devices; ++n) {
-        ASSERTRT(cudaGetDeviceProperties(&prop,n));
-        OUT << "GPU id:" << n << " name:" << prop.name 
-            << " PCI domain: " << prop.pciDomainID 
-            << " bus: " << prop.pciBusID 
-            << " device: " << prop.pciDeviceID << endl;
+        
+        char dev_name[256];
+        int dev_pci_domain_id;
+        int dev_pci_bus_id;
+        int dev_pci_device_id;
+
+        ASSERTDRV(cuDeviceGet(&dev, n));
+        ASSERTDRV(cuDeviceGetName(dev_name, sizeof(dev_name) / sizeof(dev_name[0]), dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_domain_id, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
+
+        OUT << "GPU id:" << n << "; name: " << dev_name 
+            << "; Bus id: "
+            << std::hex 
+            << std::setfill('0') << std::setw(4) << dev_pci_domain_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_bus_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_device_id
+            << std::dec
+            << endl;
     }
     OUT << "selecting device " << dev_id << endl;
-    ASSERTRT(cudaSetDevice(dev_id));
+    ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    CUcontext dev_ctx;
+    ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
+    ASSERTDRV(cuCtxSetCurrent(dev_ctx));
 
     OUT << "testing size: " << _size << endl;
     OUT << "rounded size: " << size << endl;
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
     OUT << "device ptr: " << hex << d_A << dec << endl;
-
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
 
     uint32_t *init_buf = NULL;
     init_buf = (uint32_t *)malloc(size);
@@ -210,7 +227,9 @@ main(int argc, char *argv[])
     OUT << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
 
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gpuMemFree(d_A));
+
+    ASSERTDRV(cuDevicePrimaryCtxRelease(dev));
 }
 
 /*

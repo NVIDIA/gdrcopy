@@ -22,87 +22,147 @@
 
 #pragma once
 
-#define ASSERT(x)                                                       \
-    do                                                                  \
-        {                                                               \
-            if (!(x))                                                   \
-                {                                                       \
-                    fprintf(stdout, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
-                    exit(EXIT_FAILURE);                                 \
-                }                                                       \
-        } while (0)
+#include <stdarg.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <cuda.h>
+#include <check.h>
+#include <map>
+#include <gdrapi.h>
 
-#define ASSERTDRV(stmt)				\
-    do                                          \
-        {                                       \
-            CUresult result = (stmt);           \
-            ASSERT(CUDA_SUCCESS == result);     \
-        } while (0)
+namespace gdrcopy {
+    namespace test {
+        extern std::map<CUdeviceptr, CUdeviceptr> _allocations;
 
-#define ASSERTRT(stmt)				\
-    do                                          \
-        {                                       \
-            cudaError_t result = (stmt);           \
-            ASSERT(cudaSuccess == result);     \
-        } while (0)
+        static inline CUresult gpuMemAlloc(CUdeviceptr *pptr, size_t psize, bool align_to_gpu_page = true, bool set_sync_memops = true)
+        {
+            CUresult ret = CUDA_SUCCESS;
+            CUdeviceptr ptr;
+            size_t size;
 
-static inline bool operator==(const gdr_mh_t &a, const gdr_mh_t &b) {
-    return a.h == b.h;
-}
+            if (align_to_gpu_page)
+                size = psize + GPU_PAGE_SIZE - 1;
+            else
+                size = psize;
 
-static const gdr_mh_t null_mh = {0};
+            ret = cuMemAlloc(&ptr, size);
+            if (ret != CUDA_SUCCESS)
+                return ret;
 
-#define ASSERT_EQ(P, V) ASSERT((P) == (V))
-#define CHECK_EQ(P, V) ASSERT((P) == (V))
-#define ASSERT_NEQ(P, V) ASSERT(!((P) == (V)))
-#define BREAK_IF_NEQ(P, V) if((P) != (V)) break
-#define BEGIN_CHECK do
-#define END_CHECK while(0)
-
-static int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
-{
-    int diff = 0;
-    if (size % 4 != 0U) {
-        printf("warning: buffer size %zu is not dword aligned, ignoring trailing bytes\n", size);
-        size -= (size % 4);
-    }
-    unsigned ndwords = size/sizeof(uint32_t);
-    for(unsigned  w = 0; w < ndwords; ++w) {
-        if (ref_buf[w] != buf[w]) {
-            if (!diff) {
-                printf("%10.10s %8.8s %8.8s\n", "word", "content", "expected");
+            if (set_sync_memops) {
+                unsigned int flag = 1;
+                ret = cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, ptr);
+                if (ret != CUDA_SUCCESS) {
+                    cuMemFree(ptr);
+                    return ret;
+                }
             }
-            if (diff < 10) {
-                printf("%10d %08x %08x\n", w, buf[w], ref_buf[w]);
-            }
-            ++diff;
+
+            if (align_to_gpu_page)
+                *pptr = (ptr + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+            else
+                *pptr = ptr;
+
+            // Record the actual pointer for doing gpuMemFree later.
+            _allocations[*pptr] = ptr;
+
+            return CUDA_SUCCESS;
         }
+
+        static inline CUresult gpuMemFree(CUdeviceptr pptr)
+        {
+            CUresult ret = CUDA_SUCCESS;
+            CUdeviceptr ptr;
+
+            if (_allocations.count(pptr) > 0) {
+                ptr = _allocations[pptr];
+                ret = cuMemFree(ptr);
+                if (ret == CUDA_SUCCESS)
+                    _allocations.erase(ptr);
+                return ret;
+            }
+            else
+                return CUDA_ERROR_INVALID_VALUE;
+        }
+
+        extern bool print_dbg_msg;
+
+        void print_dbg(const char* fmt, ...);
+
+        #define EXIT_WAIVED 2
+
+        extern const char *testname;
+
+        #define BEGIN_GDRCOPY_TEST(__testname)                                  \
+        START_TEST(__testname)                                                  \
+        testname = #__testname;                                                 \
+        print_dbg("&&&& RUNNING " # __testname "\n");                           \
+        fflush(stdout);                                                         \
+        fflush(stderr);                                                         \
+        pid_t __pid = fork();                                                   \
+        if (__pid < 0) {                                                        \
+            print_dbg("Cannot fork\n");                                         \
+            print_dbg("&&&& FAILED " # __testname "\n");                        \
+            exit(EXIT_FAILURE);                                                 \
+        }                                                                       \
+        if (__pid == 0)
+
+        #define END_GDRCOPY_TEST                                                \
+        if (__pid) {                                                            \
+            int __child_exit_status = -EINVAL;                                  \
+            if (waitpid(__pid, &__child_exit_status, 0) == -1) {                \
+                print_dbg("waitpid returned an error\n");                       \
+                print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);         \
+                exit(EXIT_FAILURE);                                             \
+            }                                                                   \
+            if (__child_exit_status == EXIT_SUCCESS)                            \
+                print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);         \
+            else if (__child_exit_status == EXIT_WAIVED)                        \
+                print_dbg("&&&& WAIVED %s\n", gdrcopy::test::testname);         \
+            else                                                                \
+                print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);         \
+        }                                                                       \
+        END_TEST
+
+        #define ASSERT(x)                                                       \
+            do                                                                  \
+                {                                                               \
+                    if (!(x))                                                   \
+                        {                                                       \
+                            fprintf(stderr, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
+                            exit(EXIT_FAILURE);                                 \
+                        }                                                       \
+                } while (0)
+
+        #define ASSERTDRV(stmt)				\
+            do                                          \
+                {                                       \
+                    CUresult result = (stmt);           \
+                    if (result != CUDA_SUCCESS) {       \
+                        const char *_err_name;          \
+                        cuGetErrorName(result, &_err_name); \
+                        fprintf(stderr, "CUDA error: %s\n", _err_name);   \
+                    }                                   \
+                    ASSERT(CUDA_SUCCESS == result);     \
+                } while (0)
+
+        static inline bool operator==(const gdr_mh_t &a, const gdr_mh_t &b) {
+            return a.h == b.h;
+        }
+
+        static const gdr_mh_t null_mh = {0};
+
+        #define ASSERT_EQ(P, V) ASSERT((P) == (V))
+        #define CHECK_EQ(P, V) ASSERT((P) == (V))
+        #define ASSERT_NEQ(P, V) ASSERT(!((P) == (V)))
+        #define BREAK_IF_NEQ(P, V) if((P) != (V)) break
+        #define BEGIN_CHECK do
+        #define END_CHECK while(0)
+
+        int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size);
+
+        void init_hbuf_walking_bit(uint32_t *h_buf, size_t size);
+
+        void init_hbuf_linear_ramp(uint32_t *h_buf, size_t size);
     }
-    if (diff) {
-        printf("check error: %d different dwords out of %d\n", diff, ndwords);
-    }
-    return diff;
 }
-
-static void init_hbuf_walking_bit(uint32_t *h_buf, size_t size)
-{
-    uint32_t base_value = 0x3F4C5E6A; // 0xa55ad33d;
-    unsigned w;
-    ASSERT_NEQ(h_buf, (void*)0);
-    ASSERT_EQ(size % 4, 0U);
-    //OUT << "filling mem with walking bit " << endl;
-    for(w = 0; w<size/sizeof(uint32_t); ++w)
-        h_buf[w] = base_value ^ (1<< (w%32));
-}
-
-static void init_hbuf_linear_ramp(uint32_t *h_buf, size_t size)
-{
-    uint32_t base_value = 0x3F4C5E6A; // 0xa55ad33d;
-    unsigned w;
-    ASSERT_NEQ(h_buf, (void*)0);
-    ASSERT_EQ(size % 4, 0U);
-    //OUT << "filling mem with walking bit " << endl;
-    for(w = 0; w<size/sizeof(uint32_t); ++w)
-        h_buf[w] = w;
-}
-

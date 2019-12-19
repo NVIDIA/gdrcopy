@@ -37,6 +37,13 @@
 #include <linux/timer.h>
 #include <linux/sched.h>
 
+//-----------------------------------------------------------------------------
+
+static int gdrdrv_major = 0;
+static int gdrdrv_cpu_can_cache_gpu_mappings = 0;
+
+//-----------------------------------------------------------------------------
+
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
 /**
  * This API is available after Linux kernel 2.6.32
@@ -99,7 +106,7 @@ static inline int gdr_pfn_is_ram(unsigned long pfn)
 #else
     unsigned long start = pfn << PAGE_SHIFT;
     unsigned long mask_47bits = (1UL<<47)-1;
-    return 0 == (start & ~mask_47bits);
+    return gdrdrv_cpu_can_cache_gpu_mappings && (0 == (start & ~mask_47bits));
 #endif
 }
 
@@ -174,7 +181,7 @@ static int info_enabled = 0;
 MODULE_AUTHOR("drossetti@nvidia.com");
 MODULE_LICENSE("MIT");
 MODULE_DESCRIPTION("GDRCopy kernel-mode driver");
-MODULE_VERSION("1.1");
+MODULE_VERSION(GDRDRV_VERSION_STRING);
 module_param(dbg_enabled, int, 0000);
 MODULE_PARM_DESC(dbg_enabled, "enable debug tracing");
 module_param(info_enabled, int, 0000);
@@ -272,11 +279,6 @@ struct gdr_info {
     int                     next_handle_overflow;
 };
 typedef struct gdr_info gdr_info_t;
-
-//-----------------------------------------------------------------------------
-
-static int gdrdrv_major = 0;
-static int gdrdrv_cpu_can_cache_gpu_mappings = 0;
 
 //-----------------------------------------------------------------------------
 

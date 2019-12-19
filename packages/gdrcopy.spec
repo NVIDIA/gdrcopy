@@ -1,4 +1,4 @@
-%{!?_release: %define _release 2}
+%{!?_release: %define _release 3}
 %{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?GDR_VERSION: %define GDR_VERSION 2.0}
 %{!?KVERSION: %define KVERSION %(uname -r)}
@@ -76,17 +76,19 @@ fi
 
 /sbin/chkconfig --add gdrcopy
 
-/usr/bin/systemctl start gdrcopy
+service gdrcopy start
 
 %preun %{kmod}
-/usr/bin/systemctl stop gdrcopy
-%{MODPROBE} -rq gdrdrv
+service gdrcopy stop||:
+%{MODPROBE} -rq gdrdrv||:
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
    true
 fi              
 
 %postun %{kmod}
-/usr/bin/systemctl daemon-reload
+if [ -e /usr/bin/systemctl ]; then
+    /usr/bin/systemctl daemon-reload
+fi
 
 
 %clean
@@ -114,6 +116,18 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Mon Sep 16 2019 Pak Markthub <pmarkthub@nvidia.com> 2.0-3
+- Harden security in gdrdrv.
+- Enable cached mappings in POWER9.
+- Improve copy performance with unrolling in POWERPC.
+- Creates _sanity_ unit test for testing the functionality and security.
+- Consolidate basic and _validate_ into sanity unit test.
+- Introduce compile time and runtime version checking in libgdrapi.
+- Improve rpm packaging.
+- Introduce deb packaging for the userspace library and the applications.
+- Introduce dkms packaging for the gdrdrv driver.
+- Rename gdr_copy_from/to_bar to gdr_copy_from/to_mapping.
+- Update README
 * Thu Jul 26 2018 Davide Rossetti <davide.rossetti@gmail.com> 1.4-2
 - bumped minor version
 * Fri Jun 29 2018 Davide Rossetti <davide.rossetti@gmail.com> 1.3-2
@@ -123,3 +137,4 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 - add basic test
 * Thu Sep 15 2016 Davide Rossetti <davide.rossetti@gmail.com> 1.2-1
 - First version of RPM spec
+
