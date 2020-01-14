@@ -47,7 +47,7 @@ using namespace gdrcopy::test;
 int num_write_iters = 10000;
 int num_read_iters  = 100;
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     size_t _size = 128*1024;
     size_t copy_size = 0;
@@ -230,6 +230,8 @@ main(int argc, char *argv[])
     ASSERTDRV(gpuMemFree(d_A));
 
     ASSERTDRV(cuDevicePrimaryCtxRelease(dev));
+
+    return 0;
 }
 
 /*
