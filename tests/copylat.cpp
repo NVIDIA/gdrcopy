@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -44,9 +44,6 @@ using namespace gdrcopy::test;
 #else
 #define FENCE() asm volatile("":::"memory")
 #endif
-
-#define OUT cout
-//#define OUT TESTSTACK
 
 //#define MYCLOCK CLOCK_REALTIME
 //#define MYCLOCK CLOCK_RAW_MONOTONIC
@@ -118,16 +115,16 @@ int main(int argc, char *argv[])
         ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
         ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
 
-        OUT << "GPU id:" << n << "; name: " << dev_name 
-            << "; Bus id: "
-            << std::hex 
-            << std::setfill('0') << std::setw(4) << dev_pci_domain_id
-            << ":" << std::setfill('0') << std::setw(2) << dev_pci_bus_id
-            << ":" << std::setfill('0') << std::setw(2) << dev_pci_device_id
-            << std::dec
-            << endl;
+        cout  << "GPU id:" << n << "; name: " << dev_name 
+              << "; Bus id: "
+              << std::hex 
+              << std::setfill('0') << std::setw(4) << dev_pci_domain_id
+              << ":" << std::setfill('0') << std::setw(2) << dev_pci_bus_id
+              << ":" << std::setfill('0') << std::setw(2) << dev_pci_device_id
+              << std::dec
+              << endl;
     }
-    OUT << "selecting device " << dev_id << endl;
+    cout << "selecting device " << dev_id << endl;
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
     CUcontext dev_ctx;
@@ -136,8 +133,8 @@ int main(int argc, char *argv[])
 
     CUdeviceptr d_A;
     ASSERTDRV(cuMemAlloc(&d_A, size));
-    OUT << "device ptr: 0x" << hex << d_A << dec << endl;
-    OUT << "allocated size: " << size << endl;
+    cout << "device ptr: 0x" << hex << d_A << dec << endl;
+    cout << "allocated size: " << size << endl;
 
     unsigned int flag = 1;
     ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
@@ -151,8 +148,8 @@ int main(int argc, char *argv[])
     init_hbuf_walking_bit(init_buf, size);
 
     if (do_cumemcpy) {
-        OUT << endl;
-        OUT << "cuMemcpy_H2D num iters for each size: " << num_write_iters << endl;
+        cout << endl;
+        cout << "cuMemcpy_H2D num iters for each size: " << num_write_iters << endl;
         printf("Test \t\t Size(B) \t Avg.Time(us)\n");
         BEGIN_CHECK {
             // cuMemcpy H2D benchmark
@@ -170,8 +167,8 @@ int main(int argc, char *argv[])
             }
         } END_CHECK;
 
-        OUT << endl;
-        OUT << "cuMemcpy_D2H num iters for each size: " << num_read_iters << endl;
+        cout << endl;
+        cout << "cuMemcpy_D2H num iters for each size: " << num_read_iters << endl;
         printf("Test \t\t Size(B) \t Avg.Time(us)\n");
         BEGIN_CHECK {
             // cuMemcpy D2H benchmark
@@ -189,10 +186,10 @@ int main(int argc, char *argv[])
             }
         } END_CHECK;
 
-        OUT << endl;
+        cout << endl;
     }
 
-    OUT << endl;
+    cout << endl;
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -206,28 +203,28 @@ int main(int argc, char *argv[])
 
         void *map_d_ptr  = NULL;
         ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, size), 0);
-        OUT << "map_d_ptr: " << map_d_ptr << endl;
+        cout << "map_d_ptr: " << map_d_ptr << endl;
 
         gdr_info_t info;
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-        OUT << "info.va: " << hex << info.va << dec << endl;
-        OUT << "info.mapped_size: " << info.mapped_size << endl;
-        OUT << "info.page_size: " << info.page_size << endl;
-        OUT << "info.mapped: " << info.mapped << endl;
-        OUT << "info.wc_mapping: " << info.wc_mapping << endl;
+        cout << "info.va: " << hex << info.va << dec << endl;
+        cout << "info.mapped_size: " << info.mapped_size << endl;
+        cout << "info.page_size: " << info.page_size << endl;
+        cout << "info.mapped: " << info.mapped << endl;
+        cout << "info.wc_mapping: " << info.wc_mapping << endl;
 
         // remember that mappings start on a 64KB boundary, so let's
         // calculate the offset from the head of the mapping to the
         // beginning of the buffer
         int off = info.va - d_A;
-        OUT << "page offset: " << off << endl;
+        cout << "page offset: " << off << endl;
 
         uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
-        OUT << "user-space pointer: " << buf_ptr << endl;
+        cout << "user-space pointer: " << buf_ptr << endl;
 
         // gdr_copy H2D benchmark
-        OUT << endl;
-        OUT << "gdrcopy_H2D num iters for each size: " << num_write_iters << endl;
+        cout << endl;
+        cout << "gdrcopy_H2D num iters for each size: " << num_write_iters << endl;
         printf("Test \t\t Size(B) \t Avg.Time(us)\n");
         copy_size = 1;
         while (copy_size <= size) {
@@ -247,8 +244,8 @@ int main(int argc, char *argv[])
         FENCE();
 
         // gdr_copy D2H benchmark
-        OUT << endl;
-        OUT << "gdrcopy_D2H num iters for each size: " << num_read_iters << endl;
+        cout << endl;
+        cout << "gdrcopy_D2H num iters for each size: " << num_read_iters << endl;
         printf("Test \t\t Size(B) \t Avg.Time(us)\n");
         copy_size = 1;
         while (copy_size <= size) {
@@ -262,14 +259,14 @@ int main(int argc, char *argv[])
             copy_size <<= 1;
         }
 
-        OUT << "unmapping buffer" << endl;
+        cout << "unmapping buffer" << endl;
         ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, size), 0);
 
-        OUT << "unpinning buffer" << endl;
+        cout << "unpinning buffer" << endl;
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     } END_CHECK;
 
-    OUT << "closing gdrdrv" << endl;
+    cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
 
     ASSERTDRV(cuMemFree(d_A));
