@@ -123,6 +123,80 @@ BAR1 read BW: 1.50172MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
+
+$ copylat
+GPU id:0; name: Tesla P100-PCIE-16GB; Bus id: 0000:09:00
+selecting device 0
+device ptr: 0x7f6aca800000
+allocated size: 16777216
+
+map_d_ptr: 0x7f6ae5000000
+info.va: 7f6aca800000
+info.mapped_size: 16777216
+info.page_size: 65536
+info.mapped: 1
+info.wc_mapping: 1
+page offset: 0
+user-space pointer: 0x7f6ae5000000
+
+gdrcopy_H2D num iters for each size: 10000
+Test             Size(B)         Avg.Time(us)
+gdrcopy_H2D             1             1.1117
+gdrcopy_H2D             2             1.0974
+gdrcopy_H2D             4             1.1112
+gdrcopy_H2D             8             1.0932
+gdrcopy_H2D            16             1.1355
+gdrcopy_H2D            32             1.1002
+gdrcopy_H2D            64             1.0896
+gdrcopy_H2D           128             1.1041
+gdrcopy_H2D           256             1.1045
+gdrcopy_H2D           512             1.1388
+gdrcopy_H2D          1024             1.1828
+gdrcopy_H2D          2048             1.3386
+gdrcopy_H2D          4096             1.5467
+gdrcopy_H2D          8192             1.9240
+gdrcopy_H2D         16384             2.7284
+gdrcopy_H2D         32768             4.3212
+gdrcopy_H2D         65536             7.5466
+gdrcopy_H2D        131072            13.9201
+gdrcopy_H2D        262144            26.7436
+gdrcopy_H2D        524288            52.4096
+gdrcopy_H2D       1048576           103.6885
+gdrcopy_H2D       2097152           206.1889
+gdrcopy_H2D       4194304           411.6814
+gdrcopy_H2D       8388608           823.6871
+gdrcopy_H2D      16777216          1646.9929
+
+gdrcopy_D2H num iters for each size: 100
+Test             Size(B)         Avg.Time(us)
+gdrcopy_D2H             1             1.1127
+gdrcopy_D2H             2             1.9328
+gdrcopy_D2H             4             1.7850
+gdrcopy_D2H             8             1.7876
+gdrcopy_D2H            16             0.8988
+gdrcopy_D2H            32             1.7585
+gdrcopy_D2H            64             3.1707
+gdrcopy_D2H           128             3.5372
+gdrcopy_D2H           256             3.0572
+gdrcopy_D2H           512             3.5334
+gdrcopy_D2H          1024             3.8761
+gdrcopy_D2H          2048             5.6613
+gdrcopy_D2H          4096             8.9801
+gdrcopy_D2H          8192            16.2939
+gdrcopy_D2H         16384            30.6305
+gdrcopy_D2H         32768            63.4093
+gdrcopy_D2H         65536           119.1810
+gdrcopy_D2H        131072           241.8435
+gdrcopy_D2H        262144           521.4625
+gdrcopy_D2H        524288          1035.5491
+gdrcopy_D2H       1048576          2074.2087
+gdrcopy_D2H       2097152          4140.2264
+gdrcopy_D2H       4194304          8287.9000
+gdrcopy_D2H       8388608         19700.4252
+gdrcopy_D2H      16777216         39434.4365
+unmapping buffer
+unpinning buffer
+closing gdrdrv
 ```
 
 ## NUMA effects
