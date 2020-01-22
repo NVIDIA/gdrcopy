@@ -176,7 +176,7 @@ BEGIN_GDRCOPY_TEST(basic)
     expecting_exception_signal = false;
     MB();
 
-	init_cuda(0);
+    init_cuda(0);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -200,7 +200,7 @@ BEGIN_GDRCOPY_TEST(basic)
 
     ASSERTDRV(gpuMemFree(d_A));
 
-	finalize_cuda(0);
+    finalize_cuda(0);
 }
 END_GDRCOPY_TEST
 
@@ -209,7 +209,7 @@ BEGIN_GDRCOPY_TEST(basic_with_tokens)
     expecting_exception_signal = false;
     MB();
 
-	init_cuda(0);
+    init_cuda(0);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -235,7 +235,7 @@ BEGIN_GDRCOPY_TEST(basic_with_tokens)
 
     ASSERTDRV(gpuMemFree(d_A));
 
-	finalize_cuda(0);
+    finalize_cuda(0);
 }
 END_GDRCOPY_TEST
 
@@ -250,7 +250,7 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
     expecting_exception_signal = false;
     MB();
 
-	init_cuda(0);
+    init_cuda(0);
 
     // Allocate for a few bytes so that cuMemAlloc returns an unaligned address
     // in the next allocation. This behavior is observed in GPU Driver 410 and
@@ -336,7 +336,7 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
 
     ASSERTDRV(gpuMemFree(d_A));
 
-	finalize_cuda(0);
+    finalize_cuda(0);
 }
 END_GDRCOPY_TEST
 
@@ -345,7 +345,7 @@ BEGIN_GDRCOPY_TEST(data_validation)
     expecting_exception_signal = false;
     MB();
 
-	init_cuda(0);
+    init_cuda(0);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -437,7 +437,7 @@ BEGIN_GDRCOPY_TEST(data_validation)
 
     ASSERTDRV(gpuMemFree(d_A));
 
-	finalize_cuda(0);
+    finalize_cuda(0);
 }
 END_GDRCOPY_TEST
 
@@ -469,7 +469,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
 
     int mydata = (rand() % 1000) + 1;
 
-	init_cuda(0);
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -502,7 +502,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
 
     print_dbg("Calling gdr_close\n");
     ASSERT_EQ(gdr_close(g), 0);
-    
+
     print_dbg("Trying to read buf_ptr[0] after gdr_close\n");
     expecting_exception_signal = true;
     MB();
@@ -512,8 +512,8 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
     MB();
 
     ASSERT_NEQ(data_from_buf_ptr, mydata);
-    
-	finalize_cuda(0);
+
+    finalize_cuda(0);
 }
 END_GDRCOPY_TEST
 
@@ -545,7 +545,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
 
     int mydata = (rand() % 1000) + 1;
 
-	init_cuda(0);
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -578,7 +578,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
 
     print_dbg("Calling cuMemFree\n");
     ASSERTDRV(gpuMemFree(d_A));
-    
+
     print_dbg("Trying to read buf_ptr[0] after cuMemFree\n");
     expecting_exception_signal = true;
     MB();
@@ -588,7 +588,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
     MB();
 
     ASSERT_NEQ(data_from_buf_ptr, mydata);
-    
+
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
@@ -674,7 +674,7 @@ BEGIN_GDRCOPY_TEST(invalidation_two_mappings)
     ASSERT_EQ(buf_ptr[1][0], mydata + 1);
 
     ASSERTDRV(gpuMemFree(d_A[1]));
-    
+
     for (int i = 0; i < 2; ++i) {
         ASSERT_EQ(gdr_unmap(g, mh[i], bar_ptr[i], size), 0);
         ASSERT_EQ(gdr_unpin_buffer(g, mh[i]), 0);
@@ -1273,7 +1273,7 @@ BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 
         fd = g->fd;
         print_dbg("%s: Extracted fd from gdr_t got fd %d\n", myname, fd);
-        
+
         print_dbg("%s: Sending fd to child via unix socket\n", myname);
         ASSERT(sendfd(pair[1], fd) >= 0);
 
