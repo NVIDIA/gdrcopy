@@ -222,31 +222,32 @@ int main(int argc, char *argv[])
         uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
         cout << "user-space pointer: " << buf_ptr << endl;
 
-        // gdr_copy H2D benchmark
+        // gdr_copy_to_mapping benchmark
         cout << endl;
-        cout << "gdrcopy_H2D num iters for each size: " << num_write_iters << endl;
-        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
+        cout << "gdr_copy_to_mapping num iters for each size: " << num_write_iters << endl;
+        printf("Test \t\t\t Size(B) \t Avg.Time(us)\n");
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
-            uint32_t dat;
+            uint8_t dat;
             clock_gettime(MYCLOCK, &beg);
             for (iter = 0; iter < num_write_iters; ++iter) {
                 gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
-                dat = *(volatile uint32_t *)buf_ptr;
+                // ensure that the data reaches the GPU's point of consistency
+                dat = *(volatile uint8_t *)buf_ptr;
             }
             clock_gettime(MYCLOCK, &end);
             lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
-            printf("gdrcopy_H2D \t %8zu \t %11.4f\n", copy_size, lat_us);
+            printf("gdr_copy_to_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
             copy_size <<= 1;
         }
 
         FENCE();
 
-        // gdr_copy D2H benchmark
+        // gdr_copy_from_mapping benchmark
         cout << endl;
-        cout << "gdrcopy_D2H num iters for each size: " << num_read_iters << endl;
-        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
+        cout << "gdr_copy_from_mapping num iters for each size: " << num_read_iters << endl;
+        printf("Test \t\t\t Size(B) \t Avg.Time(us)\n");
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
@@ -255,7 +256,7 @@ int main(int argc, char *argv[])
                 gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
             clock_gettime(MYCLOCK, &end);
             lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
-            printf("gdrcopy_D2H \t %8zu \t %11.4f\n", copy_size, lat_us);
+            printf("gdr_copy_from_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
             copy_size <<= 1;
         }
 
