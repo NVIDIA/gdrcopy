@@ -36,13 +36,6 @@ using namespace std;
 
 using namespace gdrcopy::test;
 
-#define OUT cout
-//#define OUT TESTSTACK
-
-//#define MYCLOCK CLOCK_REALTIME
-//#define MYCLOCK CLOCK_RAW_MONOTONIC
-#define MYCLOCK CLOCK_MONOTONIC
-
 // manually tuned...
 int num_write_iters = 10000;
 int num_read_iters  = 100;
@@ -123,7 +116,7 @@ int main(int argc, char *argv[])
         ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
         ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
 
-        OUT << "GPU id:" << n << "; name: " << dev_name 
+        cout << "GPU id:" << n << "; name: " << dev_name 
             << "; Bus id: "
             << std::hex 
             << std::setfill('0') << std::setw(4) << dev_pci_domain_id
@@ -132,19 +125,19 @@ int main(int argc, char *argv[])
             << std::dec
             << endl;
     }
-    OUT << "selecting device " << dev_id << endl;
+    cout << "selecting device " << dev_id << endl;
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
     CUcontext dev_ctx;
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
     ASSERTDRV(cuCtxSetCurrent(dev_ctx));
 
-    OUT << "testing size: " << _size << endl;
-    OUT << "rounded size: " << size << endl;
+    cout << "testing size: " << _size << endl;
+    cout << "rounded size: " << size << endl;
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
-    OUT << "device ptr: " << hex << d_A << dec << endl;
+    cout << "device ptr: " << hex << d_A << dec << endl;
 
     uint32_t *init_buf = NULL;
     init_buf = (uint32_t *)malloc(size);
@@ -163,24 +156,24 @@ int main(int argc, char *argv[])
 
         void *map_d_ptr  = NULL;
         ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, size), 0);
-        OUT << "map_d_ptr: " << map_d_ptr << endl;
+        cout << "map_d_ptr: " << map_d_ptr << endl;
 
         gdr_info_t info;
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-        OUT << "info.va: " << hex << info.va << dec << endl;
-        OUT << "info.mapped_size: " << info.mapped_size << endl;
-        OUT << "info.page_size: " << info.page_size << endl;
-        OUT << "info.mapped: " << info.mapped << endl;
-        OUT << "info.wc_mapping: " << info.wc_mapping << endl;
+        cout << "info.va: " << hex << info.va << dec << endl;
+        cout << "info.mapped_size: " << info.mapped_size << endl;
+        cout << "info.page_size: " << info.page_size << endl;
+        cout << "info.mapped: " << info.mapped << endl;
+        cout << "info.wc_mapping: " << info.wc_mapping << endl;
 
         // remember that mappings start on a 64KB boundary, so let's
         // calculate the offset from the head of the mapping to the
         // beginning of the buffer
         int off = info.va - d_A;
-        OUT << "page offset: " << off << endl;
+        cout << "page offset: " << off << endl;
 
         uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
-        OUT << "user-space pointer:" << buf_ptr << endl;
+        cout << "user-space pointer:" << buf_ptr << endl;
 
         // copy to GPU benchmark
         cout << "writing test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_write_iters << endl;
@@ -217,14 +210,14 @@ int main(int argc, char *argv[])
             cout << "read BW: " << roMBps << "MB/s" << endl;
         }
 
-        OUT << "unmapping buffer" << endl;
+        cout << "unmapping buffer" << endl;
         ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, size), 0);
 
-        OUT << "unpinning buffer" << endl;
+        cout << "unpinning buffer" << endl;
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     } END_CHECK;
 
-    OUT << "closing gdrdrv" << endl;
+    cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
 
     ASSERTDRV(gpuMemFree(d_A));

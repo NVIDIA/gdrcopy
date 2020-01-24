@@ -37,18 +37,6 @@ using namespace std;
 
 using namespace gdrcopy::test;
 
-#if defined(GDRAPI_X86)
-#define FENCE() asm volatile("mfence":::"memory")
-#elif defined(GDRAPI_POWER)
-#define FENCE() asm volatile("sync":::"memory")
-#else
-#define FENCE() asm volatile("":::"memory")
-#endif
-
-//#define MYCLOCK CLOCK_REALTIME
-//#define MYCLOCK CLOCK_RAW_MONOTONIC
-#define MYCLOCK CLOCK_MONOTONIC
-
 // manually tuned...
 int num_write_iters = 10000;
 int num_read_iters = 100;
@@ -242,7 +230,7 @@ int main(int argc, char *argv[])
             copy_size <<= 1;
         }
 
-        FENCE();
+        MB();
 
         // gdr_copy_from_mapping benchmark
         cout << endl;
