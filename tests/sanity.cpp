@@ -176,7 +176,7 @@ BEGIN_GDRCOPY_TEST(basic)
     expecting_exception_signal = false;
     MB();
 
-	init_cuda(0);
+    init_cuda(0);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -200,7 +200,42 @@ BEGIN_GDRCOPY_TEST(basic)
 
     ASSERTDRV(gpuMemFree(d_A));
 
-	finalize_cuda(0);
+    finalize_cuda(0);
+}
+END_GDRCOPY_TEST
+
+BEGIN_GDRCOPY_TEST(basic_with_tokens)
+{
+    expecting_exception_signal = false;
+    MB();
+
+    init_cuda(0);
+
+    const size_t _size = 256*1024+16;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    print_dbg("buffer size: %zu\n", size);
+
+    CUdeviceptr d_A;
+    CUDA_POINTER_ATTRIBUTE_P2P_TOKENS tokens = {0,0};
+
+    ASSERTDRV(gpuMemAlloc(&d_A, size));
+    ASSERTDRV(cuPointerGetAttribute(&tokens, CU_POINTER_ATTRIBUTE_P2P_TOKENS, d_A));
+
+    gdr_t g = gdr_open();
+    ASSERT_NEQ(g, (void*)0);
+
+    gdr_mh_t mh = null_mh;
+    CUdeviceptr d_ptr = d_A;
+
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, tokens.p2pToken, tokens.vaSpaceToken, &mh), 0);
+    ASSERT_NEQ(mh, null_mh);
+    ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+    ASSERT_EQ(gdr_close(g), 0);
+
+    ASSERTDRV(gpuMemFree(d_A));
+
+    finalize_cuda(0);
 }
 END_GDRCOPY_TEST
 
@@ -215,7 +250,7 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
     expecting_exception_signal = false;
     MB();
 
-	init_cuda(0);
+    init_cuda(0);
 
     // Allocate for a few bytes so that cuMemAlloc returns an unaligned address
     // in the next allocation. This behavior is observed in GPU Driver 410 and
@@ -301,7 +336,7 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
 
     ASSERTDRV(gpuMemFree(d_A));
 
-	finalize_cuda(0);
+    finalize_cuda(0);
 }
 END_GDRCOPY_TEST
 
@@ -310,7 +345,7 @@ BEGIN_GDRCOPY_TEST(data_validation)
     expecting_exception_signal = false;
     MB();
 
-	init_cuda(0);
+    init_cuda(0);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -402,7 +437,7 @@ BEGIN_GDRCOPY_TEST(data_validation)
 
     ASSERTDRV(gpuMemFree(d_A));
 
-	finalize_cuda(0);
+    finalize_cuda(0);
 }
 END_GDRCOPY_TEST
 
@@ -434,7 +469,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
 
     int mydata = (rand() % 1000) + 1;
 
-	init_cuda(0);
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -467,7 +502,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
 
     print_dbg("Calling gdr_close\n");
     ASSERT_EQ(gdr_close(g), 0);
-    
+
     print_dbg("Trying to read buf_ptr[0] after gdr_close\n");
     expecting_exception_signal = true;
     MB();
@@ -477,8 +512,8 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
     MB();
 
     ASSERT_NEQ(data_from_buf_ptr, mydata);
-    
-	finalize_cuda(0);
+
+    finalize_cuda(0);
 }
 END_GDRCOPY_TEST
 
@@ -510,7 +545,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
 
     int mydata = (rand() % 1000) + 1;
 
-	init_cuda(0);
+    init_cuda(0);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -543,7 +578,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
 
     print_dbg("Calling cuMemFree\n");
     ASSERTDRV(gpuMemFree(d_A));
-    
+
     print_dbg("Trying to read buf_ptr[0] after cuMemFree\n");
     expecting_exception_signal = true;
     MB();
@@ -553,7 +588,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
     MB();
 
     ASSERT_NEQ(data_from_buf_ptr, mydata);
-    
+
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
@@ -639,7 +674,7 @@ BEGIN_GDRCOPY_TEST(invalidation_two_mappings)
     ASSERT_EQ(buf_ptr[1][0], mydata + 1);
 
     ASSERTDRV(gpuMemFree(d_A[1]));
-    
+
     for (int i = 0; i < 2; ++i) {
         ASSERT_EQ(gdr_unmap(g, mh[i], bar_ptr[i], size), 0);
         ASSERT_EQ(gdr_unpin_buffer(g, mh[i]), 0);
@@ -1238,7 +1273,7 @@ BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 
         fd = g->fd;
         print_dbg("%s: Extracted fd from gdr_t got fd %d\n", myname, fd);
-        
+
         print_dbg("%s: Sending fd to child via unix socket\n", myname);
         ASSERT(sendfd(pair[1], fd) >= 0);
 
@@ -1387,6 +1422,99 @@ BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_map)
 }
 END_GDRCOPY_TEST
 
+/**
+ * Although the use of P2P tokens has been marked as depricated, CUDA still
+ * supports it.  This unit test ensures that Process A cannot access GPU memory
+ * of Process B by using tokens, which can be bruteforcedly generated.
+ *
+ * Step:
+ * 1. Fork the process
+ *
+ * 2.P Parent: Allocate GPU memory and get tokens.
+ * 3.P Parent: Send the cuMemAlloc'd ptr and the tokens to Child.
+ * 4.P Parent: Waiting for Child to exit.
+ *
+ * 2.C Child: Waiting for ptr and tokens from Parent
+ * 3.C Child: Attempt gdr_pin_buffer with the ptr and tokens. We expect that
+ *     gdr_pin_buffer would fail
+ */
+BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
+{
+    expecting_exception_signal = false;
+    MB();
+
+    int filedes_0[2];
+    int filedes_1[2];
+    int read_fd;
+    int write_fd;
+    ASSERT_NEQ(pipe(filedes_0), -1);
+    ASSERT_NEQ(pipe(filedes_1), -1);
+
+    const size_t _size = sizeof(int) * 16;
+    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const char *myname;
+
+    fflush(stdout);
+    fflush(stderr);
+
+    CUdeviceptr d_A;
+    CUDA_POINTER_ATTRIBUTE_P2P_TOKENS tokens = {0,0};
+
+    pid_t pid = fork();
+    ASSERT(pid >= 0);
+
+    myname = pid == 0 ? "child" : "parent";
+
+    print_dbg("%s: Start\n", myname);
+
+    if (pid == 0) {
+        close(filedes_0[0]);
+        close(filedes_1[1]);
+
+        read_fd = filedes_1[0];
+        write_fd = filedes_0[1];
+
+        gdr_t g = gdr_open();
+        ASSERT_NEQ(g, (void*)0);
+
+        ASSERT_EQ(read(read_fd, &d_A, sizeof(CUdeviceptr)), sizeof(CUdeviceptr));
+        ASSERT_EQ(read(read_fd, &tokens, sizeof(CUDA_POINTER_ATTRIBUTE_P2P_TOKENS)), sizeof(CUDA_POINTER_ATTRIBUTE_P2P_TOKENS));
+
+        print_dbg("%s: Received from parent tokens.p2pToken %llu, tokens.vaSpaceToken %u\n", myname, tokens.p2pToken, tokens.vaSpaceToken);
+
+        gdr_mh_t mh;
+
+        CUdeviceptr d_ptr = d_A;
+
+        ASSERT_NEQ(gdr_pin_buffer(g, d_ptr, size, tokens.p2pToken, tokens.vaSpaceToken, &mh), 0);
+    }
+    else {
+        close(filedes_0[1]);
+        close(filedes_1[0]);
+
+        read_fd = filedes_0[0];
+        write_fd = filedes_1[1];
+
+        init_cuda(0);
+
+        ASSERTDRV(gpuMemAlloc(&d_A, size));
+        ASSERTDRV(cuPointerGetAttribute(&tokens, CU_POINTER_ATTRIBUTE_P2P_TOKENS, d_A));
+
+        print_dbg("%s: CUDA generated tokens.p2pToken %llu, tokens.vaSpaceToken %u\n", myname, tokens.p2pToken, tokens.vaSpaceToken);
+
+        ASSERT_EQ(write(write_fd, &d_A, sizeof(CUdeviceptr)), sizeof(CUdeviceptr));
+        ASSERT_EQ(write(write_fd, &tokens, sizeof(CUDA_POINTER_ATTRIBUTE_P2P_TOKENS)), sizeof(CUDA_POINTER_ATTRIBUTE_P2P_TOKENS));
+
+        int child_exit_status = -EINVAL;
+        ASSERT(wait(&child_exit_status) == pid);
+        ASSERT_EQ(child_exit_status, EXIT_SUCCESS);
+
+        ASSERTDRV(gpuMemFree(d_A));
+
+        finalize_cuda(0);
+    }
+}
+END_GDRCOPY_TEST
 
 int main(int argc, char *argv[])
 {
@@ -1425,6 +1553,7 @@ int main(int argc, char *argv[])
 
     suite_add_tcase(s, tc_basic);
     tcase_add_test(tc_basic, basic);
+    tcase_add_test(tc_basic, basic_with_tokens);
     tcase_add_test(tc_basic, basic_unaligned_mapping);
 
     suite_add_tcase(s, tc_data_validation);
@@ -1440,6 +1569,7 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_invalidation, invalidation_fork_map_and_free);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map);
+    tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_pin_parent_with_tokens);
 
     tcase_set_timeout(tc_basic, 60);
     tcase_set_timeout(tc_data_validation, 60);
