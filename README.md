@@ -140,7 +140,7 @@ page offset: 0
 user-space pointer: 0x7f6ae5000000
 
 gdr_copy_to_mapping num iters for each size: 10000
-WARNING: gdr_copy_to_mapping does not guarantee the visibility of data to pre-launched CUDA kernels.
+WARNING: Measuring the latency of command-issuing latency. Data might not be visible to the GPU yet.
 Test                     Size(B)         Avg.Time(us)
 gdr_copy_to_mapping             1             0.0969
 gdr_copy_to_mapping             2             0.0988
