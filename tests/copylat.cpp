@@ -213,7 +213,7 @@ int main(int argc, char *argv[])
         // gdr_copy_to_mapping benchmark
         cout << endl;
         cout << "gdr_copy_to_mapping num iters for each size: " << num_write_iters << endl;
-        cout << "WARNING: Measuring the latency of command-issuing latency. Data might not be visible to the GPU yet." << endl;
+        cout << "WARNING: Measuring the issue overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility." << endl;
         // For more information, see
         // https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#sync-behavior
         printf("Test \t\t\t Size(B) \t Avg.Time(us)\n");

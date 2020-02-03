@@ -140,7 +140,7 @@ page offset: 0
 user-space pointer: 0x7f6ae5000000
 
 gdr_copy_to_mapping num iters for each size: 10000
-WARNING: Measuring the latency of command-issuing latency. Data might not be visible to the GPU yet.
+WARNING: Measuring the issue overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility.
 Test                     Size(B)         Avg.Time(us)
 gdr_copy_to_mapping             1             0.0969
 gdr_copy_to_mapping             2             0.0988
