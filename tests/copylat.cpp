@@ -213,16 +213,18 @@ int main(int argc, char *argv[])
         // gdr_copy_to_mapping benchmark
         cout << endl;
         cout << "gdr_copy_to_mapping num iters for each size: " << num_write_iters << endl;
+        cout << "WARNING: gdr_copy_to_mapping does not guarantee the visibility of data to pre-launched CUDA kernels." << endl;
         printf("Test \t\t\t Size(B) \t Avg.Time(us)\n");
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
-            uint8_t dat;
             clock_gettime(MYCLOCK, &beg);
+            // WARNING: Measuring only the command-issuing latency. This does
+            // not guarantee the data visibility to pre-launched CUDA kernels.
+            // For more information, see
+            // https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#sync-behavior
             for (iter = 0; iter < num_write_iters; ++iter) {
                 gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
-                // ensure that the data reaches the GPU's point of consistency
-                dat = *(volatile uint8_t *)buf_ptr;
             }
             clock_gettime(MYCLOCK, &end);
             lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;

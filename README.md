@@ -140,32 +140,33 @@ page offset: 0
 user-space pointer: 0x7f6ae5000000
 
 gdr_copy_to_mapping num iters for each size: 10000
+WARNING: gdr_copy_to_mapping does not guarantee the visibility of data to pre-launched CUDA kernels.
 Test                     Size(B)         Avg.Time(us)
-gdr_copy_to_mapping             1             1.0850
-gdr_copy_to_mapping             2             1.0558
-gdr_copy_to_mapping             4             1.0694
-gdr_copy_to_mapping             8             1.0560
-gdr_copy_to_mapping            16             1.1170
-gdr_copy_to_mapping            32             1.0556
-gdr_copy_to_mapping            64             1.0739
-gdr_copy_to_mapping           128             1.0604
-gdr_copy_to_mapping           256             1.0885
-gdr_copy_to_mapping           512             1.0979
-gdr_copy_to_mapping          1024             1.1539
-gdr_copy_to_mapping          2048             1.2981
-gdr_copy_to_mapping          4096             1.4624
-gdr_copy_to_mapping          8192             1.8940
-gdr_copy_to_mapping         16384             2.7242
-gdr_copy_to_mapping         32768             4.2891
-gdr_copy_to_mapping         65536             7.5150
-gdr_copy_to_mapping        131072            13.8871
-gdr_copy_to_mapping        262144            26.7314
-gdr_copy_to_mapping        524288            52.3860
-gdr_copy_to_mapping       1048576           103.7096
-gdr_copy_to_mapping       2097152           206.1532
-gdr_copy_to_mapping       4194304           411.6158
-gdr_copy_to_mapping       8388608           823.6061
-gdr_copy_to_mapping      16777216          1646.9662
+gdr_copy_to_mapping             1             0.0969
+gdr_copy_to_mapping             2             0.0988
+gdr_copy_to_mapping             4             0.0982
+gdr_copy_to_mapping             8             0.0983
+gdr_copy_to_mapping            16             0.1000
+gdr_copy_to_mapping            32             0.0997
+gdr_copy_to_mapping            64             0.1018
+gdr_copy_to_mapping           128             0.1011
+gdr_copy_to_mapping           256             0.1134
+gdr_copy_to_mapping           512             0.1342
+gdr_copy_to_mapping          1024             0.1751
+gdr_copy_to_mapping          2048             0.2606
+gdr_copy_to_mapping          4096             0.4336
+gdr_copy_to_mapping          8192             0.8141
+gdr_copy_to_mapping         16384             1.6070
+gdr_copy_to_mapping         32768             3.1999
+gdr_copy_to_mapping         65536             6.3869
+gdr_copy_to_mapping        131072            12.7635
+gdr_copy_to_mapping        262144            25.5032
+gdr_copy_to_mapping        524288            51.0073
+gdr_copy_to_mapping       1048576           102.0074
+gdr_copy_to_mapping       2097152           203.9973
+gdr_copy_to_mapping       4194304           408.1637
+gdr_copy_to_mapping       8388608           817.4134
+gdr_copy_to_mapping      16777216          1634.5638
 
 gdr_copy_from_mapping num iters for each size: 100
 Test                     Size(B)         Avg.Time(us)
