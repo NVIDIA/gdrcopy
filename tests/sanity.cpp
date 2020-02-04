@@ -47,14 +47,6 @@ using namespace std;
 
 using namespace gdrcopy::test;
 
-#if defined(GDRAPI_X86)
-#define MB() asm volatile("mfence":::"memory")
-#elif defined(GDRAPI_POWER)
-#define MB() asm volatile("sync":::"memory")
-#else
-#define MB() asm volatile("":::"memory")
-#endif
-
 volatile bool expecting_exception_signal = false;
 
 void exception_signal_handle(int sig)

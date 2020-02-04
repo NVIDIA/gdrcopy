@@ -123,6 +123,81 @@ BAR1 read BW: 1.50172MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
+
+$ copylat
+GPU id:0; name: Tesla P100-PCIE-16GB; Bus id: 0000:09:00
+selecting device 0
+device ptr: 0x7f6aca800000
+allocated size: 16777216
+
+map_d_ptr: 0x7f6ae5000000
+info.va: 7f6aca800000
+info.mapped_size: 16777216
+info.page_size: 65536
+info.mapped: 1
+info.wc_mapping: 1
+page offset: 0
+user-space pointer: 0x7f6ae5000000
+
+gdr_copy_to_mapping num iters for each size: 10000
+WARNING: Measuring the issue overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility.
+Test                     Size(B)         Avg.Time(us)
+gdr_copy_to_mapping             1             0.0969
+gdr_copy_to_mapping             2             0.0988
+gdr_copy_to_mapping             4             0.0982
+gdr_copy_to_mapping             8             0.0983
+gdr_copy_to_mapping            16             0.1000
+gdr_copy_to_mapping            32             0.0997
+gdr_copy_to_mapping            64             0.1018
+gdr_copy_to_mapping           128             0.1011
+gdr_copy_to_mapping           256             0.1134
+gdr_copy_to_mapping           512             0.1342
+gdr_copy_to_mapping          1024             0.1751
+gdr_copy_to_mapping          2048             0.2606
+gdr_copy_to_mapping          4096             0.4336
+gdr_copy_to_mapping          8192             0.8141
+gdr_copy_to_mapping         16384             1.6070
+gdr_copy_to_mapping         32768             3.1999
+gdr_copy_to_mapping         65536             6.3869
+gdr_copy_to_mapping        131072            12.7635
+gdr_copy_to_mapping        262144            25.5032
+gdr_copy_to_mapping        524288            51.0073
+gdr_copy_to_mapping       1048576           102.0074
+gdr_copy_to_mapping       2097152           203.9973
+gdr_copy_to_mapping       4194304           408.1637
+gdr_copy_to_mapping       8388608           817.4134
+gdr_copy_to_mapping      16777216          1634.5638
+
+gdr_copy_from_mapping num iters for each size: 100
+Test                     Size(B)         Avg.Time(us)
+gdr_copy_from_mapping           1             1.0986
+gdr_copy_from_mapping           2             1.9074
+gdr_copy_from_mapping           4             1.7588
+gdr_copy_from_mapping           8             1.7593
+gdr_copy_from_mapping          16             0.8822
+gdr_copy_from_mapping          32             1.7350
+gdr_copy_from_mapping          64             3.0681
+gdr_copy_from_mapping         128             3.4641
+gdr_copy_from_mapping         256             2.9769
+gdr_copy_from_mapping         512             3.5207
+gdr_copy_from_mapping        1024             3.6279
+gdr_copy_from_mapping        2048             5.5507
+gdr_copy_from_mapping        4096            10.5047
+gdr_copy_from_mapping        8192            17.8014
+gdr_copy_from_mapping       16384            30.0232
+gdr_copy_from_mapping       32768            58.1767
+gdr_copy_from_mapping       65536           118.7792
+gdr_copy_from_mapping      131072           241.5278
+gdr_copy_from_mapping      262144           506.1804
+gdr_copy_from_mapping      524288          1014.1972
+gdr_copy_from_mapping     1048576          2026.6072
+gdr_copy_from_mapping     2097152          4048.9970
+gdr_copy_from_mapping     4194304          8103.9561
+gdr_copy_from_mapping     8388608         19230.3878
+gdr_copy_from_mapping    16777216         38474.8613
+unmapping buffer
+unpinning buffer
+closing gdrdrv
 ```
 
 ## NUMA effects

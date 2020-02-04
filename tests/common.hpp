@@ -30,6 +30,88 @@
 #include <map>
 #include <gdrapi.h>
 
+/**
+ * Memory barrier
+ */
+#if defined(GDRAPI_X86)
+#define MB() asm volatile("mfence":::"memory")
+#elif defined(GDRAPI_POWER)
+#define MB() asm volatile("sync":::"memory")
+#else
+#define MB() asm volatile("":::"memory")
+#endif
+
+/**
+ * Clock used for timing
+ */
+//#define MYCLOCK CLOCK_REALTIME
+//#define MYCLOCK CLOCK_RAW_MONOTONIC
+#define MYCLOCK CLOCK_MONOTONIC
+
+
+#define EXIT_WAIVED 2
+
+#define BEGIN_GDRCOPY_TEST(__testname)                                  \
+START_TEST(__testname) {                                                \
+    testname = #__testname;                                             \
+    print_dbg("&&&& RUNNING " # __testname "\n");                       \
+    fflush(stdout);                                                     \
+    fflush(stderr);                                                     \
+    pid_t __pid = fork();                                               \
+    if (__pid < 0) {                                                    \
+        print_dbg("Cannot fork\n");                                     \
+        print_dbg("&&&& FAILED " # __testname "\n");                    \
+        exit(EXIT_FAILURE);                                             \
+    }                                                                   \
+    if (__pid == 0) {
+
+#define END_GDRCOPY_TEST }                                              \
+    if (__pid) {                                                        \
+        int __child_exit_status = -EINVAL;                              \
+        if (waitpid(__pid, &__child_exit_status, 0) == -1) {            \
+            print_dbg("waitpid returned an error\n");                   \
+            print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);     \
+            exit(EXIT_FAILURE);                                         \
+        }                                                               \
+        if (__child_exit_status == EXIT_SUCCESS)                        \
+            print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);     \
+        else if (__child_exit_status == EXIT_WAIVED)                    \
+            print_dbg("&&&& WAIVED %s\n", gdrcopy::test::testname);     \
+        else                                                            \
+            print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);     \
+    }                                                                   \
+} END_TEST
+
+#define ASSERT(x)                                                       \
+    do                                                                  \
+        {                                                               \
+            if (!(x))                                                   \
+                {                                                       \
+                    fprintf(stderr, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
+                    exit(EXIT_FAILURE);                                 \
+                }                                                       \
+        } while (0)
+
+#define ASSERTDRV(stmt)				\
+    do                                          \
+        {                                       \
+            CUresult result = (stmt);           \
+            if (result != CUDA_SUCCESS) {       \
+                const char *_err_name;          \
+                cuGetErrorName(result, &_err_name); \
+                fprintf(stderr, "CUDA error: %s\n", _err_name);   \
+            }                                   \
+            ASSERT(CUDA_SUCCESS == result);     \
+        } while (0)
+
+#define ASSERT_EQ(P, V) ASSERT((P) == (V))
+#define CHECK_EQ(P, V) ASSERT((P) == (V))
+#define ASSERT_NEQ(P, V) ASSERT(!((P) == (V)))
+#define BREAK_IF_NEQ(P, V) if((P) != (V)) break
+#define BEGIN_CHECK do
+#define END_CHECK while(0)
+
+
 namespace gdrcopy {
     namespace test {
         extern std::map<CUdeviceptr, CUdeviceptr> _allocations;
@@ -89,75 +171,13 @@ namespace gdrcopy {
 
         void print_dbg(const char* fmt, ...);
 
-        #define EXIT_WAIVED 2
-
         extern const char *testname;
-
-        #define BEGIN_GDRCOPY_TEST(__testname)                                  \
-        START_TEST(__testname) {                                                \
-            testname = #__testname;                                             \
-            print_dbg("&&&& RUNNING " # __testname "\n");                       \
-            fflush(stdout);                                                     \
-            fflush(stderr);                                                     \
-            pid_t __pid = fork();                                               \
-            if (__pid < 0) {                                                    \
-                print_dbg("Cannot fork\n");                                     \
-                print_dbg("&&&& FAILED " # __testname "\n");                    \
-                exit(EXIT_FAILURE);                                             \
-            }                                                                   \
-            if (__pid == 0) {
-
-        #define END_GDRCOPY_TEST }                                              \
-            if (__pid) {                                                        \
-                int __child_exit_status = -EINVAL;                              \
-                if (waitpid(__pid, &__child_exit_status, 0) == -1) {            \
-                    print_dbg("waitpid returned an error\n");                   \
-                    print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);     \
-                    exit(EXIT_FAILURE);                                         \
-                }                                                               \
-                if (__child_exit_status == EXIT_SUCCESS)                        \
-                    print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);     \
-                else if (__child_exit_status == EXIT_WAIVED)                    \
-                    print_dbg("&&&& WAIVED %s\n", gdrcopy::test::testname);     \
-                else                                                            \
-                    print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);     \
-            }                                                                   \
-        } END_TEST
-
-        #define ASSERT(x)                                                       \
-            do                                                                  \
-                {                                                               \
-                    if (!(x))                                                   \
-                        {                                                       \
-                            fprintf(stderr, "Assertion \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
-                            exit(EXIT_FAILURE);                                 \
-                        }                                                       \
-                } while (0)
-
-        #define ASSERTDRV(stmt)				\
-            do                                          \
-                {                                       \
-                    CUresult result = (stmt);           \
-                    if (result != CUDA_SUCCESS) {       \
-                        const char *_err_name;          \
-                        cuGetErrorName(result, &_err_name); \
-                        fprintf(stderr, "CUDA error: %s\n", _err_name);   \
-                    }                                   \
-                    ASSERT(CUDA_SUCCESS == result);     \
-                } while (0)
 
         static inline bool operator==(const gdr_mh_t &a, const gdr_mh_t &b) {
             return a.h == b.h;
         }
 
         static const gdr_mh_t null_mh = {0};
-
-        #define ASSERT_EQ(P, V) ASSERT((P) == (V))
-        #define CHECK_EQ(P, V) ASSERT((P) == (V))
-        #define ASSERT_NEQ(P, V) ASSERT(!((P) == (V)))
-        #define BREAK_IF_NEQ(P, V) if((P) != (V)) break
-        #define BEGIN_CHECK do
-        #define END_CHECK while(0)
 
         int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size);
 
