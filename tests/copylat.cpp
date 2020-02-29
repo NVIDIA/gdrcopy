@@ -40,6 +40,7 @@ using namespace gdrcopy::test;
 // manually tuned...
 int num_write_iters = 10000;
 int num_read_iters = 100;
+int small_size_iter_factor = 1000;
 
 int main(int argc, char *argv[])
 {
@@ -49,6 +50,7 @@ int main(int argc, char *argv[])
     bool do_cumemcpy = false;
     struct timespec beg, end;
     double lat_us;
+    double bw;
 
     while(1) {        
         int c;
@@ -137,39 +139,46 @@ int main(int argc, char *argv[])
 
     if (do_cumemcpy) {
         cout << endl;
-        cout << "cuMemcpy_H2D num iters for each size: " << num_write_iters << endl;
-        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
+        cout << "cuMemcpy_H2D num iters for each size: " << small_size_iter_factor * num_write_iters << "/" << num_write_iters << endl;
+        printf("Test \t\t Size(B) \t Avg.Time(us) \t Avg.BW(MB/s)\n");
         BEGIN_CHECK {
             // cuMemcpy H2D benchmark
             copy_size = 1;
             while (copy_size <= size) {
                 int iter = 0;
+                size_t num_iters = (size < 100000 ? num_write_iters*small_size_iter_factor: num_write_iters);
                 clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_write_iters; ++iter) {
+                for (iter = 0; iter < num_iters; ++iter) {
                     ASSERTDRV(cuMemcpy(d_A, (CUdeviceptr)init_buf, copy_size));
                 }
                 clock_gettime(MYCLOCK, &end);
-                lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
-                printf("cuMemcpy_H2D \t %8zu \t %11.4f\n", copy_size, lat_us);
+                double dt_us = (end.tv_nsec - beg.tv_nsec)/1000.0 + (end.tv_sec - beg.tv_sec)*1000000.0;
+                lat_us =  dt_us / (double)num_iters;
+                bw = copy_size / lat_us;
+                printf("cuMemcpy_H2D \t %8zu \t %11.4f\t %11.4f\n", copy_size, lat_us, bw);
                 copy_size <<= 1;
             }
         } END_CHECK;
 
         cout << endl;
-        cout << "cuMemcpy_D2H num iters for each size: " << num_read_iters << endl;
-        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
+        cout << "cuMemcpy_D2H num iters for each size: " << small_size_iter_factor * num_read_iters << "/" << num_read_iters << endl;
+        printf("Test \t\t Size(B) \t Avg.Time(us) \t Avg.BW(MB/s)\n");
         BEGIN_CHECK {
             // cuMemcpy D2H benchmark
             copy_size = 1;
             while (copy_size <= size) {
                 int iter = 0;
+                size_t num_iters = (size < 100000 ? small_size_iter_factor*num_read_iters:num_read_iters);
                 clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_read_iters; ++iter) {
+                for (iter = 0; iter < num_iters; ++iter) {
                     ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
                 }
                 clock_gettime(MYCLOCK, &end);
-                lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
-                printf("cuMemcpy_D2H \t %8zu \t %11.4f\n", copy_size, lat_us);
+                //lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
+                double dt_us = (end.tv_nsec - beg.tv_nsec)/1000.0 + (end.tv_sec - beg.tv_sec)*1000000.0;
+                lat_us =  dt_us / (double)num_iters;
+                bw = copy_size / lat_us;
+                printf("cuMemcpy_D2H \t %8zu \t %11.4f\t %11.4f\n", copy_size, lat_us, bw);
                 copy_size <<= 1;
             }
         } END_CHECK;
@@ -216,17 +225,21 @@ int main(int argc, char *argv[])
         cout << "WARNING: Measuring the issue overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility." << endl;
         // For more information, see
         // https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#sync-behavior
-        printf("Test \t\t\t Size(B) \t Avg.Time(us)\n");
+        printf("Test \t\t\t Size(B) \t Avg.Time(us) \t Avg.BW(MB/s)\n");
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
             clock_gettime(MYCLOCK, &beg);
-            for (iter = 0; iter < num_write_iters; ++iter) {
+            size_t num_iters = (size < 100000 ? num_write_iters*small_size_iter_factor: num_write_iters);
+            clock_gettime(MYCLOCK, &beg);
+            for (iter = 0; iter < num_iters; ++iter) {
                 gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
             }
             clock_gettime(MYCLOCK, &end);
-            lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
-            printf("gdr_copy_to_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
+            double dt_us = (end.tv_nsec - beg.tv_nsec)/1000.0 + (end.tv_sec - beg.tv_sec)*1000000.0;
+            lat_us =  dt_us / (double)num_iters;
+            bw = copy_size / lat_us;
+            printf("gdr_copy_to_mapping \t %8zu \t %11.4f\t %11.4f\n", copy_size, lat_us, bw);
             copy_size <<= 1;
         }
 
@@ -239,12 +252,16 @@ int main(int argc, char *argv[])
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
+            size_t num_iters = (size < 100000 ? small_size_iter_factor*num_read_iters:num_read_iters);
             clock_gettime(MYCLOCK, &beg);
-            for (iter = 0; iter < num_read_iters; ++iter)
+            for (iter = 0; iter < num_iters; ++iter) {
                 gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
+            }
             clock_gettime(MYCLOCK, &end);
-            lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
-            printf("gdr_copy_from_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
+            double dt_us = (end.tv_nsec - beg.tv_nsec)/1000.0 + (end.tv_sec - beg.tv_sec)*1000000.0;
+            lat_us =  dt_us / (double)num_iters;
+            bw = copy_size / lat_us;
+            printf("gdr_copy_from_mapping \t %8zu \t %11.4f\t %11.4f\n", copy_size, lat_us, bw);
             copy_size <<= 1;
         }
 
