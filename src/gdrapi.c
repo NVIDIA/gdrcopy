@@ -517,7 +517,7 @@ static inline int ptr_is_aligned(const void *ptr, unsigned powof2)
     return is_aligned(addr, powof2);
 }
 
-static int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size, int wc_mapping)
+static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size_t size, int wc_mapping)
 {
     if (first_time) {
         gdr_init_cpu_flags();
@@ -566,7 +566,7 @@ static int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size, int 
     return 0;
 }
 
-static int gdr_copy_from_bar(void *h_ptr, const void *map_d_ptr, size_t size, int wc_mapping)
+static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, size_t size, int wc_mapping)
 {
     if (first_time) {
         gdr_init_cpu_flags();
@@ -624,7 +624,7 @@ int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, siz
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
-    return gdr_copy_to_bar(map_d_ptr, h_ptr, size, mh->wc_mapping);
+    return gdr_copy_to_mapping_internal(map_d_ptr, h_ptr, size, mh->wc_mapping);
 }
 
 int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size)
@@ -634,7 +634,7 @@ int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, s
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
-    return gdr_copy_from_bar(h_ptr, map_d_ptr, size, mh->wc_mapping);
+    return gdr_copy_from_mapping_internal(h_ptr, map_d_ptr, size, mh->wc_mapping);
 }
 
 
