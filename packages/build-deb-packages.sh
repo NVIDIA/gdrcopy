@@ -63,7 +63,7 @@ ex mv gdrcopy gdrcopy-${VERSION}
 ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
 
 ex cd $tmpdir/gdrcopy-${VERSION}
-ex debuild --set-envvar=CUDA=$CUDA -us -uc
+ex debuild --set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH} -us -uc
 
 echo
 echo "Building dkms module ..."
