@@ -1,4 +1,10 @@
-gdrdrv-dkms (@VERSION@) stable; urgency=low
+gdrdrv-dkms (@VERSION@) unstable; urgency=low
+
+  * Change the package maintainer to Davide Rossetti.
+
+ -- Davide Rossetti <drossetti@nvidia.com>  Mon, 02 Mar 2020 11:59:59 -0700
+
+gdrdrv-dkms (2.0) stable; urgency=low
 
   * Harden security in gdrdrv.
   * Enable cached mappings in POWER9.
