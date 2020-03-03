@@ -41,6 +41,7 @@ using namespace gdrcopy::test;
 int num_write_iters = 10000;
 int num_read_iters = 100;
 int small_size_iter_factor = 1000;
+int warmup = 10;
 
 int main(int argc, char *argv[])
 {
@@ -54,7 +55,7 @@ int main(int argc, char *argv[])
 
     while(1) {        
         int c;
-        c = getopt(argc, argv, "s:d:w:r:hc");
+        c = getopt(argc, argv, "s:d:w:r:hcW:");
         if (c == -1)
             break;
 
@@ -71,11 +72,18 @@ int main(int argc, char *argv[])
             case 'r':
                 num_read_iters = strtol(optarg, NULL, 0);
                 break;
+            case 'W':
+                warmup = strtol(optarg, NULL, 0);
+                break;
             case 'c':
                 do_cumemcpy = true;
                 break;
             case 'h':
-                printf("syntax: %s -s <buf size> -d <gpu dev id> -w <write iters> -r <read iters> -h[help] -c[do-cuMemcpy]\n", argv[0]);
+                printf("syntax: %s [-s <buf size>][-d <gpu dev id>][-w <write iters>][-r <read iters>][-h][-c][-w]\n"
+                       "-c                   benchmark cuMemcpy\n"
+                       "-w <# iterations>    modify warmup (default %d)\n",
+                       argv[0],
+                       warmup);
                 exit(EXIT_FAILURE);
                 break;
             default:
@@ -147,8 +155,9 @@ int main(int argc, char *argv[])
             while (copy_size <= size) {
                 int iter = 0;
                 size_t num_iters = (size < 100000 ? num_write_iters*small_size_iter_factor: num_write_iters);
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_iters; ++iter) {
+                for (iter = 0; iter < num_iters+warmup; ++iter) {
+                    if (iter == warmup)
+                        clock_gettime(MYCLOCK, &beg);
                     ASSERTDRV(cuMemcpy(d_A, (CUdeviceptr)init_buf, copy_size));
                 }
                 clock_gettime(MYCLOCK, &end);
@@ -169,8 +178,9 @@ int main(int argc, char *argv[])
             while (copy_size <= size) {
                 int iter = 0;
                 size_t num_iters = (size < 100000 ? small_size_iter_factor*num_read_iters:num_read_iters);
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_iters; ++iter) {
+                for (iter = 0; iter < num_iters+warmup; ++iter) {
+                    if (iter == warmup)
+                        clock_gettime(MYCLOCK, &beg);
                     ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
                 }
                 clock_gettime(MYCLOCK, &end);
@@ -231,8 +241,9 @@ int main(int argc, char *argv[])
             int iter = 0;
             clock_gettime(MYCLOCK, &beg);
             size_t num_iters = (size < 100000 ? num_write_iters*small_size_iter_factor: num_write_iters);
-            clock_gettime(MYCLOCK, &beg);
-            for (iter = 0; iter < num_iters; ++iter) {
+            for (iter = 0; iter < num_iters+warmup; ++iter) {
+                if (iter == warmup)
+                    clock_gettime(MYCLOCK, &beg);
                 gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
             }
             clock_gettime(MYCLOCK, &end);
@@ -253,8 +264,9 @@ int main(int argc, char *argv[])
         while (copy_size <= size) {
             int iter = 0;
             size_t num_iters = (size < 100000 ? small_size_iter_factor*num_read_iters:num_read_iters);
-            clock_gettime(MYCLOCK, &beg);
-            for (iter = 0; iter < num_iters; ++iter) {
+            for (iter = 0; iter < num_iters+warmup; ++iter) {
+                if (iter == warmup)
+                    clock_gettime(MYCLOCK, &beg);
                 gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
             }
             clock_gettime(MYCLOCK, &end);
