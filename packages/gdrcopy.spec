@@ -1,4 +1,4 @@
-%{!?_release: %define _release 3}
+%{!?_release: %define _release 4}
 %{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?GDR_VERSION: %define GDR_VERSION 2.0}
 %{!?KVERSION: %define KVERSION %(uname -r)}
