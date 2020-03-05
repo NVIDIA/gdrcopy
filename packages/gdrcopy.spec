@@ -1,4 +1,4 @@
-%{!?_release: %define _release 4}
+%{!?_release: %define _release 1}
 %{!?CUDA: %define CUDA /usr/local/cuda}
 %{!?GDR_VERSION: %define GDR_VERSION 2.0}
 %{!?KVERSION: %define KVERSION %(uname -r)}
@@ -117,6 +117,12 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Mon Mar 02 2020 Davide Rossetti <drossetti@nvidia.com> 2.0-4
+- Introduce copylat test application.
+- Introduce basic_with_tokens and invalidation_fork_child_gdr_pin_parent_with_tokens sub-tests in sanity.
+- Remove the dependency with libcudart.so.
+- Clean up the code in the tests folder.
+- Change the package maintainer to Davide Rossetti.
 * Mon Sep 16 2019 Pak Markthub <pmarkthub@nvidia.com> 2.0-3
 - Harden security in gdrdrv.
 - Enable cached mappings in POWER9.
