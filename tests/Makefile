@@ -42,6 +42,7 @@ install: exes
 	@ echo "installing exes in $(DESTBIN)..." && \
 	mkdir -p $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx copybw -t $(DESTBIN) && \
+	install -D -v -m u=rwx,g=rx,o=rx copylat -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx sanity -t $(DESTBIN)
 
 .PHONY: clean all exes install

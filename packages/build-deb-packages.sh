@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Restart this number at 1 if MAJOR_VERSION or MINOR_VERSION changes
+# See https://www.debian.org/doc/debian-policy/ch-controlfields.html#version
+DEBIAN_VERSION=2
+
 SCRIPT_DIR_PATH="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."
 
@@ -35,6 +39,7 @@ if [ "X$VERSION" == "X" ]; then
     echo "Failed to get version numbers!" >&2
     exit 1
 fi
+FULL_VERSION="${VERSION}-${DEBIAN_VERSION}"
 
 tmpdir=`mktemp -d /tmp/gdr.XXXXXX`
 if [ ! -d "$tmpdir" ]; then
@@ -42,7 +47,7 @@ if [ ! -d "$tmpdir" ]; then
     exit 1
 fi
 
-echo "Building gdrcopy debian packages version ${VERSION} ..."
+echo "Building gdrcopy debian packages version ${FULL_VERSION} ..."
 
 echo "Working in $tmpdir ..."
 
@@ -56,26 +61,26 @@ ex cp README.md $tmpdir/gdrcopy/debian/README.source
 ex rm -f $tmpdir/gdrcopy_${VERSION}.orig.tar.gz
 
 ex cd $tmpdir/gdrcopy
-ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@VERSION@/${FULL_VERSION}/g" {} +
 
 ex cd $tmpdir
 ex mv gdrcopy gdrcopy-${VERSION}
 ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
 
 ex cd $tmpdir/gdrcopy-${VERSION}
-ex debuild --set-envvar=CUDA=$CUDA -us -uc
+ex debuild --set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH} -us -uc
 
 echo
 echo "Building dkms module ..."
-ex cd $tmpdir/gdrcopy-$VERSION/src/gdrdrv
+ex cd $tmpdir/gdrcopy-${VERSION}/src/gdrdrv
 ex make clean
 
-ex mkdir -p $tmpdir/gdrdrv-dkms-$VERSION/
-ex cp -r $tmpdir/gdrcopy-$VERSION/src/gdrdrv $tmpdir/gdrdrv-dkms-$VERSION/gdrdrv-$VERSION
-ex cp ${SCRIPT_DIR_PATH}/dkms.conf $tmpdir/gdrdrv-dkms-$VERSION/gdrdrv-$VERSION/
-ex cd $tmpdir/gdrdrv-dkms-$VERSION/
+ex mkdir -p $tmpdir/gdrdrv-dkms-${VERSION}/
+ex cp -r $tmpdir/gdrcopy-${VERSION}/src/gdrdrv $tmpdir/gdrdrv-dkms-${VERSION}/gdrdrv-${VERSION}
+ex cp ${SCRIPT_DIR_PATH}/dkms.conf $tmpdir/gdrdrv-dkms-${VERSION}/gdrdrv-${VERSION}/
+ex cd $tmpdir/gdrdrv-dkms-${VERSION}/
 ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
-ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
 
 ex dpkg-buildpackage -S -us -uc

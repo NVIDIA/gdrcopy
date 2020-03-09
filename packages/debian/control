@@ -1,6 +1,6 @@
 Source: gdrcopy
 Priority: optional
-Maintainer: Pak Markthub <pmarkthub@nvidia.com>
+Maintainer: Davide Rossetti <drossetti@nvidia.com>
 Build-Depends: debhelper (>= 10), check, libsubunit-dev
 Standards-Version: @VERSION@
 Section: libs

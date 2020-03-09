@@ -73,6 +73,8 @@ We provide three ways for building and installing GDRCopy
 ### rpm package
 
 ```shell
+$ sudo yum groupinstall 'Development Tools'
+$ sudo yum install rpm-build make check check-devel subunit subunit-devel
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
 $ sudo rpm -Uvh gdrcopy-kmod-<version>.<platform>.rpm
@@ -83,6 +85,7 @@ $ sudo rpm -Uvh gdrcopy-devel-<version>.<platform>.rpm
 ### deb package
 
 ```shell
+$ sudo apt install build-essential devscripts debhelper check libsubunit-dev
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-deb-packages.sh
 $ sudo dpkg -i gdrdrv-dkms_<version>_<platform>.deb
