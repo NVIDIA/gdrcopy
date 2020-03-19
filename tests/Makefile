@@ -1,8 +1,8 @@
 DESTBIN ?= 
 CUDA ?= /usr/local/cuda
 
-CHECK_INC  ?= $(shell pkg-config --cflags-only-I check)
-CHECK_LIBS ?= $(shell pkg-config --libs check)
+CHECK_INC  := $(shell pkg-config --cflags-only-I check)
+CHECK_LIBS := $(shell pkg-config --libs check)
 
 GDRAPI_INC := ../include
 GDRAPI_SRC := ../src
@@ -10,7 +10,7 @@ GDRAPI_SRC := ../src
 CUDA_LIB := -L $(CUDA)/lib64 -L $(CUDA)/lib -L /usr/lib64/nvidia -L /usr/lib/nvidia
 CUDA_INC += -I $(CUDA)/include
 
-CPPFLAGS := $(CUDA_INC) -I $(GDRAPI_INC) -I $(GDRAPI_SRC) -I $(CUDA)/include -I $(CHECK_INC)
+CPPFLAGS := $(CUDA_INC) -I $(GDRAPI_INC) -I $(GDRAPI_SRC) -I $(CUDA)/include $(CHECK_INC)
 LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64 -L $(GDRAPI_SRC)
 COMMONCFLAGS := -O2
 CFLAGS   += $(COMMONCFLAGS)
