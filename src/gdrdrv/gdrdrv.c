@@ -266,6 +266,7 @@ struct gdr_info {
     // Pointer to the pid struct of the creator process. We do not use
     // numerical pid here to avoid issues from pid reuse.
     struct pid             *pid;
+    pid_t                   tgid;
 
     // Address space unique to this opened file. We need to create a new one
     // because filp->f_mapping usually points to inode->i_mapping.
@@ -279,6 +280,14 @@ struct gdr_info {
     int                     next_handle_overflow;
 };
 typedef struct gdr_info gdr_info_t;
+
+static int gdrdrv_check_same_process(gdr_info_t *info, struct task_struct *tsk)
+{
+    BUG_ON(0 == info);
+    BUG_ON(0 == tsk);
+    return (info->pid == task_pid(tsk))        // either exactly the same task
+        || (info->tgid == task_tgid_nr(tsk)) ; // or tasks belonging to the task group
+}
 
 //-----------------------------------------------------------------------------
 
@@ -309,6 +318,7 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     // here we track the process owning the driver fd and prevent other process
     // to use it.
     info->pid = task_pid(current);
+    info->tgid = task_tgid_nr(current);
 
     address_space_init_once(&info->mapping);
     info->mapping.host = inode;
@@ -340,7 +350,7 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
         return -EIO;
     }
     // Check that the caller is the same process that did gdrdrv_open
-    if (info->pid != task_pid(current)) {
+    if (!gdrdrv_check_same_process(info, current)) {
         gdr_dbg("filp is not opened by the current process\n");
         return -EACCES;
     }
@@ -767,7 +777,7 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
         return -EIO;
     }
     // Check that the caller is the same process that did gdrdrv_open
-    if (info->pid != task_pid(current)) {
+    if (!gdrdrv_check_same_process(info, current)) {
         gdr_dbg("filp is not opened by the current process\n");
         return -EACCES;
     }
@@ -893,7 +903,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         return -EIO;
     }
     // Check that the caller is the same process that did gdrdrv_open
-    if (info->pid != task_pid(current)) {
+    if (!gdrdrv_check_same_process(info, current)) {
         gdr_dbg("filp is not opened by the current process\n");
         return -EACCES;
     }
