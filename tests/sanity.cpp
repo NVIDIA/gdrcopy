@@ -1508,6 +1508,54 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
 }
 END_GDRCOPY_TEST
 
+struct mt_test_info {
+    CUdeviceptr d_buf;
+    void *mapped_d_buf;
+    size_t size;
+    gdr_t g;
+    gdr_mh_t mh;
+};
+
+void *thr_fun(void *data)
+{
+    mt_test_info *pt = static_cast<mt_test_info*>(data);
+
+    ASSERT_EQ(gdr_pin_buffer(pt->g, pt->d_buf, pt->size, 0, 0, &pt->mh), 0);
+    ASSERT_NEQ(pt->mh, null_mh);
+    ASSERT_EQ(gdr_map(pt->g, pt->mh, &pt->mapped_d_buf, pt->size), 0);
+    ASSERT_EQ(gdr_unmap(pt->g, pt->mh, pt->mapped_d_buf, pt->size), 0);
+    ASSERT_EQ(gdr_unpin_buffer(pt->g, pt->mh), 0);
+    ASSERT_EQ(gdr_close(pt->g), 0);
+    return NULL;
+}
+
+BEGIN_GDRCOPY_TEST(child_thread_pins_buffer)
+{
+    const size_t _size = GPU_PAGE_SIZE * 16;
+    mt_test_info t;
+    t.size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    init_cuda(0);
+
+    ASSERTDRV(gpuMemAlloc(&t.d_buf, t.size));
+    ASSERTDRV(cuMemsetD8(t.d_buf, 0xA5, t.size));
+
+    t.g = gdr_open();
+    ASSERT_NEQ(t.g, (void*)0);
+
+    pthread_t tid;
+    int rc = pthread_create(&tid, NULL, thr_fun, &t);
+    ASSERT_EQ(rc, 0);
+
+    print_dbg("waiting for child thread to finish\n");
+    rc = pthread_join(tid, NULL);
+    ASSERT_EQ(rc, 0);
+
+    ASSERTDRV(gpuMemFree(t.d_buf));
+    finalize_cuda(0);
+}
+END_GDRCOPY_TEST
+
 int main(int argc, char *argv[])
 {
     int c;
@@ -1547,6 +1595,7 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_basic, basic);
     tcase_add_test(tc_basic, basic_with_tokens);
     tcase_add_test(tc_basic, basic_unaligned_mapping);
+    tcase_add_test(tc_basic, child_thread_pins_buffer);
 
     suite_add_tcase(s, tc_data_validation);
     tcase_add_test(tc_data_validation, data_validation);
@@ -1573,6 +1622,7 @@ int main(int argc, char *argv[])
 
     return nf == 0 ? 0 : 1;
 }
+
 
 /*
  * Local variables:
