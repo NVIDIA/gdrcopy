@@ -266,7 +266,7 @@ struct gdr_info {
     // Pointer to the pid struct of the creator process. We do not use
     // numerical pid here to avoid issues from pid reuse.
     struct pid             *pid;
-    pid_t                   tgid;
+    struct pid             *tgid;
 
     // Address space unique to this opened file. We need to create a new one
     // because filp->f_mapping usually points to inode->i_mapping.
@@ -287,10 +287,10 @@ static int gdrdrv_check_same_process(gdr_info_t *info, struct task_struct *tsk)
     BUG_ON(0 == info);
     BUG_ON(0 == tsk);
     same_proc = (info->pid == task_pid(tsk))        // either exactly the same task
-        || (info->tgid == task_tgid_nr(tsk)) ; // or tasks belonging to the task group
+        || (info->tgid == task_tgid(tsk)) ; // or tasks belonging to the task group
     if (!same_proc) {
-        gdr_dbg("check failed, info:{pid=%p tgid=0x%x} this tsk={pid=%p tgid=0x%x}\n",
-                info->pid, info->tgid, task_pid(tsk), task_tgid_nr(tsk));
+        gdr_dbg("check failed, info:{pid=%p tgid=%p} this tsk={pid=%p tgid=%p}\n",
+                info->pid, info->tgid, task_pid(tsk), task_tgid(tsk));
     }
     return same_proc;
 }
@@ -324,7 +324,7 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     // here we track the process owning the driver fd and prevent other process
     // to use it.
     info->pid = task_pid(current);
-    info->tgid = task_tgid_nr(current);
+    info->tgid = task_tgid(current);
 
     address_space_init_once(&info->mapping);
     info->mapping.host = inode;
