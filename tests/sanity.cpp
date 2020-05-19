@@ -1514,25 +1514,60 @@ struct mt_test_info {
     size_t size;
     gdr_t g;
     gdr_mh_t mh;
+    bool use_barrier;
+    pthread_barrier_t barrier;
 };
 
-void *thr_fun(void *data)
+void *thr_fun_setup(void *data)
 {
     mt_test_info *pt = static_cast<mt_test_info*>(data);
-
+    ASSERT(pt);
     ASSERT_EQ(gdr_pin_buffer(pt->g, pt->d_buf, pt->size, 0, 0, &pt->mh), 0);
     ASSERT_NEQ(pt->mh, null_mh);
     ASSERT_EQ(gdr_map(pt->g, pt->mh, &pt->mapped_d_buf, pt->size), 0);
+    if (pt->use_barrier)
+        pthread_barrier_wait(&pt->barrier);
+    return NULL;
+}
+
+void *thr_fun_teardown(void *data)
+{
+    mt_test_info *pt = static_cast<mt_test_info*>(data);
+    ASSERT(pt);
+    if (pt->use_barrier)
+        pthread_barrier_wait(&pt->barrier);
     ASSERT_EQ(gdr_unmap(pt->g, pt->mh, pt->mapped_d_buf, pt->size), 0);
+    pt->mapped_d_buf = 0;
     ASSERT_EQ(gdr_unpin_buffer(pt->g, pt->mh), 0);
+    pt->mh = null_mh;
+    return NULL;
+}
+
+void *thr_fun_combined(void *data)
+{
+    mt_test_info *pt = static_cast<mt_test_info*>(data);
+    ASSERT(pt);
+    ASSERT(!pt->use_barrier);
+    thr_fun_setup(data);
+    thr_fun_teardown(data);
+    return NULL;
+}
+
+void *thr_fun_cleanup(void *data)
+{
+    mt_test_info *pt = static_cast<mt_test_info*>(data);
+    ASSERT(pt);
     ASSERT_EQ(gdr_close(pt->g), 0);
+    pt->g = 0;
+    ASSERTDRV(gpuMemFree(pt->d_buf));
+    pt->d_buf = 0;
     return NULL;
 }
 
 BEGIN_GDRCOPY_TEST(child_thread_pins_buffer)
 {
     const size_t _size = GPU_PAGE_SIZE * 16;
-    mt_test_info t;
+    mt_test_info t = { 0, 0, 0, 0, null_mh, false };
     t.size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
     init_cuda(0);
@@ -1542,16 +1577,29 @@ BEGIN_GDRCOPY_TEST(child_thread_pins_buffer)
 
     t.g = gdr_open();
     ASSERT_NEQ(t.g, (void*)0);
-
-    pthread_t tid;
-    int rc = pthread_create(&tid, NULL, thr_fun, &t);
-    ASSERT_EQ(rc, 0);
-
-    print_dbg("waiting for child thread to finish\n");
-    rc = pthread_join(tid, NULL);
-    ASSERT_EQ(rc, 0);
-
-    ASSERTDRV(gpuMemFree(t.d_buf));
+    {
+        pthread_t tid;
+        t.use_barrier = false;
+        print_dbg("spawning single child thread\n");
+        ASSERT_EQ(pthread_create(&tid, NULL, thr_fun_combined, &t), 0);
+        ASSERT_EQ(pthread_join(tid, NULL), 0);
+    }
+    {
+        pthread_t tid[2];
+        ASSERT_EQ(pthread_barrier_init(&t.barrier, NULL, 2), 0);
+        t.use_barrier = true;
+        print_dbg("spawning two children threads\n");
+        ASSERT_EQ(pthread_create(&tid[0], NULL, thr_fun_setup, &t), 0);
+        ASSERT_EQ(pthread_create(&tid[1], NULL, thr_fun_teardown, &t), 0);
+        ASSERT_EQ(pthread_join(tid[0], NULL), 0);
+        ASSERT_EQ(pthread_join(tid[1], NULL), 0);
+    }
+    {
+        pthread_t tid;
+        print_dbg("spawning cleanup child thread\n");
+        ASSERT_EQ(pthread_create(&tid, NULL, thr_fun_cleanup, &t), 0);
+        ASSERT_EQ(pthread_join(tid, NULL), 0);
+    }
     finalize_cuda(0);
 }
 END_GDRCOPY_TEST
