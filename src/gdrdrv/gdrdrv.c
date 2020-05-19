@@ -965,7 +965,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     // this also works as the mapped flag for this mr
     mr->cpu_mapping_type = GDR_MR_CACHING;
     vma->vm_ops = &gdrdrv_vm_ops;
-    gdr_dbg("overwriting vma->vm_private_data=0x%px with mr=0x%px\n", vma->vm_private_data, mr);
+    gdr_dbg("overwriting vma->vm_private_data=%px with mr=%px\n", vma->vm_private_data, mr);
     vma->vm_private_data = mr;
 
     // check for physically contiguous IO ranges
