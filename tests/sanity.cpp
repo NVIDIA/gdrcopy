@@ -1522,8 +1522,10 @@ void *thr_fun_setup(void *data)
 {
     mt_test_info *pt = static_cast<mt_test_info*>(data);
     ASSERT(pt);
+    print_dbg("pinning\n");
     ASSERT_EQ(gdr_pin_buffer(pt->g, pt->d_buf, pt->size, 0, 0, &pt->mh), 0);
     ASSERT_NEQ(pt->mh, null_mh);
+    print_dbg("mapping\n");
     ASSERT_EQ(gdr_map(pt->g, pt->mh, &pt->mapped_d_buf, pt->size), 0);
     if (pt->use_barrier)
         pthread_barrier_wait(&pt->barrier);
@@ -1536,8 +1538,10 @@ void *thr_fun_teardown(void *data)
     ASSERT(pt);
     if (pt->use_barrier)
         pthread_barrier_wait(&pt->barrier);
+    print_dbg("unmapping\n");
     ASSERT_EQ(gdr_unmap(pt->g, pt->mh, pt->mapped_d_buf, pt->size), 0);
     pt->mapped_d_buf = 0;
+    print_dbg("unpinning\n");
     ASSERT_EQ(gdr_unpin_buffer(pt->g, pt->mh), 0);
     pt->mh = null_mh;
     return NULL;
@@ -1588,9 +1592,19 @@ BEGIN_GDRCOPY_TEST(child_thread_pins_buffer)
         pthread_t tid[2];
         ASSERT_EQ(pthread_barrier_init(&t.barrier, NULL, 2), 0);
         t.use_barrier = true;
-        print_dbg("spawning two children threads\n");
+        print_dbg("spawning two children threads, splitting setup and teardown\n");
         ASSERT_EQ(pthread_create(&tid[0], NULL, thr_fun_setup, &t), 0);
         ASSERT_EQ(pthread_create(&tid[1], NULL, thr_fun_teardown, &t), 0);
+        ASSERT_EQ(pthread_join(tid[0], NULL), 0);
+        ASSERT_EQ(pthread_join(tid[1], NULL), 0);
+    }
+    {
+        pthread_t tid[2];
+        t.use_barrier = false;
+        mt_test_info t2 = t;
+        print_dbg("spawning two children threads, concurrently pinning and mapping the same buffer\n");
+        ASSERT_EQ(pthread_create(&tid[0], NULL, thr_fun_combined, &t), 0);
+        ASSERT_EQ(pthread_create(&tid[1], NULL, thr_fun_combined, &t2), 0);
         ASSERT_EQ(pthread_join(tid[0], NULL), 0);
         ASSERT_EQ(pthread_join(tid[1], NULL), 0);
     }
