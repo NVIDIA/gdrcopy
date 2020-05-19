@@ -283,10 +283,16 @@ typedef struct gdr_info gdr_info_t;
 
 static int gdrdrv_check_same_process(gdr_info_t *info, struct task_struct *tsk)
 {
+    int same_proc;
     BUG_ON(0 == info);
     BUG_ON(0 == tsk);
-    return (info->pid == task_pid(tsk))        // either exactly the same task
+    same_proc = (info->pid == task_pid(tsk))        // either exactly the same task
         || (info->tgid == task_tgid_nr(tsk)) ; // or tasks belonging to the task group
+    if (!same_proc) {
+        gdr_dbg("check failed, info:{pid=%p tgid=0x%x} this tsk={pid=%p tgid=0x%x}\n",
+                info->pid, info->tgid, task_pid(tsk), task_tgid_nr(tsk));
+    }
+    return same_proc;
 }
 
 //-----------------------------------------------------------------------------
