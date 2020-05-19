@@ -156,7 +156,7 @@ static inline int gdr_pfn_is_ram(unsigned long pfn)
 
 #define DEVNAME "gdrdrv"
 
-#define gdr_msg(KRNLVL, FMT, ARGS...) printk(KRNLVL DEVNAME ":" FMT, ## ARGS)
+#define gdr_msg(KRNLVL, FMT, ARGS...) printk(KRNLVL DEVNAME ":%s:" FMT, __func__, ## ARGS)
 //#define gdr_msg(KRNLVL, FMT, ARGS...) printk_ratelimited(KRNLVL DEVNAME ":" FMT, ## ARGS)
 
 static int dbg_enabled = 0;
