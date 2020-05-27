@@ -1568,7 +1568,7 @@ void *thr_fun_cleanup(void *data)
     return NULL;
 }
 
-BEGIN_GDRCOPY_TEST(child_thread_pins_buffer)
+BEGIN_GDRCOPY_TEST(basic_child_thread_pins_buffer)
 {
     const size_t _size = GPU_PAGE_SIZE * 16;
     mt_test_info t = { 0, 0, 0, 0, null_mh, false };
@@ -1657,7 +1657,7 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_basic, basic);
     tcase_add_test(tc_basic, basic_with_tokens);
     tcase_add_test(tc_basic, basic_unaligned_mapping);
-    tcase_add_test(tc_basic, child_thread_pins_buffer);
+    tcase_add_test(tc_basic, basic_child_thread_pins_buffer);
 
     suite_add_tcase(s, tc_data_validation);
     tcase_add_test(tc_data_validation, data_validation);
