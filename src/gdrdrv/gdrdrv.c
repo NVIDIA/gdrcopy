@@ -263,9 +263,8 @@ struct gdr_info {
     struct list_head        mr_list;
     struct mutex            lock;
 
-    // Pointer to the pid struct of the creator process. We do not use
-    // numerical pid here to avoid issues from pid reuse.
-    struct pid             *pid;
+    // Pointer to the pid struct of the creator task group.
+    // We do not use numerical pid here to avoid issues from pid reuse.
     struct pid             *tgid;
 
     // Address space unique to this opened file. We need to create a new one
@@ -286,11 +285,10 @@ static int gdrdrv_check_same_process(gdr_info_t *info, struct task_struct *tsk)
     int same_proc;
     BUG_ON(0 == info);
     BUG_ON(0 == tsk);
-    same_proc = (info->pid == task_pid(tsk))        // either exactly the same task
-        || (info->tgid == task_tgid(tsk)) ; // or tasks belonging to the task group
+    same_proc = (info->tgid == task_tgid(tsk)) ; // these tasks belong to the same task group
     if (!same_proc) {
-        gdr_dbg("check failed, info:{pid=%p tgid=%p} this tsk={pid=%p tgid=%p}\n",
-                info->pid, info->tgid, task_pid(tsk), task_tgid(tsk));
+        gdr_dbg("check failed, info:{tgid=%p} this tsk={tgid=%p}\n",
+                info->tgid, task_tgid(tsk));
     }
     return same_proc;
 }
@@ -321,9 +319,8 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     mutex_init(&info->lock);
 
     // GPU driver does not support sharing GPU allocations at fork time. Hence
-    // here we track the process owning the driver fd and prevent other process
+    // here we track the task group owning the driver fd and prevent other process
     // to use it.
-    info->pid = task_pid(current);
     info->tgid = task_tgid(current);
 
     address_space_init_once(&info->mapping);
