@@ -36,6 +36,9 @@
 #include <linux/timex.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
+#include <linux/sched/signal.h>
+#endif
 
 //-----------------------------------------------------------------------------
 
