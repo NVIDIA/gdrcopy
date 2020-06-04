@@ -36,6 +36,9 @@
 #include <linux/timex.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
+#include <linux/sched/signal.h>
+#endif
 
 //-----------------------------------------------------------------------------
 
@@ -156,7 +159,7 @@ static inline int gdr_pfn_is_ram(unsigned long pfn)
 
 #define DEVNAME "gdrdrv"
 
-#define gdr_msg(KRNLVL, FMT, ARGS...) printk(KRNLVL DEVNAME ":" FMT, ## ARGS)
+#define gdr_msg(KRNLVL, FMT, ARGS...) printk(KRNLVL DEVNAME ":%s:" FMT, __func__, ## ARGS)
 //#define gdr_msg(KRNLVL, FMT, ARGS...) printk_ratelimited(KRNLVL DEVNAME ":" FMT, ## ARGS)
 
 static int dbg_enabled = 0;
@@ -263,9 +266,9 @@ struct gdr_info {
     struct list_head        mr_list;
     struct mutex            lock;
 
-    // Pointer to the pid struct of the creator process. We do not use
-    // numerical pid here to avoid issues from pid reuse.
-    struct pid             *pid;
+    // Pointer to the pid struct of the creator task group.
+    // We do not use numerical pid here to avoid issues from pid reuse.
+    struct pid             *tgid;
 
     // Address space unique to this opened file. We need to create a new one
     // because filp->f_mapping usually points to inode->i_mapping.
@@ -279,6 +282,19 @@ struct gdr_info {
     int                     next_handle_overflow;
 };
 typedef struct gdr_info gdr_info_t;
+
+static int gdrdrv_check_same_process(gdr_info_t *info, struct task_struct *tsk)
+{
+    int same_proc;
+    BUG_ON(0 == info);
+    BUG_ON(0 == tsk);
+    same_proc = (info->tgid == task_tgid(tsk)) ; // these tasks belong to the same task group
+    if (!same_proc) {
+        gdr_dbg("check failed, info:{tgid=%p} this tsk={tgid=%p}\n",
+                info->tgid, task_tgid(tsk));
+    }
+    return same_proc;
+}
 
 //-----------------------------------------------------------------------------
 
@@ -306,9 +322,9 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     mutex_init(&info->lock);
 
     // GPU driver does not support sharing GPU allocations at fork time. Hence
-    // here we track the process owning the driver fd and prevent other process
+    // here we track the task group owning the driver fd and prevent other process
     // to use it.
-    info->pid = task_pid(current);
+    info->tgid = task_tgid(current);
 
     address_space_init_once(&info->mapping);
     info->mapping.host = inode;
@@ -340,7 +356,7 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
         return -EIO;
     }
     // Check that the caller is the same process that did gdrdrv_open
-    if (info->pid != task_pid(current)) {
+    if (!gdrdrv_check_same_process(info, current)) {
         gdr_dbg("filp is not opened by the current process\n");
         return -EACCES;
     }
@@ -767,7 +783,7 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
         return -EIO;
     }
     // Check that the caller is the same process that did gdrdrv_open
-    if (info->pid != task_pid(current)) {
+    if (!gdrdrv_check_same_process(info, current)) {
         gdr_dbg("filp is not opened by the current process\n");
         return -EACCES;
     }
@@ -893,7 +909,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         return -EIO;
     }
     // Check that the caller is the same process that did gdrdrv_open
-    if (info->pid != task_pid(current)) {
+    if (!gdrdrv_check_same_process(info, current)) {
         gdr_dbg("filp is not opened by the current process\n");
         return -EACCES;
     }
@@ -949,7 +965,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     // this also works as the mapped flag for this mr
     mr->cpu_mapping_type = GDR_MR_CACHING;
     vma->vm_ops = &gdrdrv_vm_ops;
-    gdr_dbg("overwriting vma->vm_private_data=0x%px with mr=0x%px\n", vma->vm_private_data, mr);
+    gdr_dbg("overwriting vma->vm_private_data=%px with mr=%px\n", vma->vm_private_data, mr);
     vma->vm_private_data = mr;
 
     // check for physically contiguous IO ranges
