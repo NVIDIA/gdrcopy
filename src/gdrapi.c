@@ -129,7 +129,7 @@ gdr_t gdr_open()
     if (-1 == fd ) {
         ret = errno;
         gdr_err("error opening driver (errno=%d/%s)\n", ret, strerror(ret));
-        goto err;
+        goto err_mem;
     }
 
     struct GDRDRV_IOC_GET_VERSION_PARAMS params;
@@ -137,7 +137,7 @@ gdr_t gdr_open()
     if (0 != retcode) {
         ret = errno;
         gdr_err("Error getting the gdrdrv driver version with ioctl error (errno=%d). gdrdrv might be too old.\n", ret);
-        goto err;
+        goto err_fd;
     }
     if (params.gdrdrv_version < MINIMUM_GDRDRV_VERSION) {
         gdr_err(
@@ -147,7 +147,7 @@ gdr_t gdr_open()
             params.gdrdrv_version >> MAJOR_VERSION_SHIFT, 
             params.gdrdrv_version & MINOR_VERSION_MASK
         );
-        goto err;
+        goto err_fd;
     }
     if (params.minimum_gdr_api_version > GDR_API_VERSION) {
         gdr_err(
@@ -157,7 +157,7 @@ gdr_t gdr_open()
             GDR_API_MAJOR_VERSION, 
             GDR_API_MINOR_VERSION
         );
-        goto err;
+        goto err_fd;
     }
 
     g->fd = fd;
@@ -165,8 +165,12 @@ gdr_t gdr_open()
 
     return g;
 
-err:
+err_fd:
+    close(fd);
+
+err_mem:
     free(g);
+
     return NULL;
 }
 
