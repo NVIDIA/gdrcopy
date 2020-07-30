@@ -1,6 +1,8 @@
 DESTBIN ?= 
 CUDA ?= /usr/local/cuda
 
+# note that pkg-config respects PKG_CONFIG_PATH, which can be used
+# to pick libcheck from a user-defined path
 CHECK_INC  := $(shell pkg-config --cflags-only-I check)
 CHECK_LIBS := $(shell pkg-config --libs check)
 
