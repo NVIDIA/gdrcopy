@@ -34,10 +34,10 @@ A simple by-product of it is a copy library with the following characteristics:
   prefetched and so burst reads transactions are not generated through
   PCIE
 
-The library comes with two tests:
+The library comes with a few tests like:
 - sanity, which contains unit tests for the library and the driver.
-- copybw, a minimal application which calculates the R/W bandwidth.
-
+- copybw, a minimal application which calculates the R/W bandwidth for a specific buffer size.
+- copylat, a benchmark application which calculates the R/W copy latency for a range of buffer sizes.
 
 ## Requirements
 
@@ -310,3 +310,7 @@ GPUDirect in the "Relevant Area" field.
 You can later track their progress using the __My Bugs__ link on the left of
 this [view](https://developer.nvidia.com/user).
 
+## Acknowledgment
+
+If you find this software useful in your work, please cite:
+R. Shi et al., "Designing efficient small message transfer mechanism for inter-node MPI communication on InfiniBand GPU clusters," 2014 21st International Conference on High Performance Computing (HiPC), Dona Paula, 2014, pp. 1-10, doi: 10.1109/HiPC.2014.7116873.
