@@ -1,13 +1,18 @@
 DESTBIN ?= 
 CUDA ?= /usr/local/cuda
 
+# note that pkg-config respects PKG_CONFIG_PATH, which can be used
+# to pick libcheck from a user-defined path
+CHECK_INC  := $(shell pkg-config --cflags-only-I check)
+CHECK_LIBS := $(shell pkg-config --libs check)
+
 GDRAPI_INC := ../include
 GDRAPI_SRC := ../src
 
 CUDA_LIB := -L $(CUDA)/lib64 -L $(CUDA)/lib -L /usr/lib64/nvidia -L /usr/lib/nvidia
 CUDA_INC += -I $(CUDA)/include
 
-CPPFLAGS := $(CUDA_INC) -I $(GDRAPI_INC) -I $(GDRAPI_SRC) -I $(CUDA)/include
+CPPFLAGS := $(CUDA_INC) -I $(GDRAPI_INC) -I $(GDRAPI_SRC) -I $(CUDA)/include $(CHECK_INC)
 LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64 -L $(GDRAPI_SRC)
 COMMONCFLAGS := -O2
 CFLAGS   += $(COMMONCFLAGS)
@@ -30,7 +35,7 @@ copybw: copybw.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
 sanity: sanity.o common.o
-	$(LINK.cc)  -o $@ $^ $(LIBS) `pkg-config --libs check`
+	$(LINK.cc)  -o $@ $^ $(LIBS) $(CHECK_LIBS)
 
 copylat: copylat.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt

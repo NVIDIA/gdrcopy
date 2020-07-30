@@ -99,6 +99,13 @@ $ make PREFIX=<install-to-this-location> CUDA=<cuda-install-top-dir> all install
 $ sudo ./insmod.sh
 ```
 
+If `libcheck` is installed in a non-standard path and therefore is not
+picked by `pkg-config`, you can set the `PKG_CONFIG_PATH` environment
+variable to the directory which contains the `check.pc` file and pass it
+down to make:
+```shell
+$ PKG_CONFIG_PATH=/check_install_path/lib/pkgconfig/ make <...>
+```
 
 ## Tests
 
