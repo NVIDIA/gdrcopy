@@ -130,5 +130,17 @@ namespace gdrcopy {
 
             return status == 0;
         }
+
+        void print_histogram(double *lat_arr, int count, int *bin_arr, int num_bins, double min, double max)
+        {
+            int den = (max - min) / num_bins;
+            for (int j = 0; j < num_bins; j++) bin_arr[j] = 0;
+            for (int i = 0; i < count; i++) {
+                bin_arr[(int) ((lat_arr[i] - min) / den)]++;
+            }
+            for (int j = 0; j < num_bins; j++) {
+                printf("[%lf\t-\t%lf]\t%d\n", (min * (j + 1)), (min * (j + 2)), bin_arr[j]);
+            }
+        }
     }
 }
