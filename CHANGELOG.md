@@ -4,7 +4,9 @@
 - fix build problem on RHL8 kernels
 - relax checks in gdrdrv to support multi-threading use cases
 - fix fd leak in gdr_open()
-- include gdrlat in RPM
+- introcuce new copylat test
+- remove CUDA RT dependency in tests
+- assorted cleanups
 
 ## [2.0] - 2019-09-16
 - Harden security in gdrdrv.
