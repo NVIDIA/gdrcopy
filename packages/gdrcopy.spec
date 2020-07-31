@@ -117,6 +117,10 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Fri Jul 31 2020 Davide Rossetti <drossetti@nvidia.com> 2.1-1
+- fix build problem on RHL8 kernels
+- relax checks in gdrdrv to support multi-threading use cases
+- fix fd leak in gdr_open()
 * Mon Mar 02 2020 Davide Rossetti <drossetti@nvidia.com> 2.0-4
 - Introduce copylat test application.
 - Introduce basic_with_tokens and invalidation_fork_child_gdr_pin_parent_with_tokens sub-tests in sanity.
