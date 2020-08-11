@@ -2,54 +2,88 @@
 # -*- makefile -*-
 
 # Uncomment this to turn on verbose mode.
-#export DH_VERBOSE=1
+export DH_VERBOSE=1
 
-DEB_NAME=gdrdrv
-NAME=gdrdrv
-VERSION=@VERSION@
+# DEB_NAME=gdrdrv
+# NAME=gdrdrv
+# VERSION=@VERSION@
 
-configure: configure-stamp
-configure-stamp:
-	dh_testdir
-	touch configure-stamp
+# configure: configure-stamp
+# configure-stamp:
+# 	dh_testdir
+# 	touch configure-stamp
 
 
-build: build-stamp
+# build: build-stamp
 
-build-stamp: configure-stamp 
-	dh_testdir
-	$(MAKE)
-	touch $@
+# build-stamp: configure-stamp 
+# 	dh_testdir
+# 	$(MAKE)
+# 	touch $@
 
-clean:
-	dh_testdir
-	dh_testroot
-	rm -f build-stamp configure-stamp
-	-$(MAKE) clean
-	dh_clean
+# clean:
+# 	dh_testdir
+# 	dh_testroot
+# 	rm -f build-stamp configure-stamp
+# 	-$(MAKE) clean
+# 	dh_clean
 
-install: build
-	dh_testdir
-	dh_testroot
-	dh_prep
-	dh_installdirs
-	$(MAKE) DESTDIR=$(CURDIR)/debian/$(DEB_NAME)-dkms NAME=$(NAME) VERSION=$(VERSION) install
-	dh_installinit --name $(DEB_NAME)
+# install: build
+# 	dh_testdir
+# 	dh_testroot
+# 	dh_prep
+# 	dh_installdirs
+# 	$(MAKE) DESTDIR=$(CURDIR)/debian/$(DEB_NAME)-dkms NAME=$(NAME) VERSION=$(VERSION) install
+# 	dh_installinit --name $(DEB_NAME)
 
-binary-arch: build install
+# binary-arch: build install
 
-binary-indep: build install
-	dh_testdir
-	dh_testroot
-	dh_link
-	dh_strip
-	dh_compress
-	dh_fixperms
-	dh_installdeb
-	dh_shlibdeps
-	dh_gencontrol
-	dh_md5sums
-	dh_builddeb
+# binary-indep: build install
+# 	dh_testdir
+# 	dh_testroot
+# 	dh_link
+# 	dh_strip
+# 	dh_compress
+# 	dh_fixperms
+# 	dh_installdeb
+# 	dh_shlibdeps
+# 	dh_gencontrol
+# 	dh_md5sums
+# 	dh_builddeb
 
-binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install configure
+# binary: binary-indep binary-arch
+# .PHONY: build clean binary-indep binary-arch binary install configure
+
+pname:=gdrdrv
+pdkms:=$(pname)-dkms
+#pversion:=@VERSION@
+pversion:=$(shell dpkg-parsechangelog | sed -n 's/^Version: *\([^-]\+\)-.\+/\1/p')
+srcdir:=$(pname)-$(pversion)
+%:
+	dh $@ --with dkms
+
+override_dh_auto_clean:
+
+override_dh_auto_configure:
+
+override_dh_auto_build:
+
+override_dh_auto_test:
+
+override_dh_auto_install:
+	# For dkms
+	dh_installdirs -p$(pdkms)  usr/src/$(pname)-$(pversion)
+	cp -a $(srcdir)/Makefile             debian/$(pdkms)/usr/src/$(pname)-$(pversion)
+	cp -a $(srcdir)/gdrdrv.h             debian/$(pdkms)/usr/src/$(pname)-$(pversion)
+	cp -a $(srcdir)/gdrdrv.c             debian/$(pdkms)/usr/src/$(pname)-$(pversion)
+	cp -a $(srcdir)/nv-p2p-dummy.c       debian/$(pdkms)/usr/src/$(pname)-$(pversion)
+	cp -a $(srcdir)/dkms.conf            debian/$(pdkms)/usr/src/$(pname)-$(pversion)
+	# utils
+	#dh_installdirs -p$(pdkms)  /etc/init.d/
+	#install -m 0755 $(srcdir)/gdrcopy    debian/$(pname)/etc/init.d/gdrcopy
+	# add info needed to load the module on boot
+	# $(CURDIR)/debian/updateInit.sh debian/$(pname)/etc/init.d/gdrcopy
+	#dh_installdirs -p$(pdkms)  /etc/init/
+	#install -m 0755 $(srcdir)/gdrcopy.upstart         debian/$(pname)/etc/init/gdrdrv.conf
+
+override_dh_installinit:
