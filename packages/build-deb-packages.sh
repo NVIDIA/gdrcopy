@@ -83,8 +83,8 @@ ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
 ex find . -type f -exec sed -i "s/@VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
 
-ex dpkg-buildpackage -S -us -uc
-ex dpkg-buildpackage -rfakeroot -d -b -us -uc
+#ex dpkg-buildpackage -S -us -uc
+ex dpkg-buildpackage -rfakeroot -d -us -uc
 
 echo
 echo "Copying *.deb and supplementary files to the current working directory ..."
