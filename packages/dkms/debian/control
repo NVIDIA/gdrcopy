@@ -3,7 +3,7 @@ Section: misc
 Priority: optional
 Maintainer: Davide Rossetti <drossetti@nvidia.com>
 Build-Depends: debhelper (>= 10), dkms
-Standards-Version: @VERSION@
+Standards-Version: @FULL_VERSION@
 
 Package: gdrdrv-dkms
 Architecture: any
