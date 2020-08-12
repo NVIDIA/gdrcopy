@@ -61,7 +61,8 @@ ex cp README.md ${tmpdir}/gdrcopy/debian/README.source
 ex rm -f ${tmpdir}/gdrcopy_${VERSION}.orig.tar.gz
 
 ex cd ${tmpdir}/gdrcopy
-ex find . -type f -exec sed -i "s/@VERSION@/${FULL_VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 
 ex cd ${tmpdir}
 ex mv gdrcopy gdrcopy-${VERSION}
