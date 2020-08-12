@@ -76,15 +76,20 @@ echo "Building dkms module ..."
 ex cd ${tmpdir}/gdrcopy-${VERSION}/src/gdrdrv
 ex make clean
 
-ex mkdir -p ${tmpdir}/gdrdrv-dkms-${VERSION}/
-ex cp -r ${tmpdir}/gdrcopy-${VERSION}/src/gdrdrv ${tmpdir}/gdrdrv-dkms-${VERSION}/gdrdrv-${VERSION}
-ex cp ${SCRIPT_DIR_PATH}/dkms.conf ${tmpdir}/gdrdrv-dkms-${VERSION}/gdrdrv-${VERSION}/
-ex cd ${tmpdir}/gdrdrv-dkms-${VERSION}/
+dkmsdir="${tmpdir}/gdrdrv-dkms-${VERSION}"
+ex mkdir -p ${dkmsdir}
+ex cp -r ${tmpdir}/gdrcopy-${VERSION}/src/gdrdrv ${dkmsdir}/gdrdrv-${VERSION}
+ex cp ${SCRIPT_DIR_PATH}/dkms.conf ${dkmsdir}/gdrdrv-${VERSION}/
+ex cd ${dkmsdir}
 ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
 
+ex cd ${tmpdir}
+ex tar czvf gdrdrv-dkms_${VERSION}.orig.tar.gz gdrdrv-dkms-${VERSION}
+
+ex cd ${dkmsdir}
 ex dpkg-buildpackage -rfakeroot -d -F -us -uc
 
 echo
