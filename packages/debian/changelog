@@ -1,4 +1,4 @@
-gdrcopy (@VERSION@) unstable; urgency=low
+gdrcopy (@FULL_VERSION@) unstable; urgency=low
 
   * fix build problem on RHL8 kernels
   * relax checks in gdrdrv to support multi-threading use cases

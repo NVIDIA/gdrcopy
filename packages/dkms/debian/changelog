@@ -1,4 +1,4 @@
-gdrdrv-dkms (@VERSION@) unstable; urgency=low
+gdrdrv-dkms (@FULL_VERSION@) unstable; urgency=low
 
   * Change the package maintainer to Davide Rossetti.
 
