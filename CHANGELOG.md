@@ -4,7 +4,7 @@
 - fix build problem on RHL8 kernels
 - relax checks in gdrdrv to support multi-threading use cases
 - fix fd leak in gdr_open()
-- introcuce new copylat test
+- introduce new copylat test
 - remove CUDA RT dependency in tests
 - assorted cleanups
 
