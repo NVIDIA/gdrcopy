@@ -85,7 +85,7 @@ $ sudo rpm -Uvh gdrcopy-devel-<version>.<platform>.rpm
 ### deb package
 
 ```shell
-$ sudo apt install build-essential devscripts debhelper check libsubunit-dev
+$ sudo apt install build-essential devscripts debhelper check libsubunit-dev fakeroot
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-deb-packages.sh
 $ sudo dpkg -i gdrdrv-dkms_<version>_<platform>.deb
