@@ -58,7 +58,7 @@ echo "building"
 make -j CUDA=${CUDA}
 
 %install
-make install DESTDIR=$RPM_BUILD_ROOT PREFIX=%{_prefix}
+make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
 make drv_install DESTDIR=$RPM_BUILD_ROOT 
 
 # Install gdrdrv service script
