@@ -66,7 +66,7 @@ install -d $RPM_BUILD_ROOT/etc/init.d
 install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
 
 %post %{kmod}
-/sbin/depmod -a
+/sbin/depmod -a %{KVERSION}
 %{MODPROBE} -rq gdrdrv||:
 %{MODPROBE} gdrdrv||:
 
