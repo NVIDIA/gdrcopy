@@ -111,6 +111,15 @@ START_TEST(__testname) {                                                \
 #define BEGIN_CHECK do
 #define END_CHECK while(0)
 
+#define GDR_OPEN_SAFE() ({                                                          \
+        gdr_t _g = gdr_open();                                                      \
+        if (!_g) {                                                                  \
+            fprintf(stderr, "gdr_open error: Is gdrdrv installed and loaded?\n");   \
+            exit(EXIT_FAILURE);                                                     \
+        }                                                                           \
+        _g;                                                                         \
+    })
+
 
 namespace gdrcopy {
     namespace test {
