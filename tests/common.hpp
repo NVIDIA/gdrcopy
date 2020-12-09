@@ -77,8 +77,10 @@ START_TEST(__testname) {                                                \
             print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);     \
         else if (__child_exit_status == EXIT_WAIVED)                    \
             print_dbg("&&&& WAIVED %s\n", gdrcopy::test::testname);     \
-        else                                                            \
+        else {                                                          \
             print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);     \
+            ck_abort();                                                 \
+        }                                                               \
     }                                                                   \
 } END_TEST
 
