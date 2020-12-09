@@ -36,9 +36,20 @@
 #include <linux/timex.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
 #include <linux/sched/signal.h>
 #endif
+
+/**
+ * HAVE_UNLOCKED_IOCTL has been dropped in kernel version 5.9.
+ * There is a chance that the removal might be ported back to 5.x.
+ * So if HAVE_UNLOCKED_IOCTL is not defined in kernel v5, we define it.
+ * This also allows backward-compatibility with kernel < 2.6.11.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0) && !defined(HAVE_UNLOCKED_IOCTL)
+#define HAVE_UNLOCKED_IOCTL 1
+#endif 
 
 //-----------------------------------------------------------------------------
 
