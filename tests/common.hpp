@@ -113,19 +113,21 @@ START_TEST(__testname) {                                                \
 #define BEGIN_CHECK do
 #define END_CHECK while(0)
 
-#define GDR_OPEN_SAFE() ({                                                              \
-        gdr_t _g = gdr_open();                                                          \
-        if (!_g) {                                                                      \
-            fprintf(stderr, "gdr_open error: Is gdrdrv driver installed and loaded?\n");\
-            exit(EXIT_FAILURE);                                                         \
-        }                                                                               \
-        _g;                                                                             \
-    })
 
 
 namespace gdrcopy {
     namespace test {
         extern std::map<CUdeviceptr, CUdeviceptr> _allocations;
+
+        static inline gdr_t gdr_open_safe()
+        {
+            gdr_t g = gdr_open();
+            if (!g) {
+                fprintf(stderr, "gdr_open error: Is gdrdrv driver installed and loaded?\n");
+                exit(EXIT_FAILURE);
+            }
+            return g;
+        }
 
         static inline CUresult gpuMemAlloc(CUdeviceptr *pptr, size_t psize, bool align_to_gpu_page = true, bool set_sync_memops = true)
         {
