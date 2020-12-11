@@ -61,17 +61,17 @@ START_TEST(__testname) {                                                \
     if (__pid < 0) {                                                    \
         print_dbg("Cannot fork\n");                                     \
         print_dbg("&&&& FAILED " # __testname "\n");                    \
-        exit(EXIT_FAILURE);                                             \
+        ck_abort();                                                     \
     }                                                                   \
     if (__pid == 0) {
 
 #define END_GDRCOPY_TEST }                                              \
-    if (__pid) {                                                        \
+    if (__pid > 0) {                                                    \
         int __child_exit_status = -EINVAL;                              \
         if (waitpid(__pid, &__child_exit_status, 0) == -1) {            \
             print_dbg("waitpid returned an error\n");                   \
             print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);     \
-            exit(EXIT_FAILURE);                                         \
+            ck_abort();                                                 \
         }                                                               \
         if (__child_exit_status == EXIT_SUCCESS)                        \
             print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);     \
