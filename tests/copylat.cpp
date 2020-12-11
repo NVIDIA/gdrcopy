@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
 
     cout << endl;
 
-    gdr_t g = GDR_OPEN_SAFE();
+    gdr_t g = gdr_open_safe();
     ASSERT_NEQ(g, (void*)0);
 
     gdr_mh_t mh;
