@@ -144,8 +144,7 @@ int main(int argc, char *argv[])
     ASSERT_NEQ(init_buf, (void*)0);
     init_hbuf_walking_bit(init_buf, size);
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh;
     BEGIN_CHECK {

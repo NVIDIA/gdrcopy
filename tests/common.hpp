@@ -61,24 +61,26 @@ START_TEST(__testname) {                                                \
     if (__pid < 0) {                                                    \
         print_dbg("Cannot fork\n");                                     \
         print_dbg("&&&& FAILED " # __testname "\n");                    \
-        exit(EXIT_FAILURE);                                             \
+        ck_abort();                                                     \
     }                                                                   \
     if (__pid == 0) {
 
 #define END_GDRCOPY_TEST }                                              \
-    if (__pid) {                                                        \
+    if (__pid > 0) {                                                    \
         int __child_exit_status = -EINVAL;                              \
         if (waitpid(__pid, &__child_exit_status, 0) == -1) {            \
             print_dbg("waitpid returned an error\n");                   \
             print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);     \
-            exit(EXIT_FAILURE);                                         \
+            ck_abort();                                                 \
         }                                                               \
         if (__child_exit_status == EXIT_SUCCESS)                        \
             print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);     \
         else if (__child_exit_status == EXIT_WAIVED)                    \
             print_dbg("&&&& WAIVED %s\n", gdrcopy::test::testname);     \
-        else                                                            \
+        else {                                                          \
             print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);     \
+            ck_abort();                                                 \
+        }                                                               \
     }                                                                   \
 } END_TEST
 
@@ -112,9 +114,20 @@ START_TEST(__testname) {                                                \
 #define END_CHECK while(0)
 
 
+
 namespace gdrcopy {
     namespace test {
         extern std::map<CUdeviceptr, CUdeviceptr> _allocations;
+
+        static inline gdr_t gdr_open_safe()
+        {
+            gdr_t g = gdr_open();
+            if (!g) {
+                fprintf(stderr, "gdr_open error: Is gdrdrv driver installed and loaded?\n");
+                exit(EXIT_FAILURE);
+            }
+            return g;
+        }
 
         static inline CUresult gpuMemAlloc(CUdeviceptr *pptr, size_t psize, bool align_to_gpu_page = true, bool set_sync_memops = true)
         {

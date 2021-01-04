@@ -177,8 +177,7 @@ BEGIN_GDRCOPY_TEST(basic)
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh = null_mh;
     CUdeviceptr d_ptr = d_A;
@@ -214,8 +213,7 @@ BEGIN_GDRCOPY_TEST(basic_with_tokens)
     ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuPointerGetAttribute(&tokens, CU_POINTER_ATTRIBUTE_P2P_TOKENS, d_A));
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh = null_mh;
     CUdeviceptr d_ptr = d_A;
@@ -272,8 +270,7 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
     }
     print_dbg("d_A is unaligned\n");
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     // Try mapping with unaligned address. This should fail.
     print_dbg("Try mapping d_A as is.\n");
@@ -354,8 +351,7 @@ BEGIN_GDRCOPY_TEST(data_validation)
     init_hbuf_walking_bit(init_buf, size);
     memset(copy_buf, 0xA5, size * sizeof(*copy_buf));
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh;
 
@@ -467,8 +463,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
     ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh;
     CUdeviceptr d_ptr = d_A;
@@ -543,8 +538,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
     ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh;
     CUdeviceptr d_ptr = d_A;
@@ -622,8 +616,7 @@ BEGIN_GDRCOPY_TEST(invalidation_two_mappings)
         ASSERTDRV(cuMemsetD8(d_A[i], 0x95, size));
     }
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh[2];
 
@@ -768,8 +761,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_access_after_cumemfree)
     ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh;
 
@@ -877,8 +869,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_after_gdr_map)
     ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh;
 
@@ -1017,8 +1008,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_map_parent)
     ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh;
 
@@ -1130,8 +1120,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_map_and_free)
     ASSERTDRV(gpuMemAlloc(&d_A, size));
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh;
 
@@ -1260,8 +1249,7 @@ BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
         close(pair[0]);
 
         print_dbg("%s: Calling gdr_open\n", myname);
-        gdr_t g = gdr_open();
-        ASSERT_NEQ(g, (void*)0);
+        gdr_t g = gdr_open_safe();
 
         fd = g->fd;
         print_dbg("%s: Extracted fd from gdr_t got fd %d\n", myname, fd);
@@ -1384,8 +1372,7 @@ BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_map)
         close(pair[0]);
 
         print_dbg("%s: Calling gdr_open\n", myname);
-        gdr_t g = gdr_open();
-        ASSERT_NEQ(g, (void*)0);
+        gdr_t g = gdr_open_safe();
 
         print_dbg("%s: Calling gdr_pin_buffer\n", myname);
         gdr_mh_t mh;
@@ -1466,8 +1453,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
         read_fd = filedes_1[0];
         write_fd = filedes_0[1];
 
-        gdr_t g = gdr_open();
-        ASSERT_NEQ(g, (void*)0);
+        gdr_t g = gdr_open_safe();
 
         ASSERT_EQ(read(read_fd, &d_A, sizeof(CUdeviceptr)), sizeof(CUdeviceptr));
         ASSERT_EQ(read(read_fd, &tokens, sizeof(CUDA_POINTER_ATTRIBUTE_P2P_TOKENS)), sizeof(CUDA_POINTER_ATTRIBUTE_P2P_TOKENS));
@@ -1579,8 +1565,7 @@ BEGIN_GDRCOPY_TEST(basic_child_thread_pins_buffer)
     ASSERTDRV(gpuMemAlloc(&t.d_buf, t.size));
     ASSERTDRV(cuMemsetD8(t.d_buf, 0xA5, t.size));
 
-    t.g = gdr_open();
-    ASSERT_NEQ(t.g, (void*)0);
+    t.g = gdr_open_safe();
     {
         pthread_t tid;
         t.use_barrier = false;
