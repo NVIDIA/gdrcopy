@@ -79,3 +79,7 @@ ex cd ${CWD}
 ex cp $tmpdir/topdir/SRPMS/*.rpm .
 ex cp $tmpdir/topdir/RPMS/*/*.rpm .
 
+echo
+echo "Cleaning up ..."
+
+ex rm -rf ${tmpdir}
