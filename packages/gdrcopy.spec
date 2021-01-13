@@ -55,7 +55,7 @@ Kernel-mode driver for GDRCopy.
 
 %build
 echo "building"
-make -j CUDA=${CUDA}
+make -j CUDA=%{CUDA}
 
 %install
 make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
