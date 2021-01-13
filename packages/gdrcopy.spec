@@ -6,9 +6,9 @@
 %global debug_package %{nil}
 %global krelver %(echo -n %{KVERSION} | sed -e 's/-/_/g')
 %define MODPROBE %(if ( /sbin/modprobe -c | grep -q '^allow_unsupported_modules  *0'); then echo -n "/sbin/modprobe --allow-unsupported-modules"; else echo -n "/sbin/modprobe"; fi )
+%define usr_src_dir /usr/src
 %define driver_install_dir /lib/modules/%{KVERSION}/%{MODULE_LOCATION}
 %global kmod kmod
-#modules-%{krelver}
 
 
 Name:           gdrcopy
@@ -24,9 +24,6 @@ Requires:       %{name}-%{kmod} check
 
 # to get rid of libcuda/libcudart
 AutoReqProv:    no
-# alternatives, not working on RH6 
-#%filter_from_provides /libcuda\\.so.*$/d
-#%global __provides_exclude ^libcuda\\.so.*$
 
 %package devel
 Summary: The development files
@@ -36,7 +33,7 @@ Requires: %{name} = %{version}-%{release}
 %package %{kmod}
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
-#Requires: %{name} = %{version}-%{release}
+Requires: dkms
 
 %description
 GDRCopy, a low-latency GPU memory copy library and a kernel-mode driver, built on top of the 
@@ -55,17 +52,31 @@ Kernel-mode driver for GDRCopy.
 
 %build
 echo "building"
-make -j CUDA=%{CUDA}
+make -j CUDA=%{CUDA} config lib exes
 
 %install
+# Install gdrcopy library and tests
 make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
-make drv_install DESTDIR=$RPM_BUILD_ROOT 
+
+# Install gdrdrv src
+mkdir -p $RPM_BUILD_ROOT/usr/src
+cp -r -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
+cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
 
 # Install gdrdrv service script
 install -d $RPM_BUILD_ROOT/etc/init.d
 install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
 
 %post %{kmod}
+dkms add -m gdrdrv -v %{version} -q || :
+
+# Rebuild and make available for the all installed kernel
+for kver in $(ls -1d /lib/modules/* | cut -d'/' -f4)
+do
+    dkms build -m gdrdrv -v %{version} -k ${kver} -q || :
+    dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :
+done
+
 /sbin/depmod -a
 %{MODPROBE} -rq gdrdrv||:
 %{MODPROBE} gdrdrv||:
@@ -84,6 +95,9 @@ service gdrcopy stop||:
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
    true
 fi              
+
+# Remove all versions from DKMS registry
+dkms remove -m gdrdrv -v %{version} -q --all || :
 
 %postun %{kmod}
 if [ -e /usr/bin/systemctl ]; then
@@ -113,7 +127,11 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %files %{kmod}
 %defattr(-,root,root,-)
 /etc/init.d/gdrcopy
-%{driver_install_dir}/gdrdrv.ko
+%{usr_src_dir}/gdrdrv-%{version}/gdrdrv.c
+%{usr_src_dir}/gdrdrv-%{version}/gdrdrv.h
+%{usr_src_dir}/gdrdrv-%{version}/Makefile
+%{usr_src_dir}/gdrdrv-%{version}/nv-p2p-dummy.c
+%{usr_src_dir}/gdrdrv-%{version}/dkms.conf
 
 
 %changelog
