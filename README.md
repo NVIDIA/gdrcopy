@@ -52,8 +52,8 @@ require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
 subunit.
 
 ```shell
-# On RHEL
-$ sudo yum install check check-devel subunit subunit-devel
+# On RHEL (epel-release repository might be required)
+$ sudo yum install dkms check check-devel subunit subunit-devel
 
 # On Debian
 $ sudo apt install check libsubunit0 libsubunit-dev
@@ -73,8 +73,9 @@ We provide three ways for building and installing GDRCopy
 ### rpm package
 
 ```shell
+# Note: You might need to enable epel-release repository first.
 $ sudo yum groupinstall 'Development Tools'
-$ sudo yum install rpm-build make check check-devel subunit subunit-devel
+$ sudo yum install dkms rpm-build make check check-devel subunit subunit-devel
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
 $ sudo rpm -Uvh gdrcopy-kmod-<version>.<platform>.rpm
