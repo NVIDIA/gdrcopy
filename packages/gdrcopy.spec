@@ -77,7 +77,7 @@ do
     dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :
 done
 
-/sbin/depmod -a
+/sbin/depmod -a %{KVERSION}
 %{MODPROBE} -rq gdrdrv||:
 %{MODPROBE} gdrdrv||:
 
