@@ -12,7 +12,7 @@
 
 %global kmod_install_script                                             \
 echo "Start gdrcopy-kmod installation."                                 \
-dkms add -m gdrdrv -v %{version} -q || :                                \
+dkms add -m gdrdrv -v %{version} -q --rpm_safe_upgrade || :             \
                                                                         \
 # Rebuild and make available for all installed kernel                   \
 echo "Building and installing to all available kernels."                \
@@ -123,7 +123,7 @@ fi
 echo "Uninstalling and removing the driver."
 echo "This process may take a few minutes ..."
 dkms uninstall -m gdrdrv -v %{version} -q --all || :
-dkms remove -m gdrdrv -v %{version} -q --all || :
+dkms remove -m gdrdrv -v %{version} -q --all --rpm_safe_upgrade || :
 
 # Clean up the weak-updates symlinks
 find /lib/modules/*/weak-updates -name "gdrdrv.ko.xz" | xargs rm
