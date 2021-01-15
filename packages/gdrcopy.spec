@@ -61,6 +61,7 @@ AutoReqProv:    no
 Summary: The development files
 Group: System Environment/Libraries
 Requires: %{name} = %{version}-%{release}
+BuildArch: noarch
 
 %package %{kmod}
 Summary: The kernel-mode driver
