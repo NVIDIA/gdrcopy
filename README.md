@@ -52,7 +52,8 @@ require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
 subunit.
 
 ```shell
-# On RHEL (epel-release repository might be required)
+# On RHEL
+# dkms can be installed from epel-release. See https://fedoraproject.org/wiki/EPEL.
 $ sudo yum install dkms check check-devel subunit subunit-devel
 
 # On Debian
@@ -73,7 +74,8 @@ We provide three ways for building and installing GDRCopy
 ### rpm package
 
 ```shell
-# Note: You might need to enable epel-release repository first.
+# dkms can be installed from epel-release. See https://fedoraproject.org/wiki/EPEL.
+
 $ sudo yum groupinstall 'Development Tools'
 $ sudo yum install dkms rpm-build make check check-devel subunit subunit-devel
 $ cd packages
