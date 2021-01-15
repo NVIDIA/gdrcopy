@@ -65,7 +65,10 @@ Requires: %{name} = %{version}-%{release}
 %package %{kmod}
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
-Requires: dkms
+Requires: dkms >= 1.00
+Requires: bash
+Release: %{_release}%{?dist}dkms
+BuildArch: noarch
 Recommends: kmod-nvidia-latest-dkms
 
 %description
