@@ -71,6 +71,8 @@ install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT
 dkms add -m gdrdrv -v %{version} -q || :
 
 # Rebuild and make available for the all installed kernel
+echo "Building and installing to all available kernels."
+echo "This process may take a few minutes ..."
 for kver in $(ls -1d /lib/modules/* | cut -d'/' -f4)
 do
     dkms build -m gdrdrv -v %{version} -k ${kver} -q || :
@@ -97,6 +99,9 @@ if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
 fi              
 
 # Remove all versions from DKMS registry
+echo "Uninstalling and removing the driver."
+echo "This process may take a few minutes ..."
+dkms uninstall -m gdrdrv -v %{version} -q --all || :
 dkms remove -m gdrdrv -v %{version} -q --all || :
 
 %postun %{kmod}
