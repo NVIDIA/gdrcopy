@@ -14,7 +14,7 @@
 echo "Start gdrcopy-kmod installation."                                 \
 dkms add -m gdrdrv -v %{version} -q || :                                \
                                                                         \
-# Rebuild and make available for the all installed kernel               \
+# Rebuild and make available for all installed kernel                   \
 echo "Building and installing to all available kernels."                \
 echo "This process may take a few minutes ..."                          \
 for kver in $(ls -1d /lib/modules/* | cut -d'/' -f4)                    \
@@ -92,7 +92,7 @@ make -j CUDA=%{CUDA} config lib exes
 make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
 
 # Install gdrdrv src
-mkdir -p $RPM_BUILD_ROOT/usr/src
+mkdir -p $RPM_BUILD_ROOT%{usr_src_dir}
 cp -r -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
 
