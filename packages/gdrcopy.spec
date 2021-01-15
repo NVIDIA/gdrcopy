@@ -137,6 +137,20 @@ find /lib/modules/*/weak-updates -name "gdrdrv.ko.xz" | xargs rm
 %{kmod_install_script}
 
 
+%triggerin %{kmod} -- kmod-nvidia-latest-dkms
+%{kmod_install_script}
+
+
+%triggerun %{kmod} -- kmod-nvidia-latest-dkms
+# This kmod package has only weak dependency with kmod-nvidia-latest-dkms, which is not enforced by RPM.
+# Uninstalling kmod-nvidia-latest-dkms would not result in uninstalling this package.
+# However, gdrdrv may prevent the removal of nvidia.ko.
+# Hence, we rmmod gdrdrv before starting kmod-nvidia-latest-dkms uninstallation.
+service gdrcopy stop||:
+%{MODPROBE} -rq gdrdrv||:
+service gdrcopy start > /dev/null 2>&1 ||:
+
+
 %clean
 rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 [ "x$RPM_BUILD_ROOT" != "x" ] && rm -rf $RPM_BUILD_ROOT
