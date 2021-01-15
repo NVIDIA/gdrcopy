@@ -7,7 +7,7 @@
 %global krelver %(echo -n %{KVERSION} | sed -e 's/-/_/g')
 %define MODPROBE %(if ( /sbin/modprobe -c | grep -q '^allow_unsupported_modules  *0'); then echo -n "/sbin/modprobe --allow-unsupported-modules"; else echo -n "/sbin/modprobe"; fi )
 %define usr_src_dir /usr/src
-%define driver_install_dir /lib/modules/%{KVERSION}/%{MODULE_LOCATION}
+%define old_driver_install_dir /lib/modules/%{KVERSION}/%{MODULE_LOCATION}
 %global kmod kmod
 
 
@@ -68,6 +68,17 @@ install -d $RPM_BUILD_ROOT/etc/init.d
 install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
 
 %post %{kmod}
+if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
+    echo "Old package detected. Defer installation until after the old package is removed."
+
+    # Prevent the uninstall scriptlet of the old package complaining about change in gdrcopy service
+    if [ -e /usr/bin/systemctl ]; then
+        /usr/bin/systemctl daemon-reload
+    fi
+
+    exit 0;
+fi
+
 dkms add -m gdrdrv -v %{version} -q || :
 
 # Rebuild and make available for the all installed kernel
@@ -104,10 +115,40 @@ echo "This process may take a few minutes ..."
 dkms uninstall -m gdrdrv -v %{version} -q --all || :
 dkms remove -m gdrdrv -v %{version} -q --all || :
 
+# Clean up the weak-updates symlinks
+find /lib/modules/*/weak-updates -name "gdrdrv.ko.xz" | xargs rm
+
 %postun %{kmod}
 if [ -e /usr/bin/systemctl ]; then
     /usr/bin/systemctl daemon-reload
 fi
+
+
+%triggerpostun %{kmod} -- gdrcopy-kmod <= 2.1-1
+
+echo "Start gdrcopy-kmod installation."
+dkms add -m gdrdrv -v %{version} -q || :
+
+# Rebuild and make available for the all installed kernel
+echo "Building and installing to all available kernels."
+echo "This process may take a few minutes ..."
+for kver in $(ls -1d /lib/modules/* | cut -d'/' -f4)
+do
+    dkms build -m gdrdrv -v %{version} -k ${kver} -q || :
+    dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :
+done
+
+/sbin/depmod -a %{KVERSION}
+%{MODPROBE} -rq gdrdrv||:
+%{MODPROBE} gdrdrv||:
+
+if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
+   true
+fi              
+
+/sbin/chkconfig --add gdrcopy
+
+service gdrcopy start
 
 
 %clean
