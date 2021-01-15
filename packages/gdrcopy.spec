@@ -34,6 +34,7 @@ Requires: %{name} = %{version}-%{release}
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
 Requires: dkms
+Recommends: kmod-nvidia-latest-dkms
 
 %description
 GDRCopy, a low-latency GPU memory copy library and a kernel-mode driver, built on top of the 
