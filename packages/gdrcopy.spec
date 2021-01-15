@@ -10,6 +10,38 @@
 %define old_driver_install_dir /lib/modules/%{KVERSION}/%{MODULE_LOCATION}
 %global kmod kmod
 
+%global kmod_install_script                                             \
+echo "Start gdrcopy-kmod installation."                                 \
+dkms add -m gdrdrv -v %{version} -q || :                                \
+                                                                        \
+# Rebuild and make available for the all installed kernel               \
+echo "Building and installing to all available kernels."                \
+echo "This process may take a few minutes ..."                          \
+for kver in $(ls -1d /lib/modules/* | cut -d'/' -f4)                    \
+do                                                                      \
+    dkms build -m gdrdrv -v %{version} -k ${kver} -q || :               \
+    dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :     \
+done                                                                    \
+                                                                        \
+/sbin/depmod -a %{KVERSION}                                             \
+%{MODPROBE} -rq gdrdrv||:                                               \
+%{MODPROBE} gdrdrv||:                                                   \
+                                                                        \
+if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
+   true                                                                 \
+fi                                                                      \
+                                                                        \
+/sbin/chkconfig --add gdrcopy                                           \
+                                                                        \
+service gdrcopy start                                                    
+
+
+%global daemon_reload_script                                            \
+if [ -e /usr/bin/systemctl ]; then                                      \
+    /usr/bin/systemctl daemon-reload                                    \
+fi
+
+
 
 Name:           gdrcopy
 Version:        %{GDR_VERSION}
@@ -73,35 +105,12 @@ if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
     echo "Old package detected. Defer installation until after the old package is removed."
 
     # Prevent the uninstall scriptlet of the old package complaining about change in gdrcopy service
-    if [ -e /usr/bin/systemctl ]; then
-        /usr/bin/systemctl daemon-reload
-    fi
+    %{daemon_reload_script}
 
     exit 0;
 fi
+%{kmod_install_script}
 
-dkms add -m gdrdrv -v %{version} -q || :
-
-# Rebuild and make available for the all installed kernel
-echo "Building and installing to all available kernels."
-echo "This process may take a few minutes ..."
-for kver in $(ls -1d /lib/modules/* | cut -d'/' -f4)
-do
-    dkms build -m gdrdrv -v %{version} -k ${kver} -q || :
-    dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :
-done
-
-/sbin/depmod -a %{KVERSION}
-%{MODPROBE} -rq gdrdrv||:
-%{MODPROBE} gdrdrv||:
-
-if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
-   true
-fi              
-
-/sbin/chkconfig --add gdrcopy
-
-service gdrcopy start
 
 %preun %{kmod}
 service gdrcopy stop||:
@@ -119,37 +128,13 @@ dkms remove -m gdrdrv -v %{version} -q --all || :
 # Clean up the weak-updates symlinks
 find /lib/modules/*/weak-updates -name "gdrdrv.ko.xz" | xargs rm
 
+
 %postun %{kmod}
-if [ -e /usr/bin/systemctl ]; then
-    /usr/bin/systemctl daemon-reload
-fi
+%{daemon_reload_script}
 
 
 %triggerpostun %{kmod} -- gdrcopy-kmod <= 2.1-1
-
-echo "Start gdrcopy-kmod installation."
-dkms add -m gdrdrv -v %{version} -q || :
-
-# Rebuild and make available for the all installed kernel
-echo "Building and installing to all available kernels."
-echo "This process may take a few minutes ..."
-for kver in $(ls -1d /lib/modules/* | cut -d'/' -f4)
-do
-    dkms build -m gdrdrv -v %{version} -k ${kver} -q || :
-    dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :
-done
-
-/sbin/depmod -a %{KVERSION}
-%{MODPROBE} -rq gdrdrv||:
-%{MODPROBE} gdrdrv||:
-
-if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
-   true
-fi              
-
-/sbin/chkconfig --add gdrcopy
-
-service gdrcopy start
+%{kmod_install_script}
 
 
 %clean
