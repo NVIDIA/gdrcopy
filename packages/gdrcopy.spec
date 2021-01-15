@@ -102,7 +102,7 @@ install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT
 
 %post %{kmod}
 if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
-    echo "Old package detected. Defer installation until after the old package is removed."
+    echo "Old package is detected. Defer installation until after the old package is removed."
 
     # Prevent the uninstall scriptlet of the old package complaining about change in gdrcopy service
     %{daemon_reload_script}
@@ -138,6 +138,10 @@ find /lib/modules/*/weak-updates -name "gdrdrv.ko.xz" | xargs rm
 
 
 %triggerin %{kmod} -- kmod-nvidia-latest-dkms
+if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
+    echo "kmod-nvidia-latest-dkms is detected but defer installation because of the old gdrcopy-kmod package."
+    exit 0;
+fi
 %{kmod_install_script}
 
 
