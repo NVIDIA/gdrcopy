@@ -113,7 +113,13 @@ if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
 
     exit 0;
 fi
-%{kmod_install_script}
+
+# Prevent race with kmod-nvidia-latest-dkms triggerin
+if [ ! -e "%{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed" ]; then
+    %{kmod_install_script}
+    mkdir -p %{_localstatedir}/lib/rpm-state/gdrcopy-kmod
+    touch %{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed
+fi
 
 
 %preun %{kmod}
@@ -146,7 +152,13 @@ if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
     echo "kmod-nvidia-latest-dkms is detected but defer installation because of the old gdrcopy-kmod package."
     exit 0;
 fi
-%{kmod_install_script}
+
+# Prevent race with post
+if [ ! -e "%{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed" ]; then
+    %{kmod_install_script}
+    mkdir -p %{_localstatedir}/lib/rpm-state/gdrcopy-kmod
+    touch %{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed
+fi
 
 
 %triggerun %{kmod} -- kmod-nvidia-latest-dkms
@@ -157,6 +169,13 @@ fi
 service gdrcopy stop||:
 %{MODPROBE} -rq gdrdrv||:
 service gdrcopy start > /dev/null 2>&1 ||:
+
+
+%posttrans %{kmod}
+# Cleaning up
+if [ -e "%{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed" ]; then
+    rm -f %{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed
+fi
 
 
 %clean
