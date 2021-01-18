@@ -136,7 +136,8 @@ dkms uninstall -m gdrdrv -v %{version} -q --all || :
 dkms remove -m gdrdrv -v %{version} -q --all --rpm_safe_upgrade || :
 
 # Clean up the weak-updates symlinks
-find /lib/modules/*/weak-updates -name "gdrdrv.ko.xz" | xargs rm
+find /lib/modules/*/weak-updates -name "gdrdrv.ko.*" | xargs rm || :
+find /lib/modules/*/weak-updates -name "gdrdrv.ko" | xargs rm || :
 
 
 %postun %{kmod}
