@@ -2,7 +2,7 @@
 
 # Restart this number at 1 if MAJOR_VERSION or MINOR_VERSION changes
 # See https://rpm-packaging-guide.github.io/#preamble-items
-RPM_VERSION=1
+RPM_VERSION=2
 
 SCRIPT_DIR_PATH="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."
@@ -39,6 +39,7 @@ if [ "X$VERSION" == "X" ]; then
     echo "Failed to get version numbers!" >&2
     exit 1
 fi
+FULL_VERSION="${VERSION}"
 
 tmpdir=`mktemp -d /tmp/gdr.XXXXXX`
 if [ ! -d "$tmpdir" ]; then
@@ -54,11 +55,13 @@ ex cd ${TOP_DIR_PATH}
 
 ex mkdir -p $tmpdir/gdrcopy
 ex rm -rf $tmpdir/gdrcopy/*
-ex cp -r packages/rhel/init.d insmod.sh Makefile README.md include src tests config_arch LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
+ex cp -r packages/dkms.conf packages/rhel/init.d insmod.sh Makefile README.md include src tests config_arch LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
 ex rm -f $tmpdir/gdrcopy-$VERSION.tar.gz
 
 ex cd $tmpdir/gdrcopy
+ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
 
 ex cd $tmpdir
 ex mv gdrcopy gdrcopy-$VERSION
@@ -76,3 +79,7 @@ ex cd ${CWD}
 ex cp $tmpdir/topdir/SRPMS/*.rpm .
 ex cp $tmpdir/topdir/RPMS/*/*.rpm .
 
+echo
+echo "Cleaning up ..."
+
+ex rm -rf ${tmpdir}
