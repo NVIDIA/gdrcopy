@@ -209,7 +209,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Thu Jan 14 2021 Pak Markthub <pmarkthub@nvidia.com> 2.1-2
+* Mon Jan 18 2021 Pak Markthub <pmarkthub@nvidia.com> 2.1-2
 - Add DKMS support in gdrcopy-kmod.rpm
 * Fri Jul 31 2020 Davide Rossetti <drossetti@nvidia.com> 2.1-1
 - fix build problem on RHL8 kernels
