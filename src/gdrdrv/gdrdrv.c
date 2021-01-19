@@ -391,8 +391,8 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
             mutex_lock(&info->lock);
         }
         list_del(&mr->node);
-        //memset(mr, 0, sizeof(*mr));
-        kzfree(mr);
+        memset(mr, 0, sizeof(*mr));
+        kfree(mr);
     }
     mutex_unlock(&info->lock);
 
@@ -685,8 +685,8 @@ static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
         // not returning an error here because further clean-up is
         // needed anyway
     }
-    //memset(mr, 0, sizeof(*mr));
-    kzfree(mr);
+    memset(mr, 0, sizeof(*mr));
+    kfree(mr);
  out:
     return ret;
 }
