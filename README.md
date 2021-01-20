@@ -34,10 +34,10 @@ A simple by-product of it is a copy library with the following characteristics:
   prefetched and so burst reads transactions are not generated through
   PCIE
 
-The library comes with two tests:
+The library comes with a few tests like:
 - sanity, which contains unit tests for the library and the driver.
-- copybw, a minimal application which calculates the R/W bandwidth.
-
+- copybw, a minimal application which calculates the R/W bandwidth for a specific buffer size.
+- copylat, a benchmark application which calculates the R/W copy latency for a range of buffer sizes.
 
 ## Requirements
 
@@ -47,13 +47,14 @@ RDMA](http://developer.nvidia.com/gpudirect).  For more technical informations,
 please refer to the official GPUDirect RDMA [design
 document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 
-The device driver requires GPU display driver >= 331.14. The library and tests
+The device driver requires GPU display driver >= 418.40 on ppc64le and >= 331.14 on other platforms. The library and tests
 require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
 subunit.
 
 ```shell
 # On RHEL
-$ sudo yum install check check-devel subunit subunit-devel
+# dkms can be installed from epel-release. See https://fedoraproject.org/wiki/EPEL.
+$ sudo yum install dkms check check-devel subunit subunit-devel
 
 # On Debian
 $ sudo apt install check libsubunit0 libsubunit-dev
@@ -73,6 +74,10 @@ We provide three ways for building and installing GDRCopy
 ### rpm package
 
 ```shell
+# dkms can be installed from epel-release. See https://fedoraproject.org/wiki/EPEL.
+
+$ sudo yum groupinstall 'Development Tools'
+$ sudo yum install dkms rpm-build make check check-devel subunit subunit-devel
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
 $ sudo rpm -Uvh gdrcopy-kmod-<version>.<platform>.rpm
@@ -83,6 +88,7 @@ $ sudo rpm -Uvh gdrcopy-devel-<version>.<platform>.rpm
 ### deb package
 
 ```shell
+$ sudo apt install build-essential devscripts debhelper check libsubunit-dev fakeroot pkg-config dkms
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-deb-packages.sh
 $ sudo dpkg -i gdrdrv-dkms_<version>_<platform>.deb
@@ -96,6 +102,13 @@ $ make PREFIX=<install-to-this-location> CUDA=<cuda-install-top-dir> all install
 $ sudo ./insmod.sh
 ```
 
+If `libcheck` is installed in a non-standard path and therefore is not
+picked by `pkg-config`, you can set the `PKG_CONFIG_PATH` environment
+variable to the directory which contains the `check.pc` file and pass it
+down to make:
+```shell
+$ PKG_CONFIG_PATH=/check_install_path/lib/pkgconfig/ make <...>
+```
 
 ## Tests
 
@@ -120,6 +133,81 @@ BAR writing test...
 BAR1 write BW: 9549.25MB/s
 BAR reading test...
 BAR1 read BW: 1.50172MB/s
+unmapping buffer
+unpinning buffer
+closing gdrdrv
+
+$ copylat
+GPU id:0; name: Tesla P100-PCIE-16GB; Bus id: 0000:09:00
+selecting device 0
+device ptr: 0x7f6aca800000
+allocated size: 16777216
+
+map_d_ptr: 0x7f6ae5000000
+info.va: 7f6aca800000
+info.mapped_size: 16777216
+info.page_size: 65536
+info.mapped: 1
+info.wc_mapping: 1
+page offset: 0
+user-space pointer: 0x7f6ae5000000
+
+gdr_copy_to_mapping num iters for each size: 10000
+WARNING: Measuring the issue overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility.
+Test                     Size(B)         Avg.Time(us)
+gdr_copy_to_mapping             1             0.0969
+gdr_copy_to_mapping             2             0.0988
+gdr_copy_to_mapping             4             0.0982
+gdr_copy_to_mapping             8             0.0983
+gdr_copy_to_mapping            16             0.1000
+gdr_copy_to_mapping            32             0.0997
+gdr_copy_to_mapping            64             0.1018
+gdr_copy_to_mapping           128             0.1011
+gdr_copy_to_mapping           256             0.1134
+gdr_copy_to_mapping           512             0.1342
+gdr_copy_to_mapping          1024             0.1751
+gdr_copy_to_mapping          2048             0.2606
+gdr_copy_to_mapping          4096             0.4336
+gdr_copy_to_mapping          8192             0.8141
+gdr_copy_to_mapping         16384             1.6070
+gdr_copy_to_mapping         32768             3.1999
+gdr_copy_to_mapping         65536             6.3869
+gdr_copy_to_mapping        131072            12.7635
+gdr_copy_to_mapping        262144            25.5032
+gdr_copy_to_mapping        524288            51.0073
+gdr_copy_to_mapping       1048576           102.0074
+gdr_copy_to_mapping       2097152           203.9973
+gdr_copy_to_mapping       4194304           408.1637
+gdr_copy_to_mapping       8388608           817.4134
+gdr_copy_to_mapping      16777216          1634.5638
+
+gdr_copy_from_mapping num iters for each size: 100
+Test                     Size(B)         Avg.Time(us)
+gdr_copy_from_mapping           1             1.0986
+gdr_copy_from_mapping           2             1.9074
+gdr_copy_from_mapping           4             1.7588
+gdr_copy_from_mapping           8             1.7593
+gdr_copy_from_mapping          16             0.8822
+gdr_copy_from_mapping          32             1.7350
+gdr_copy_from_mapping          64             3.0681
+gdr_copy_from_mapping         128             3.4641
+gdr_copy_from_mapping         256             2.9769
+gdr_copy_from_mapping         512             3.5207
+gdr_copy_from_mapping        1024             3.6279
+gdr_copy_from_mapping        2048             5.5507
+gdr_copy_from_mapping        4096            10.5047
+gdr_copy_from_mapping        8192            17.8014
+gdr_copy_from_mapping       16384            30.0232
+gdr_copy_from_mapping       32768            58.1767
+gdr_copy_from_mapping       65536           118.7792
+gdr_copy_from_mapping      131072           241.5278
+gdr_copy_from_mapping      262144           506.1804
+gdr_copy_from_mapping      524288          1014.1972
+gdr_copy_from_mapping     1048576          2026.6072
+gdr_copy_from_mapping     2097152          4048.9970
+gdr_copy_from_mapping     4194304          8103.9561
+gdr_copy_from_mapping     8388608         19230.3878
+gdr_copy_from_mapping    16777216         38474.8613
 unmapping buffer
 unpinning buffer
 closing gdrdrv
@@ -225,3 +313,7 @@ GPUDirect in the "Relevant Area" field.
 You can later track their progress using the __My Bugs__ link on the left of
 this [view](https://developer.nvidia.com/user).
 
+## Acknowledgment
+
+If you find this software useful in your work, please cite:
+R. Shi et al., "Designing efficient small message transfer mechanism for inter-node MPI communication on InfiniBand GPU clusters," 2014 21st International Conference on High Performance Computing (HiPC), Dona Paula, 2014, pp. 1-10, doi: 10.1109/HiPC.2014.7116873.

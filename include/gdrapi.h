@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2014-2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -30,7 +30,7 @@
 #define MINOR_VERSION_MASK      (((uint32_t)1 << MAJOR_VERSION_SHIFT) - 1)
 
 #define GDR_API_MAJOR_VERSION    2
-#define GDR_API_MINOR_VERSION    0
+#define GDR_API_MINOR_VERSION    1
 #define GDR_API_VERSION          ((GDR_API_MAJOR_VERSION << MAJOR_VERSION_SHIFT) | GDR_API_MINOR_VERSION)
 
 #define MINIMUM_GDRDRV_MAJOR_VERSION    2
@@ -120,7 +120,12 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size);
 
 // map_d_ptr is the user-space virtual address belonging to a mapping of a device memory buffer,
 // i.e. one returned by gdr_map()
+//
+// WARNING: Both integrity and ordering of data as observed by pre-launched GPU
+// work is not guaranteed by this API. For more information, see
+// https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#sync-behavior
 int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size);
+
 int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size);
 
 // Query the version of libgdrapi

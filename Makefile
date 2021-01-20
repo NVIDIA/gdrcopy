@@ -1,7 +1,14 @@
-DESTDIR ?= 
-PREFIX ?= /usr
-DESTLIB ?= $(DESTDIR)/$(PREFIX)/lib64
-DESTBIN ?= $(DESTDIR)/$(PREFIX)/bin
+prefix      ?= /usr/local
+exec_prefix ?= $(prefix)
+libdir      ?= $(exec_prefix)/lib
+bindir      ?= $(exec_prefix)/bin
+includedir  ?= $(prefix)/include
+
+DESTDIR := $(abspath $(DESTDIR))
+DESTLIB = $(DESTDIR)$(libdir)
+DESTBIN = $(DESTDIR)$(bindir)
+DESTINC = $(DESTDIR)$(includedir)
+
 CUDA ?= /usr/local/cuda
 
 LIB_MAJOR_VER ?= $(shell awk '/\#define GDR_API_MAJOR_VERSION/ { print $$3 }' include/gdrapi.h | tr -d '\n')
@@ -38,11 +45,11 @@ exes: lib
 install: lib_install exes_install
 
 lib_install: lib
-	@ echo "installing in $(DESTDIR)/$(PREFIX)..." && \
+	@ echo "installing in $(DESTLIB) $(DESTINC)..." && \
 	mkdir -p $(DESTLIB) && \
 	install -D -v -m u=rw,g=rw,o=r src/$(LIB_DYNAMIC) -t $(DESTLIB) && \
-	mkdir -p $(DESTDIR)/$(PREFIX)/include/ && \
-	install -D -v -m u=rw,g=rw,o=r include/* -t $(DESTDIR)/$(PREFIX)/include/; \
+	mkdir -p $(DESTINC) && \
+	install -D -v -m u=rw,g=rw,o=r include/* -t $(DESTINC); \
 	cd $(DESTLIB); \
 	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME); \
 	ln -sf $(LIB_SONAME) $(LIB_BASENAME);

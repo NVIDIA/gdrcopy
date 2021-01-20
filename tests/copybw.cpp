@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2014-2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -26,8 +26,8 @@
 #include <stdio.h>
 #include <math.h>
 #include <iostream>
+#include <iomanip>
 #include <cuda.h>
-#include <cuda_runtime_api.h>
 
 using namespace std;
 
@@ -36,18 +36,11 @@ using namespace std;
 
 using namespace gdrcopy::test;
 
-#define OUT cout
-//#define OUT TESTSTACK
-
-//#define MYCLOCK CLOCK_REALTIME
-//#define MYCLOCK CLOCK_RAW_MONOTONIC
-#define MYCLOCK CLOCK_MONOTONIC
-
 // manually tuned...
 int num_write_iters = 10000;
 int num_read_iters  = 100;
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     size_t _size = 128*1024;
     size_t copy_size = 0;
@@ -84,7 +77,7 @@ main(int argc, char *argv[])
             exit(EXIT_FAILURE);
             break;
         default:
-            printf("ERROR: invalid option\n");
+            fprintf(stderr, "ERROR: invalid option\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -93,48 +86,65 @@ main(int argc, char *argv[])
         copy_size = _size;
 
     if (copy_offset % sizeof(uint32_t) != 0) {
-        printf("ERROR: offset must be multiple of 4 bytes\n");
+        fprintf(stderr, "ERROR: offset must be multiple of 4 bytes\n");
         exit(EXIT_FAILURE);
     }
 
     if (copy_offset + copy_size > _size) {
-        printf("ERROR: offset + copy size run past the end of the buffer\n");
+        fprintf(stderr, "ERROR: offset + copy size run past the end of the buffer\n");
         exit(EXIT_FAILURE);
     }
 
     size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
 
+    ASSERTDRV(cuInit(0));
+
     int n_devices = 0;
-    ASSERTRT(cudaGetDeviceCount(&n_devices));
+    ASSERTDRV(cuDeviceGetCount(&n_devices));
 
-    cudaDeviceProp prop;
+    CUdevice dev;
     for (int n=0; n<n_devices; ++n) {
-        ASSERTRT(cudaGetDeviceProperties(&prop,n));
-        OUT << "GPU id:" << n << " name:" << prop.name 
-            << " PCI domain: " << prop.pciDomainID 
-            << " bus: " << prop.pciBusID 
-            << " device: " << prop.pciDeviceID << endl;
+        
+        char dev_name[256];
+        int dev_pci_domain_id;
+        int dev_pci_bus_id;
+        int dev_pci_device_id;
+
+        ASSERTDRV(cuDeviceGet(&dev, n));
+        ASSERTDRV(cuDeviceGetName(dev_name, sizeof(dev_name) / sizeof(dev_name[0]), dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_domain_id, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
+
+        cout << "GPU id:" << n << "; name: " << dev_name 
+            << "; Bus id: "
+            << std::hex 
+            << std::setfill('0') << std::setw(4) << dev_pci_domain_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_bus_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_device_id
+            << std::dec
+            << endl;
     }
-    OUT << "selecting device " << dev_id << endl;
-    ASSERTRT(cudaSetDevice(dev_id));
+    cout << "selecting device " << dev_id << endl;
+    ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
-    void *dummy;
-    ASSERTRT(cudaMalloc(&dummy, 0));
+    CUcontext dev_ctx;
+    ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
+    ASSERTDRV(cuCtxSetCurrent(dev_ctx));
 
-    OUT << "testing size: " << _size << endl;
-    OUT << "rounded size: " << size << endl;
+    cout << "testing size: " << _size << endl;
+    cout << "rounded size: " << size << endl;
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
-    OUT << "device ptr: " << hex << d_A << dec << endl;
+    cout << "device ptr: " << hex << d_A << dec << endl;
 
     uint32_t *init_buf = NULL;
     init_buf = (uint32_t *)malloc(size);
     ASSERT_NEQ(init_buf, (void*)0);
     init_hbuf_walking_bit(init_buf, size);
 
-    gdr_t g = gdr_open();
-    ASSERT_NEQ(g, (void*)0);
+    gdr_t g = gdr_open_safe();
 
     gdr_mh_t mh;
     BEGIN_CHECK {
@@ -145,24 +155,24 @@ main(int argc, char *argv[])
 
         void *map_d_ptr  = NULL;
         ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, size), 0);
-        OUT << "map_d_ptr: " << map_d_ptr << endl;
+        cout << "map_d_ptr: " << map_d_ptr << endl;
 
         gdr_info_t info;
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-        OUT << "info.va: " << hex << info.va << dec << endl;
-        OUT << "info.mapped_size: " << info.mapped_size << endl;
-        OUT << "info.page_size: " << info.page_size << endl;
-        OUT << "info.mapped: " << info.mapped << endl;
-        OUT << "info.wc_mapping: " << info.wc_mapping << endl;
+        cout << "info.va: " << hex << info.va << dec << endl;
+        cout << "info.mapped_size: " << info.mapped_size << endl;
+        cout << "info.page_size: " << info.page_size << endl;
+        cout << "info.mapped: " << info.mapped << endl;
+        cout << "info.wc_mapping: " << info.wc_mapping << endl;
 
         // remember that mappings start on a 64KB boundary, so let's
         // calculate the offset from the head of the mapping to the
         // beginning of the buffer
         int off = info.va - d_A;
-        OUT << "page offset: " << off << endl;
+        cout << "page offset: " << off << endl;
 
         uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
-        OUT << "user-space pointer:" << buf_ptr << endl;
+        cout << "user-space pointer:" << buf_ptr << endl;
 
         // copy to GPU benchmark
         cout << "writing test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_write_iters << endl;
@@ -199,17 +209,21 @@ main(int argc, char *argv[])
             cout << "read BW: " << roMBps << "MB/s" << endl;
         }
 
-        OUT << "unmapping buffer" << endl;
+        cout << "unmapping buffer" << endl;
         ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, size), 0);
 
-        OUT << "unpinning buffer" << endl;
+        cout << "unpinning buffer" << endl;
         ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     } END_CHECK;
 
-    OUT << "closing gdrdrv" << endl;
+    cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
 
     ASSERTDRV(gpuMemFree(d_A));
+
+    ASSERTDRV(cuDevicePrimaryCtxRelease(dev));
+
+    return 0;
 }
 
 /*

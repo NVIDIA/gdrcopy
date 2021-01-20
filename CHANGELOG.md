@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1] - 2020-08-07
+- fix build problem on RHL8 kernels
+- relax checks in gdrdrv to support multi-threading use cases
+- fix fd leak in gdr_open()
+- introduce new copylat test
+- remove CUDA RT dependency in tests
+- assorted cleanups
+
 ## [2.0] - 2019-09-16
 - Harden security in gdrdrv.
 - Enable cached mappings in POWER9.
@@ -24,6 +32,7 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 
+[2.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.1
 [2.0]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.0
 [1.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v1.3
 

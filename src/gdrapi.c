@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2014-2020, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -129,7 +129,7 @@ gdr_t gdr_open()
     if (-1 == fd ) {
         ret = errno;
         gdr_err("error opening driver (errno=%d/%s)\n", ret, strerror(ret));
-        goto err;
+        goto err_mem;
     }
 
     struct GDRDRV_IOC_GET_VERSION_PARAMS params;
@@ -137,7 +137,7 @@ gdr_t gdr_open()
     if (0 != retcode) {
         ret = errno;
         gdr_err("Error getting the gdrdrv driver version with ioctl error (errno=%d). gdrdrv might be too old.\n", ret);
-        goto err;
+        goto err_fd;
     }
     if (params.gdrdrv_version < MINIMUM_GDRDRV_VERSION) {
         gdr_err(
@@ -147,7 +147,7 @@ gdr_t gdr_open()
             params.gdrdrv_version >> MAJOR_VERSION_SHIFT, 
             params.gdrdrv_version & MINOR_VERSION_MASK
         );
-        goto err;
+        goto err_fd;
     }
     if (params.minimum_gdr_api_version > GDR_API_VERSION) {
         gdr_err(
@@ -157,7 +157,7 @@ gdr_t gdr_open()
             GDR_API_MAJOR_VERSION, 
             GDR_API_MINOR_VERSION
         );
-        goto err;
+        goto err_fd;
     }
 
     g->fd = fd;
@@ -165,8 +165,12 @@ gdr_t gdr_open()
 
     return g;
 
-err:
+err_fd:
+    close(fd);
+
+err_mem:
     free(g);
+
     return NULL;
 }
 
@@ -529,7 +533,7 @@ static inline int ptr_is_aligned(const void *ptr, unsigned powof2)
     return is_aligned(addr, powof2);
 }
 
-static int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size, int wc_mapping)
+static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size_t size, int wc_mapping)
 {
     if (first_time) {
         gdr_init_cpu_flags();
@@ -578,7 +582,7 @@ static int gdr_copy_to_bar(void *map_d_ptr, const void *h_ptr, size_t size, int 
     return 0;
 }
 
-static int gdr_copy_from_bar(void *h_ptr, const void *map_d_ptr, size_t size, int wc_mapping)
+static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, size_t size, int wc_mapping)
 {
     if (first_time) {
         gdr_init_cpu_flags();
@@ -636,7 +640,7 @@ int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, siz
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
-    return gdr_copy_to_bar(map_d_ptr, h_ptr, size, mh->wc_mapping);
+    return gdr_copy_to_mapping_internal(map_d_ptr, h_ptr, size, mh->wc_mapping);
 }
 
 int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size)
@@ -646,7 +650,7 @@ int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, s
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
-    return gdr_copy_from_bar(h_ptr, map_d_ptr, size, mh->wc_mapping);
+    return gdr_copy_from_mapping_internal(h_ptr, map_d_ptr, size, mh->wc_mapping);
 }
 
 

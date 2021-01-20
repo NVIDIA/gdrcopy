@@ -1,7 +1,20 @@
-gdrcopy (@VERSION@) stable; urgency=low
+gdrcopy (@FULL_VERSION@) unstable; urgency=low
+
+  * fix build problem on RHL8 kernels
+  * relax checks in gdrdrv to support multi-threading use cases
+  * fix fd leak in gdr_open()
+  * Introduce copylat test application.
+  * Introduce basic_with_tokens and invalidation_fork_child_gdr_pin_parent_with_tokens sub-tests in sanity.
+  * Remove the dependency with libcudart.so.
+  * Clean up the code in the tests folder.
+  * Change the package maintainer to Davide Rossetti.
+
+ -- Davide Rossetti <drossetti@nvidia.com>  Mon, 02 Mar 2020 11:59:59 -0700
+
+gdrcopy (2.0) stable; urgency=low
 
   * Improve copy performance with unrolling in POWERPC.
-  * Creates sanity unit test for testing the functionality and security.
+  * Create sanity unit test for testing the functionality and security.
   * Consolidate basic and validate into sanity unit test.
   * Introduce compile time and runtime version checking in libgdrapi.
   * Improve rpm packaging.
