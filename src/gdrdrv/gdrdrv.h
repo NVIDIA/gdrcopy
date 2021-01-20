@@ -86,6 +86,10 @@ struct GDRDRV_IOC_GET_INFO_PARAMS
     __u64 va;
     __u64 mapped_size;
     __u32 page_size;
+    #if !(defined(CONFIG_ARM64) || defined(GDRAPI_ARM64))
+    __u32 tsc_khz;
+    __u64 tm_cycles;
+    #endif
     __u32 mapped;
     __u32 wc_mapping;
 };

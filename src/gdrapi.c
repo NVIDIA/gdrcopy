@@ -42,13 +42,13 @@
 #include <assert.h>
 #include <sys/queue.h>
 
+#include "gdrconfig.h"
 #include "gdrapi.h"
 #include "gdrdrv.h"
-#include "gdrconfig.h"
 #include "gdrapi_internal.h"
 
 // TODO either use page_size = sysconf(_SC_PAGESIZE) or check the assumption below
-#ifdef GDRAPI_POWER
+#if defined(GDRAPI_POWER) || defined(GDRAPI_ARM64)
 #define PAGE_SHIFT 16
 #else // catching all 4KB page size platforms here
 #define PAGE_SHIFT 12
