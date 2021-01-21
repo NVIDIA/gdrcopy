@@ -33,9 +33,9 @@
 #include <linux/list.h>
 #include <linux/mm.h>
 #include <linux/io.h>
+#include <linux/sched.h>
 #include <linux/timex.h>
 #include <linux/timer.h>
-#include <linux/sched.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
 #include <linux/sched/signal.h>
@@ -124,8 +124,21 @@ static inline int gdr_pfn_is_ram(unsigned long pfn)
 #endif
 }
 
+#elif defined(CONFIG_ARM64)
+static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
+{
+    return pgprot_writecombine(old_prot);
+}
+static inline int gdr_pfn_is_ram(unsigned long pfn)
+{
+    // page_is_ram is GPL-only. Regardless there are no ARM64
+    // platforms supporting coherent GPU mappings, so we would not use
+    // this function anyway.
+    return 0;
+}
+
 #else
-#error "X86_64/32 or PPC64 is required"
+#error "X86_64/32 or PPC64 or ARM64 is required"
 #endif
 
 #include "gdrdrv.h"
@@ -511,7 +524,9 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     u64 page_virt_end;
     size_t rounded_size;
     gdr_mr_t *mr = NULL;
+    #ifndef CONFIG_ARM64
     cycles_t ta, tb;
+    #endif
 
     if (copy_from_user(&params, _params, sizeof(params))) {
         gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
@@ -553,18 +568,25 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x)\n",
              mr->va, mr->mapped_size, mr->p2p_token, mr->va_space);
 
+    #ifndef CONFIG_ARM64
     ta = get_cycles();
+    #endif
     ret = nvidia_p2p_get_pages(mr->p2p_token, mr->va_space, mr->va, mr->mapped_size, &page_table,
                                gdrdrv_get_pages_free_callback, mr);
+    #ifndef CONFIG_ARM64
     tb = get_cycles();
+    #endif
     if (ret < 0) {
         gdr_err("nvidia_p2p_get_pages(va=%llx len=%lld p2p_token=%llx va_space=%x) failed [ret = %d]\n",
                 mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, ret);
         goto out;
     }
     mr->page_table = page_table;
+    #ifndef CONFIG_ARM64
     mr->tm_cycles = tb - ta;
     mr->tsc_khz = get_tsc_khz();
+    #endif
+
 
     // check version before accessing page table
     if (!NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE(page_table)) {

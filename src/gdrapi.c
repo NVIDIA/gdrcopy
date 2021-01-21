@@ -42,13 +42,13 @@
 #include <assert.h>
 #include <sys/queue.h>
 
+#include "gdrconfig.h"
 #include "gdrapi.h"
 #include "gdrdrv.h"
-#include "gdrconfig.h"
 #include "gdrapi_internal.h"
 
 // TODO either use page_size = sysconf(_SC_PAGESIZE) or check the assumption below
-#ifdef GDRAPI_POWER
+#if defined(GDRAPI_POWER) || defined(GDRAPI_ARM64)
 #define PAGE_SHIFT 16
 #else // catching all 4KB page size platforms here
 #define PAGE_SHIFT 12
@@ -385,9 +385,9 @@ static inline void wc_store_fence(void) { _mm_sfence(); }
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
 #define PREFERS_LOAD_UNROLL8  0
-#endif // GDRAPI_X86
+// GDRAPI_X86
 
-#if defined(GDRAPI_POWER)
+#elif defined(GDRAPI_POWER)
 static int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
 static int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
 static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
@@ -398,7 +398,21 @@ static inline void wc_store_fence(void) { asm volatile("sync") ; }
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
 #define PREFERS_LOAD_UNROLL8  1
-#endif // GDRAPI_POWER
+// GDRAPI_POWER
+
+#elif defined(GDRAPI_ARM64)
+static int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
+static int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
+static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
+static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
+static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
+static inline void wc_store_fence(void) { asm volatile("DMB ishld") ; }
+#define PREFERS_STORE_UNROLL4 0
+#define PREFERS_STORE_UNROLL8 0
+#define PREFERS_LOAD_UNROLL4  0
+#define PREFERS_LOAD_UNROLL8  0
+// GDRAPI_ARM64
+#endif
 
 static int first_time = 1;
 static int has_sse = 0;
