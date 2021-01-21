@@ -34,11 +34,8 @@
 #include <linux/mm.h>
 #include <linux/io.h>
 #include <linux/sched.h>
-
-#ifndef CONFIG_ARM64
-    #include <linux/timex.h>
-    #include <linux/timer.h>
-#endif
+#include <linux/timex.h>
+#include <linux/timer.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
 #include <linux/sched/signal.h>
@@ -254,10 +251,8 @@ struct gdr_mr {
     enum { GDR_MR_NONE, GDR_MR_WC, GDR_MR_CACHING } cpu_mapping_type;
     nvidia_p2p_page_table_t *page_table;
     int cb_flag;
-    #ifndef CONFIG_ARM64
     cycles_t tm_cycles;
     unsigned int tsc_khz;
-    #endif
     struct vm_area_struct *vma;
     struct address_space *mapping;
 };
@@ -771,10 +766,8 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
     params.va          = mr->va;
     params.mapped_size = mr->mapped_size;
     params.page_size   = mr->page_size;
-    #ifndef CONFIG_ARM64
     params.tm_cycles   = mr->tm_cycles;
     params.tsc_khz     = mr->tsc_khz;
-    #endif
     params.mapped      = gdr_mr_is_mapped(mr);
     params.wc_mapping  = gdr_mr_is_wc_mapping(mr);
     if (copy_to_user(_params, &params, sizeof(params))) {
