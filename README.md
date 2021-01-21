@@ -61,7 +61,7 @@ $ sudo apt install check libsubunit0 libsubunit-dev
 ```
 
 Developed and tested on RH7.x and Ubuntu18_04. The supported architectures are
-Linux x86_64 and ppc64le.
+Linux x86_64, ppc64le, and arm64.
 
 Root privileges are necessary to load/install the kernel-mode device
 driver.
