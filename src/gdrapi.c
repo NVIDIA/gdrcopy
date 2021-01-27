@@ -56,6 +56,13 @@
 #define PAGE_SIZE  (1UL << PAGE_SHIFT)
 #define PAGE_MASK  (~(PAGE_SIZE-1))
 
+#ifndef ACCESS_ONCE
+    #define ACCESS_ONCE(x)  (*(volatile typeof(x) *)&x)
+#endif
+#ifndef WRITE_ONCE
+    #define WRITE_ONCE(x, v)    (ACCESS_ONCE(x) = (v))
+#endif
+
 // logging/tracing
 
 enum gdrcopy_msg_level {
@@ -542,19 +549,36 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
     }
 
     do {
+        // For very small sizes and aligned pointers, we use simple store.
+        if (size == 0) {
+            goto out;
+        } else if (size == 1) {
+            WRITE_ONCE(*(uint8_t *)map_d_ptr, *(uint8_t *)h_ptr);
+            goto do_fence;
+        } else if (size == 2 && ptr_is_aligned(map_d_ptr, 2) && ptr_is_aligned(h_ptr, 2)) {
+            WRITE_ONCE(*(uint16_t *)map_d_ptr, *(uint16_t *)h_ptr);
+            goto do_fence;
+        } else if (size == 4 && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
+            WRITE_ONCE(*(uint32_t *)map_d_ptr, *(uint32_t *)h_ptr);
+            goto do_fence;
+        } else if (size == 8 && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
+            WRITE_ONCE(*(uint64_t *)map_d_ptr, *(uint64_t *)h_ptr);
+            goto do_fence;
+        }
+
         // pick the most performing implementation compatible with the platform we are running on
         // NOTE: write fences are included in functions below
         if (has_avx) {
             assert(wc_mapping);
             gdr_dbgc(1, "using AVX implementation of gdr_copy_to_bar\n");
             memcpy_uncached_store_avx(map_d_ptr, h_ptr, size);
-            break;
+            goto out;
         }
         if (has_sse) {
             assert(wc_mapping);
             gdr_dbgc(1, "using SSE implementation of gdr_copy_to_bar\n");
             memcpy_uncached_store_sse(map_d_ptr, h_ptr, size);
-            break;
+            goto out;
         }
 
         // on POWER, compiler/libc memcpy is not optimal for MMIO
@@ -573,13 +597,16 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
             memcpy(map_d_ptr, h_ptr, size);
         }
 
-        if (wc_mapping) {
-            // fencing is needed even for plain memcpy(), due to performance
-            // being hit by delayed flushing of WC buffers
-            wc_store_fence();
-        }
     } while (0);
 
+do_fence:
+    if (wc_mapping) {
+        // fencing is needed even for plain memcpy(), due to performance
+        // being hit by delayed flushing of WC buffers
+        wc_store_fence();
+    }
+
+out:
     return 0;
 }
 
