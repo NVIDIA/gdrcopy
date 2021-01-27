@@ -31,6 +31,35 @@
 extern "C" {
 #endif
 
+#ifndef likely
+#ifdef __GNUC__
+#define likely(x)           __builtin_expect(!!(x), 1)
+#else
+#define likely(x)           (x)
+#endif
+#endif
+
+#ifndef unlikely
+#ifdef __GNUC__
+#define unlikely(x)         __builtin_expect(!!(x), 0)
+#else
+#define unlikely(x)         (x)
+#endif
+#endif
+
+#ifndef ACCESS_ONCE
+#define ACCESS_ONCE(x)      (*(volatile typeof(x) *)&x)
+#endif
+
+#ifndef READ_ONCE
+#define READ_ONCE(x)        ACCESS_ONCE(x)
+#endif
+
+#ifndef WRITE_ONCE
+#define WRITE_ONCE(x, v)    (ACCESS_ONCE(x) = (v))
+#endif
+
+
 typedef struct gdr_memh_t { 
     uint32_t handle;
     LIST_ENTRY(gdr_memh_t) entries;

@@ -56,13 +56,6 @@
 #define PAGE_SIZE  (1UL << PAGE_SHIFT)
 #define PAGE_MASK  (~(PAGE_SIZE-1))
 
-#ifndef ACCESS_ONCE
-    #define ACCESS_ONCE(x)  (*(volatile typeof(x) *)&x)
-#endif
-#ifndef WRITE_ONCE
-    #define WRITE_ONCE(x, v)    (ACCESS_ONCE(x) = (v))
-#endif
-
 // logging/tracing
 
 enum gdrcopy_msg_level {
@@ -546,7 +539,7 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
 {
     do {
         // For very small sizes and aligned pointers, we use simple store.
-        if (size == 0) {
+        if (unlikely(size == 0)) {
             goto out;
         } else if (size == 1) {
             WRITE_ONCE(*(uint8_t *)map_d_ptr, *(uint8_t *)h_ptr);
