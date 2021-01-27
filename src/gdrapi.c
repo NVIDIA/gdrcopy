@@ -558,17 +558,16 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
         }
 
         // on POWER, compiler/libc memcpy is not optimal for MMIO
-        // 64bit stores are not better than 32bit ones, so we prefer the latter
+        // 64bit stores are not better than 32bit ones, so we prefer the latter.
         // NOTE: if preferred but not aligned, a better implementation would still try to
-        // use byte sized stores to align map_d_ptr and h_ptr to next word
+        // use byte sized stores to align map_d_ptr and h_ptr to next word.
+        // NOTE2: unroll*_memcpy and memcpy do not include fencing. So, we may need the fencing below.
         if (wc_mapping && PREFERS_STORE_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
             gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_bar\n");
             unroll8_memcpy(map_d_ptr, h_ptr, size);
-            break;
         } else if (wc_mapping && PREFERS_STORE_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_to_bar\n");
             unroll4_memcpy(map_d_ptr, h_ptr, size);
-            break;
         } else {
             gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_to_bar\n");
             memcpy(map_d_ptr, h_ptr, size);
@@ -616,11 +615,9 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
         if (wc_mapping && PREFERS_LOAD_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
             gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_from_bar\n");
             unroll8_memcpy(h_ptr, map_d_ptr, size);
-            break;
         } else if (wc_mapping && PREFERS_LOAD_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_from_bar\n");
             unroll4_memcpy(h_ptr, map_d_ptr, size);
-            break;
         } else {
             gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_from_bar\n");
             memcpy(h_ptr, map_d_ptr, size);
