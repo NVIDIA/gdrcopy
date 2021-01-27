@@ -113,6 +113,7 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
     return mh;
 }
 
+static void gdr_init_cpu_flags();
 
 gdr_t gdr_open()
 {
@@ -169,6 +170,8 @@ gdr_t gdr_open()
 
     g->fd = fd;
     LIST_INIT(&g->memhs);
+
+    gdr_init_cpu_flags();
 
     return g;
 
@@ -421,7 +424,6 @@ static inline void wc_store_fence(void) { asm volatile("DMB ishld") ; }
 // GDRAPI_ARM64
 #endif
 
-static int first_time = 1;
 static int has_sse = 0;
 static int has_sse2 = 0;
 static int has_sse4_1 = 0;
@@ -451,8 +453,6 @@ static void gdr_init_cpu_flags()
 #ifdef GDRAPI_POWER
     // detect and enable Altivec/SMX support
 #endif
-
-    first_time = 0;
 }
 
 // note: more than one implementation may be compiled in
@@ -544,10 +544,6 @@ static inline int ptr_is_aligned(const void *ptr, unsigned powof2)
 
 static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size_t size, int wc_mapping)
 {
-    if (first_time) {
-        gdr_init_cpu_flags();
-    }
-
     do {
         // For very small sizes and aligned pointers, we use simple store.
         if (size == 0) {
@@ -612,10 +608,6 @@ out:
 
 static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, size_t size, int wc_mapping)
 {
-    if (first_time) {
-        gdr_init_cpu_flags();
-    }
-
     do {
         // pick the most performing implementation compatible with the platform we are running on
         if (has_sse4_1) {
