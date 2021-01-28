@@ -31,14 +31,6 @@
 extern "C" {
 #endif
 
-#ifndef likely
-#ifdef __GNUC__
-#define likely(x)           __builtin_expect(!!(x), 1)
-#else
-#define likely(x)           (x)
-#endif
-#endif
-
 #ifndef unlikely
 #ifdef __GNUC__
 #define unlikely(x)         __builtin_expect(!!(x), 0)
@@ -49,10 +41,6 @@ extern "C" {
 
 #ifndef ACCESS_ONCE
 #define ACCESS_ONCE(x)      (*(volatile typeof(x) *)&x)
-#endif
-
-#ifndef READ_ONCE
-#define READ_ONCE(x)        ACCESS_ONCE(x)
 #endif
 
 #ifndef WRITE_ONCE
