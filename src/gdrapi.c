@@ -539,16 +539,16 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
 {
     do {
         // For very small sizes and aligned pointers, we use simple store.
-        if (size == 1) {
+        if (size == sizeof(uint8_t)) {
             WRITE_ONCE(*(uint8_t *)map_d_ptr, *(uint8_t *)h_ptr);
             goto do_fence;
-        } else if (size == 2 && ptr_is_aligned(map_d_ptr, 2) && ptr_is_aligned(h_ptr, 2)) {
+        } else if (size == sizeof(uint16_t) && ptr_is_aligned(map_d_ptr, sizeof(uint16_t))) {
             WRITE_ONCE(*(uint16_t *)map_d_ptr, *(uint16_t *)h_ptr);
             goto do_fence;
-        } else if (size == 4 && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
+        } else if (size == sizeof(uint32_t) && ptr_is_aligned(map_d_ptr, sizeof(uint32_t))) {
             WRITE_ONCE(*(uint32_t *)map_d_ptr, *(uint32_t *)h_ptr);
             goto do_fence;
-        } else if (size == 8 && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
+        } else if (size == sizeof(uint64_t) && ptr_is_aligned(map_d_ptr, sizeof(uint64_t))) {
             WRITE_ONCE(*(uint64_t *)map_d_ptr, *(uint64_t *)h_ptr);
             goto do_fence;
         }
@@ -572,7 +572,7 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
         // 64bit stores are not better than 32bit ones, so we prefer the latter.
         // NOTE: if preferred but not aligned, a better implementation would still try to
         // use byte sized stores to align map_d_ptr and h_ptr to next word.
-        // NOTE2: unroll*_memcpy and memcpy do not include fencing. So, we may need the fencing below.
+        // NOTE2: unroll*_memcpy and memcpy do not include fencing.
         if (wc_mapping && PREFERS_STORE_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
             gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_bar\n");
             unroll8_memcpy(map_d_ptr, h_ptr, size);
