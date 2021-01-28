@@ -539,9 +539,7 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
 {
     do {
         // For very small sizes and aligned pointers, we use simple store.
-        if (unlikely(size == 0)) {
-            goto out;
-        } else if (size == 1) {
+        if (size == 1) {
             WRITE_ONCE(*(uint8_t *)map_d_ptr, *(uint8_t *)h_ptr);
             goto do_fence;
         } else if (size == 2 && ptr_is_aligned(map_d_ptr, 2) && ptr_is_aligned(h_ptr, 2)) {
@@ -651,6 +649,8 @@ int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, siz
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
+    if (unlikely(size == 0))
+        return 0;
     return gdr_copy_to_mapping_internal(map_d_ptr, h_ptr, size, mh->wc_mapping);
 }
 
