@@ -645,7 +645,7 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
 int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size)
 {
     gdr_memh_t *mh = to_memh(handle);
-    if (!mh->mapped) {
+    if (unlikely(!mh->mapped)) {
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
@@ -657,7 +657,7 @@ int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, siz
 int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size)
 {
     gdr_memh_t *mh = to_memh(handle);
-    if (!mh->mapped) {
+    if (unlikely(!mh->mapped)) {
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
