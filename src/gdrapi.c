@@ -661,6 +661,8 @@ int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, s
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
+    if (unlikely(size == 0))
+        return 0;
     return gdr_copy_from_mapping_internal(h_ptr, map_d_ptr, size, mh->wc_mapping);
 }
 
