@@ -106,6 +106,7 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
     return mh;
 }
 
+static void gdr_init_cpu_flags();
 
 gdr_t gdr_open()
 {
@@ -162,6 +163,8 @@ gdr_t gdr_open()
 
     g->fd = fd;
     LIST_INIT(&g->memhs);
+
+    gdr_init_cpu_flags();
 
     return g;
 
@@ -414,7 +417,6 @@ static inline void wc_store_fence(void) { asm volatile("DMB ishld") ; }
 // GDRAPI_ARM64
 #endif
 
-static int first_time = 1;
 static int has_sse = 0;
 static int has_sse2 = 0;
 static int has_sse4_1 = 0;
@@ -444,8 +446,6 @@ static void gdr_init_cpu_flags()
 #ifdef GDRAPI_POWER
     // detect and enable Altivec/SMX support
 #endif
-
-    first_time = 0;
 }
 
 // note: more than one implementation may be compiled in
@@ -537,59 +537,68 @@ static inline int ptr_is_aligned(const void *ptr, unsigned powof2)
 
 static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size_t size, int wc_mapping)
 {
-    if (first_time) {
-        gdr_init_cpu_flags();
-    }
-
     do {
+        // For very small sizes and aligned pointers, we use simple store.
+        if (size == sizeof(uint8_t)) {
+            WRITE_ONCE(*(uint8_t *)map_d_ptr, *(uint8_t *)h_ptr);
+            goto do_fence;
+        } else if (size == sizeof(uint16_t) && ptr_is_aligned(map_d_ptr, sizeof(uint16_t))) {
+            WRITE_ONCE(*(uint16_t *)map_d_ptr, *(uint16_t *)h_ptr);
+            goto do_fence;
+        } else if (size == sizeof(uint32_t) && ptr_is_aligned(map_d_ptr, sizeof(uint32_t))) {
+            WRITE_ONCE(*(uint32_t *)map_d_ptr, *(uint32_t *)h_ptr);
+            goto do_fence;
+        } else if (size == sizeof(uint64_t) && ptr_is_aligned(map_d_ptr, sizeof(uint64_t))) {
+            WRITE_ONCE(*(uint64_t *)map_d_ptr, *(uint64_t *)h_ptr);
+            goto do_fence;
+        }
+
         // pick the most performing implementation compatible with the platform we are running on
         // NOTE: write fences are included in functions below
         if (has_avx) {
             assert(wc_mapping);
             gdr_dbgc(1, "using AVX implementation of gdr_copy_to_bar\n");
             memcpy_uncached_store_avx(map_d_ptr, h_ptr, size);
-            break;
+            goto out;
         }
         if (has_sse) {
             assert(wc_mapping);
             gdr_dbgc(1, "using SSE implementation of gdr_copy_to_bar\n");
             memcpy_uncached_store_sse(map_d_ptr, h_ptr, size);
-            break;
+            goto out;
         }
 
         // on POWER, compiler/libc memcpy is not optimal for MMIO
-        // 64bit stores are not better than 32bit ones, so we prefer the latter
+        // 64bit stores are not better than 32bit ones, so we prefer the latter.
         // NOTE: if preferred but not aligned, a better implementation would still try to
-        // use byte sized stores to align map_d_ptr and h_ptr to next word
+        // use byte sized stores to align map_d_ptr and h_ptr to next word.
+        // NOTE2: unroll*_memcpy and memcpy do not include fencing.
         if (wc_mapping && PREFERS_STORE_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
             gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_bar\n");
             unroll8_memcpy(map_d_ptr, h_ptr, size);
-            break;
         } else if (wc_mapping && PREFERS_STORE_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_to_bar\n");
             unroll4_memcpy(map_d_ptr, h_ptr, size);
-            break;
         } else {
             gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_to_bar\n");
             memcpy(map_d_ptr, h_ptr, size);
         }
 
-        if (wc_mapping) {
-            // fencing is needed even for plain memcpy(), due to performance
-            // being hit by delayed flushing of WC buffers
-            wc_store_fence();
-        }
     } while (0);
 
+do_fence:
+    if (wc_mapping) {
+        // fencing is needed even for plain memcpy(), due to performance
+        // being hit by delayed flushing of WC buffers
+        wc_store_fence();
+    }
+
+out:
     return 0;
 }
 
 static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, size_t size, int wc_mapping)
 {
-    if (first_time) {
-        gdr_init_cpu_flags();
-    }
-
     do {
         // pick the most performing implementation compatible with the platform we are running on
         if (has_sse4_1) {
@@ -616,11 +625,9 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
         if (wc_mapping && PREFERS_LOAD_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
             gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_from_bar\n");
             unroll8_memcpy(h_ptr, map_d_ptr, size);
-            break;
         } else if (wc_mapping && PREFERS_LOAD_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
             gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_from_bar\n");
             unroll4_memcpy(h_ptr, map_d_ptr, size);
-            break;
         } else {
             gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_from_bar\n");
             memcpy(h_ptr, map_d_ptr, size);
@@ -638,20 +645,24 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
 int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size)
 {
     gdr_memh_t *mh = to_memh(handle);
-    if (!mh->mapped) {
+    if (unlikely(!mh->mapped)) {
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
+    if (unlikely(size == 0))
+        return 0;
     return gdr_copy_to_mapping_internal(map_d_ptr, h_ptr, size, mh->wc_mapping);
 }
 
 int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size)
 {
     gdr_memh_t *mh = to_memh(handle);
-    if (!mh->mapped) {
+    if (unlikely(!mh->mapped)) {
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
+    if (unlikely(size == 0))
+        return 0;
     return gdr_copy_from_mapping_internal(h_ptr, map_d_ptr, size, mh->wc_mapping);
 }
 
