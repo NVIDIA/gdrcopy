@@ -1,5 +1,21 @@
 gdrcopy (@FULL_VERSION@) unstable; urgency=low
 
+  * Add support for ARM64.
+  * Update various information on README.
+  * Improve Makefile.
+  * Add multi-arch support.
+  * Handle removal of HAVE_UNLOCKED_IOCTL in Linux kernel v5.9 and later.
+  * Prevent dpkg package creation to unnecessarily compile gdrdrv.
+  * Improve gdr_open error message.
+  * Fix bug that prevents sanity from correctly summarizing failure.
+  * Add dkms support in kmod package.
+  * Handle the removal of kzfree in Linux kernel v5.10 and later.
+  * Improve small-size copy-to-mapping.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Feb 2021 11:59:59 -0700
+
+gdrcopy (2.1) stable; urgency=low
+
   * fix build problem on RHL8 kernels
   * relax checks in gdrdrv to support multi-threading use cases
   * fix fd leak in gdr_open()
