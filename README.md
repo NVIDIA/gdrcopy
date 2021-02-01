@@ -98,7 +98,7 @@ $ sudo dpkg -i gdrcopy_<version>_<platform>.deb
 ### from source
 
 ```shell
-$ make PREFIX=<install-to-this-location> CUDA=<cuda-install-top-dir> all install
+$ make prefix=<install-to-this-location> CUDA=<cuda-install-top-dir> all install
 $ sudo ./insmod.sh
 ```
 
