@@ -98,12 +98,15 @@ ex mv gdrcopy gdrcopy-${VERSION}
 ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
 
 ex cd ${tmpdir}/gdrcopy-${VERSION}
+debuild_params="--set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
 if [ "${skip_dep_check}" -eq 1 ]; then
-    echo "Skip build dependency check. Use the environment variables ..."
-    ex debuild --set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH} --set-envvar=C_INCLUDE_PATH=${C_INCLUDE_PATH} --set-envvar=CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH} --set-envvar=LIBRARY_PATH=${LIBRARY_PATH} --set-envvar=LD_LIBRARY_PATH=${LD_LIBRARY_PATH} -us -uc -d
-else
-    ex debuild --set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH} -us -uc
+    debuild_params+=" --set-envvar=C_INCLUDE_PATH=${C_INCLUDE_PATH} --set-envvar=CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH} --set-envvar=LIBRARY_PATH=${LIBRARY_PATH} --set-envvar=LD_LIBRARY_PATH=${LD_LIBRARY_PATH} -d"
+    echo "Skip build dependency check. Use the environment variables instead ..."
 fi
+# --set-envvar needs to be placed before -us -uc
+debuild_params+=" -us -uc"
+ex debuild ${debuild_params}
+
 
 echo
 echo "Building dkms module ..."
