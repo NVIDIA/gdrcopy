@@ -1,4 +1,4 @@
-gdrcopy (@FULL_VERSION@) unstable; urgency=low
+gdrcopy (@FULL_VERSION@) stable; urgency=low
 
   * Add support for ARM64.
   * Update various information on README.
