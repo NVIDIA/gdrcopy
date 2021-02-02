@@ -71,7 +71,7 @@ Requires: bash
 Release: %{_release}%{?dist}dkms
 BuildArch: noarch
 %if 0%{?rhel} >= 8
-# Recommends tag is a weak dependency, which is started supporting in RHEL8.
+# Recommends tag is a weak dependency, whose support started in RHEL8.
 # See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/packaging_and_distributing_software/new-features-in-rhel-8_packaging-and-distributing-software#support-for-weak-dependencies_new-features-in-rhel-8.
 Recommends: kmod-nvidia-latest-dkms
 %endif
