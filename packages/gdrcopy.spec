@@ -213,6 +213,18 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Mon Feb 01 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
+- Add support for ARM64.
+- Update various information on README.
+- Improve Makefile.
+- Add multi-arch support.
+- Handle removal of HAVE_UNLOCKED_IOCTL in Linux kernel v5.9 and later.
+- Prevent dpkg package creation to unnecessarily compile gdrdrv.
+- Improve gdr_open error message.
+- Fix bug that prevents sanity from correctly summarizing failure.
+- Add dkms support in kmod package.
+- Handle the removal of kzfree in Linux kernel v5.10 and later.
+- Improve small-size copy-to-mapping.
 * Mon Jan 18 2021 Pak Markthub <pmarkthub@nvidia.com> 2.1-2
 - Add DKMS support in gdrcopy-kmod.rpm
 * Fri Jul 31 2020 Davide Rossetti <drossetti@nvidia.com> 2.1-1

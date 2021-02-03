@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2] - 2021-02-01
+ - Add support for ARM64.
+ - Update various information on README.
+ - Improve Makefile.
+ - Add multi-arch support.
+ - Handle removal of HAVE_UNLOCKED_IOCTL in Linux kernel v5.9 and later.
+ - Prevent dpkg package creation to unnecessarily compile gdrdrv.
+ - Improve gdr_open error message.
+ - Fix bug that prevents sanity from correctly summarizing failure.
+ - Add dkms support in kmod package.
+ - Handle the removal of kzfree in Linux kernel v5.10 and later.
+ - Improve small-size copy-to-mapping.
+
 ## [2.1] - 2020-08-07
 - fix build problem on RHL8 kernels
 - relax checks in gdrdrv to support multi-threading use cases
@@ -32,6 +45,7 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 
+[2.2]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.2
 [2.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.1
 [2.0]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.0
 [1.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v1.3

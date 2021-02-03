@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2014-2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -27,7 +27,7 @@
 #define GDRDRV_TOSTRING(s)            GDRDRV_STRINGIFY(s)
 
 #define GDRDRV_MAJOR_VERSION    2
-#define GDRDRV_MINOR_VERSION    1
+#define GDRDRV_MINOR_VERSION    2
 #define GDRDRV_VERSION          ((GDRDRV_MAJOR_VERSION << 16) | GDRDRV_MINOR_VERSION)
 #define GDRDRV_VERSION_STRING   GDRDRV_TOSTRING(GDRDRV_MAJOR_VERSION) "." GDRDRV_TOSTRING(GDRDRV_MINOR_VERSION)
 
