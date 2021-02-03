@@ -9,6 +9,8 @@ TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."
 
 CWD=$(pwd)
 
+skip_dep_check=0
+
 ex()
 {
     local rc
@@ -21,6 +23,33 @@ ex()
         exit $rc
     fi
 }
+
+function show_help
+{
+    echo "Usage: [CUDA=<path>] $0 [-d] [-h]"
+    echo ""
+    echo "  CUDA=<path>     Set your installed CUDA path (ex. /usr/local/cuda)."
+    echo "  -d              Don't check build dependencies. Use my environment variables such as C_INCLUDE_PATH instead."
+    echo "  -h              Show this help text."
+    echo ""
+}
+
+OPTIND=1	# Reset in case getopts has been used previously in the shell.
+
+while getopts "hd" opt; do
+    case "${opt}" in
+    h)
+        show_help
+        exit 0
+        ;;
+    d)  skip_dep_check=1
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+
 
 if [ "X$CUDA" == "X" ]; then
     echo "CUDA environment variable is not defined"; exit 1
@@ -69,7 +98,15 @@ ex mv gdrcopy gdrcopy-${VERSION}
 ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
 
 ex cd ${tmpdir}/gdrcopy-${VERSION}
-ex debuild --set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH} -us -uc
+debuild_params="--set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
+if [ "${skip_dep_check}" -eq 1 ]; then
+    debuild_params+=" --set-envvar=C_INCLUDE_PATH=${C_INCLUDE_PATH} --set-envvar=CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH} --set-envvar=LIBRARY_PATH=${LIBRARY_PATH} --set-envvar=LD_LIBRARY_PATH=${LD_LIBRARY_PATH} -d"
+    echo "Skip build dependency check. Use the environment variables instead ..."
+fi
+# --set-envvar needs to be placed before -us -uc
+debuild_params+=" -us -uc"
+ex debuild ${debuild_params}
+
 
 echo
 echo "Building dkms module ..."
