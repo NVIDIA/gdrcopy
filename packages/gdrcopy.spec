@@ -23,7 +23,7 @@ do                                                                      \
     dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :     \
 done                                                                    \
                                                                         \
-/sbin/depmod -a %{KVERSION}                                             \
+/sbin/depmod -a %{KVERSION} &> /dev/null ||:                            \
 %{MODPROBE} -rq gdrdrv||:                                               \
 %{MODPROBE} gdrdrv||:                                                   \
                                                                         \
