@@ -23,7 +23,7 @@ do                                                                      \
     dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :     \
 done                                                                    \
                                                                         \
-/sbin/depmod -a %{KVERSION}                                             \
+/sbin/depmod -a %{KVERSION} &> /dev/null ||:                            \
 %{MODPROBE} -rq gdrdrv||:                                               \
 %{MODPROBE} gdrdrv||:                                                   \
                                                                         \
@@ -140,8 +140,8 @@ dkms uninstall -m gdrdrv -v %{version} -q --all || :
 dkms remove -m gdrdrv -v %{version} -q --all --rpm_safe_upgrade || :
 
 # Clean up the weak-updates symlinks
-find /lib/modules/*/weak-updates -name "gdrdrv.ko.*" | xargs rm || :
-find /lib/modules/*/weak-updates -name "gdrdrv.ko" | xargs rm || :
+find /lib/modules/*/weak-updates -name "gdrdrv.ko.*" -delete &> /dev/null || :
+find /lib/modules/*/weak-updates -name "gdrdrv.ko" -delete &> /dev/null || :
 
 
 %postun %{kmod}
