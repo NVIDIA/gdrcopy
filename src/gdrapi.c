@@ -48,13 +48,9 @@
 #include "gdrapi_internal.h"
 
 // TODO either use page_size = sysconf(_SC_PAGESIZE) or check the assumption below
-#if defined(GDRAPI_POWER) || defined(GDRAPI_ARM64)
-#define PAGE_SHIFT 16
-#else // catching all 4KB page size platforms here
-#define PAGE_SHIFT 12
-#endif
-#define PAGE_SIZE  (1UL << PAGE_SHIFT)
-#define PAGE_MASK  (~(PAGE_SIZE-1))
+static int    PAGE_SHIFT = -1;
+static size_t PAGE_SIZE = 0;
+static size_t PAGE_MASK = 0;
 
 // logging/tracing
 
@@ -114,10 +110,19 @@ gdr_t gdr_open()
     const char *gdrinode = "/dev/gdrdrv";
     int ret;
 
-    long page_size = sysconf(_SC_PAGESIZE);
-    if (page_size != PAGE_SIZE) {
-        gdr_err("detected unexpected system page size\n");
-        return NULL;
+    // Initialize PAGE_SHIFT, PAGE_SIZE, and PAGE_MASK.
+    if (PAGE_SHIFT < 0) {
+        PAGE_SIZE = sysconf(_SC_PAGESIZE);
+        PAGE_MASK = PAGE_SIZE - 1;
+
+        size_t ps_tmp = PAGE_SIZE;
+        PAGE_SHIFT = 0;
+        while (ps_tmp > 0) {
+            ++PAGE_SHIFT;
+            if (ps_tmp & 0x1 == 1)
+                break;
+            ps_tmp >>= 1;
+        }
     }
 
     g = calloc(1, sizeof(*g));
