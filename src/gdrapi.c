@@ -104,6 +104,11 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
 
 static void gdr_init_cpu_flags();
 
+static inline int gdr_is_initialized()
+{
+    return PAGE_SHIFT >= 0;
+}
+
 gdr_t gdr_open()
 {
     gdr_t g = NULL;
@@ -111,7 +116,7 @@ gdr_t gdr_open()
     int ret;
 
     // Initialize PAGE_SHIFT, PAGE_SIZE, and PAGE_MASK.
-    if (PAGE_SHIFT < 0) {
+    if (!gdr_is_initialized()) {
         PAGE_SIZE = sysconf(_SC_PAGESIZE);
         PAGE_MASK = PAGE_SIZE - 1;
 
@@ -216,6 +221,11 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     int ret = 0;
     int retcode;
 
+    if (!gdr_is_initialized()) {
+        gdr_err("error not initialized. gdr_open must be called first.\n");
+        return EPERM;
+    }
+
     if (!handle) {
         return EINVAL;
     }
@@ -313,6 +323,11 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
     gdr_info_t info = {0,};
     gdr_memh_t *mh = to_memh(handle);
 
+    if (!gdr_is_initialized()) {
+        gdr_err("error not initialized. gdr_open must be called first.\n");
+        return EPERM;
+    }
+
     if (mh->mapped) {
         gdr_err("mh is mapped already\n");
         return EAGAIN;
@@ -350,8 +365,15 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
 {
     int ret = 0;
     int retcode = 0;
-    size_t rounded_size = (size + PAGE_SIZE - 1) & PAGE_MASK;
+    size_t rounded_size;
     gdr_memh_t *mh = to_memh(handle);
+
+    if (!gdr_is_initialized()) {
+        gdr_err("error not initialized. gdr_open must be called first.\n");
+        return EPERM;
+    }
+
+    rounded_size = (size + PAGE_SIZE - 1) & PAGE_MASK;
 
     if (!mh->mapped) {
         gdr_err("mh is not mapped yet\n");
