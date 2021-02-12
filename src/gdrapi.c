@@ -47,7 +47,6 @@
 #include "gdrdrv.h"
 #include "gdrapi_internal.h"
 
-// TODO either use page_size = sysconf(_SC_PAGESIZE) or check the assumption below
 static int    PAGE_SHIFT = -1;
 static size_t PAGE_SIZE = 0;
 static size_t PAGE_MASK = 0;
@@ -121,7 +120,7 @@ gdr_t gdr_open()
         PAGE_MASK = PAGE_SIZE - 1;
 
         size_t ps_tmp = PAGE_SIZE;
-        PAGE_SHIFT = 0;
+        PAGE_SHIFT = -1;
         while (ps_tmp > 0) {
             ++PAGE_SHIFT;
             if (ps_tmp & 0x1 == 1)
