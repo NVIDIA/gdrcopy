@@ -117,7 +117,7 @@ gdr_t gdr_open()
     // Initialize PAGE_SHIFT, PAGE_SIZE, and PAGE_MASK.
     if (!gdr_is_initialized()) {
         PAGE_SIZE = sysconf(_SC_PAGESIZE);
-        PAGE_MASK = PAGE_SIZE - 1;
+        PAGE_MASK = ~(PAGE_SIZE - 1);
 
         size_t ps_tmp = PAGE_SIZE;
         PAGE_SHIFT = -1;
