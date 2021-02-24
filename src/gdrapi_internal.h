@@ -58,6 +58,9 @@ typedef struct gdr_memh_t {
 struct gdr {
     int fd;
     LIST_HEAD(memh_list, gdr_memh_t) memhs;
+    size_t page_size;
+    size_t page_mask;
+    uint8_t page_shift;
 };
 
 #ifdef __cplusplus

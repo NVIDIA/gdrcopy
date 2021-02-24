@@ -47,10 +47,6 @@
 #include "gdrdrv.h"
 #include "gdrapi_internal.h"
 
-static int    PAGE_SHIFT = -1;
-static size_t PAGE_SIZE = 0;
-static size_t PAGE_MASK = 0;
-
 // logging/tracing
 
 enum gdrcopy_msg_level {
@@ -103,31 +99,11 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
 
 static void gdr_init_cpu_flags();
 
-static inline int gdr_is_initialized()
-{
-    return PAGE_SHIFT >= 0;
-}
-
 gdr_t gdr_open()
 {
     gdr_t g = NULL;
     const char *gdrinode = "/dev/gdrdrv";
     int ret;
-
-    // Initialize PAGE_SHIFT, PAGE_SIZE, and PAGE_MASK.
-    if (!gdr_is_initialized()) {
-        PAGE_SIZE = sysconf(_SC_PAGESIZE);
-        PAGE_MASK = ~(PAGE_SIZE - 1);
-
-        size_t ps_tmp = PAGE_SIZE;
-        PAGE_SHIFT = -1;
-        while (ps_tmp > 0) {
-            ++PAGE_SHIFT;
-            if (ps_tmp & 0x1 == 1)
-                break;
-            ps_tmp >>= 1;
-        }
-    }
 
     g = calloc(1, sizeof(*g));
     if (!g) {
@@ -175,6 +151,19 @@ gdr_t gdr_open()
 
     gdr_init_cpu_flags();
 
+    // Initialize page_shift, page_size, and page_mask.
+    g->page_size = sysconf(_SC_PAGESIZE);
+    g->page_mask = ~(g->page_size - 1);
+
+    size_t ps_tmp = g->page_size;
+    g->page_shift = -1;
+    while (ps_tmp > 0) {
+        ++g->page_shift;
+        if (ps_tmp & 0x1 == 1)
+            break;
+        ps_tmp >>= 1;
+    }
+
     return g;
 
 err_fd:
@@ -219,11 +208,6 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
 {
     int ret = 0;
     int retcode;
-
-    if (!gdr_is_initialized()) {
-        gdr_err("error not initialized. gdr_open must be called first.\n");
-        return EPERM;
-    }
 
     if (!handle) {
         return EINVAL;
@@ -322,17 +306,12 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
     gdr_info_t info = {0,};
     gdr_memh_t *mh = to_memh(handle);
 
-    if (!gdr_is_initialized()) {
-        gdr_err("error not initialized. gdr_open must be called first.\n");
-        return EPERM;
-    }
-
     if (mh->mapped) {
         gdr_err("mh is mapped already\n");
         return EAGAIN;
     }
-    size_t rounded_size = (size + PAGE_SIZE - 1) & PAGE_MASK;
-    off_t magic_off = (off_t)mh->handle << PAGE_SHIFT;
+    size_t rounded_size = (size + g->page_size - 1) & g->page_mask;
+    off_t magic_off = (off_t)mh->handle << g->page_shift;
     void *mmio = mmap(NULL, rounded_size, PROT_READ|PROT_WRITE, MAP_SHARED, g->fd, magic_off);
     if (mmio == MAP_FAILED) {
         int __errno = errno;
@@ -367,12 +346,7 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
     size_t rounded_size;
     gdr_memh_t *mh = to_memh(handle);
 
-    if (!gdr_is_initialized()) {
-        gdr_err("error not initialized. gdr_open must be called first.\n");
-        return EPERM;
-    }
-
-    rounded_size = (size + PAGE_SIZE - 1) & PAGE_MASK;
+    rounded_size = (size + g->page_size - 1) & g->page_mask;
 
     if (!mh->mapped) {
         gdr_err("mh is not mapped yet\n");
