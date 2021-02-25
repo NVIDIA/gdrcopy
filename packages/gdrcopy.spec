@@ -54,9 +54,6 @@ Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  gcc kernel-headers check-devel
 Requires:       %{name}-%{kmod} check
 
-# to get rid of libcuda/libcudart
-AutoReqProv:    no
-
 %package devel
 Summary: The development files
 Group: System Environment/Libraries
