@@ -41,6 +41,7 @@ if [ -e /usr/bin/systemctl ]; then                                      \
     /usr/bin/systemctl daemon-reload                                    \
 fi
 
+%global __requires_exclude ^libcuda\\.so.*$
 
 
 Name:           gdrcopy
