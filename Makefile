@@ -67,7 +67,7 @@ install: lib_install exes_install
 lib_install: lib
 	@ echo "installing in $(DESTLIB) $(DESTINC)..." && \
 	mkdir -p $(DESTLIB) && \
-	install -D -v -m u=rw,g=rw,o=r src/$(LIB_DYNAMIC) -t $(DESTLIB) && \
+	install -D -v -m u=rwx,g=rx,o=rx src/$(LIB_DYNAMIC) -t $(DESTLIB) && \
 	mkdir -p $(DESTINC) && \
 	install -D -v -m u=rw,g=rw,o=r include/* -t $(DESTINC); \
 	cd $(DESTLIB); \

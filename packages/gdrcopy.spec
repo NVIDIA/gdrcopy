@@ -41,6 +41,7 @@ if [ -e /usr/bin/systemctl ]; then                                      \
     /usr/bin/systemctl daemon-reload                                    \
 fi
 
+%global __requires_exclude ^libcuda\\.so.*$
 
 
 Name:           gdrcopy
@@ -53,9 +54,6 @@ URL:            https://github.com/NVIDIA/gdrcopy
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  gcc kernel-headers check-devel
 Requires:       %{name}-%{kmod} check
-
-# to get rid of libcuda/libcudart
-AutoReqProv:    no
 
 %package devel
 Summary: The development files
