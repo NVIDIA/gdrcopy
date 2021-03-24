@@ -43,6 +43,8 @@ int num_read_iters = 100;
 
 int main(int argc, char *argv[])
 {
+    int status = 0;
+
     size_t _size = (size_t)1 << 24;
     size_t copy_size = 1;
     int dev_id = 0;
@@ -184,8 +186,12 @@ int main(int argc, char *argv[])
     gdr_mh_t mh;
     BEGIN_CHECK {
         // tokens are optional in CUDA 6.0
-        // wave out the test if GPUDirectRDMA is not enabled
-        BREAK_IF_NEQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
+        status = gdr_pin_buffer(g, d_A, size, 0, 0, &mh);
+        if (status != 0) {
+            cerr << "error in gdr_pin_buffer with code=" << status << endl;
+            cerr << "Does the selected GPU support GPUDirect RDMA?" << endl;
+        }
+        ASSERT_EQ(status, 0);
         ASSERT_NEQ(mh, null_mh);
 
         void *map_d_ptr  = NULL;
