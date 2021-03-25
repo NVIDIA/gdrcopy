@@ -40,19 +40,37 @@ using namespace gdrcopy::test;
 // manually tuned...
 int num_write_iters = 10000;
 int num_read_iters = 100;
+int dev_id = 0;
+bool do_cumemcpy = false;
+size_t _size = (size_t)1 << 24;
+
+void print_usage(const char *path)
+{
+    cout << "Usage: " << path << " [-h][-c][-s <size>][-d <gpu>][-w <iters>][-r <iters>][-a <fn>]" << endl;
+    cout << endl;
+    cout << "Options:" << endl;
+    cout << "   -h              Print this help text" << endl;
+    cout << "   -c              Also run cuMemcpy (default: no)" << endl;
+    cout << "   -s <size>       Buffer allocation size (default: " << _size << ")" << endl;
+    cout << "   -d <gpu>        GPU ID (default: " << dev_id << ")" << endl;
+    cout << "   -w <iters>      Number of write iterations (default: " << num_write_iters << ")" << endl;
+    cout << "   -r <iters>      Number of read iterations (default: " << num_read_iters << ")" << endl;
+    cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
+    cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
+}
 
 int main(int argc, char *argv[])
 {
-    size_t _size = (size_t)1 << 24;
     size_t copy_size = 1;
-    int dev_id = 0;
-    bool do_cumemcpy = false;
     struct timespec beg, end;
     double lat_us;
 
+    gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
+    gpu_memfree_fn_t gfree_fn = gpu_mem_free;
+
     while(1) {        
         int c;
-        c = getopt(argc, argv, "s:d:w:r:hc");
+        c = getopt(argc, argv, "s:d:w:r:a:hc");
         if (c == -1)
             break;
 
@@ -69,13 +87,26 @@ int main(int argc, char *argv[])
             case 'r':
                 num_read_iters = strtol(optarg, NULL, 0);
                 break;
+            case 'a':
+                if (strcmp(optarg, "cuMemAlloc") == 0) {
+                    galloc_fn = gpu_mem_alloc;
+                    gfree_fn = gpu_mem_free;
+                }
+                else if (strcmp(optarg, "cuMemCreate") == 0) {
+                    galloc_fn = gpu_vmm_alloc;
+                    gfree_fn = gpu_vmm_free;
+                }
+                else {
+                    cerr << "Unrecognized fn argument" << endl;
+                    exit(EXIT_FAILURE);
+                }
+                break;
             case 'c':
                 do_cumemcpy = true;
                 break;
             case 'h':
-                printf("syntax: %s -s <buf size> -d <gpu dev id> -w <write iters> -r <read iters> -h[help] -c[do-cuMemcpy]\n", argv[0]);
-                exit(EXIT_FAILURE);
-                break;
+                print_usage(argv[0]);
+                exit(EXIT_SUCCESS);
             default:
                 printf("ERROR: invalid option\n");
                 exit(EXIT_FAILURE);
@@ -120,12 +151,16 @@ int main(int argc, char *argv[])
     ASSERTDRV(cuCtxSetCurrent(dev_ctx));
 
     CUdeviceptr d_A;
-    ASSERTDRV(cuMemAlloc(&d_A, size));
+    gpu_mem_handle_t mhandle;
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    d_A = mhandle.ptr;
     cout << "device ptr: 0x" << hex << d_A << dec << endl;
     cout << "allocated size: " << size << endl;
 
-    unsigned int flag = 1;
-    ASSERTDRV(cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, d_A));
+    if (galloc_fn == gpu_mem_alloc)
+        cout << "gpu alloc fn: cuMemAlloc" << endl;
+    else
+        cout << "gpu alloc fn: cuMemCreate" << endl;
 
     uint32_t *init_buf = NULL;
     uint32_t *h_buf = NULL;
@@ -212,7 +247,7 @@ int main(int argc, char *argv[])
         // gdr_copy_to_mapping benchmark
         cout << endl;
         cout << "gdr_copy_to_mapping num iters for each size: " << num_write_iters << endl;
-        cout << "WARNING: Measuring the issue overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility." << endl;
+        cout << "WARNING: Measuring the API invocation overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility." << endl;
         // For more information, see
         // https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#sync-behavior
         printf("Test \t\t\t Size(B) \t Avg.Time(us)\n");
@@ -257,7 +292,7 @@ int main(int argc, char *argv[])
     cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
 
-    ASSERTDRV(cuMemFree(d_A));
+    ASSERTDRV(gfree_fn(&mhandle));
 
     return 0;
 }
