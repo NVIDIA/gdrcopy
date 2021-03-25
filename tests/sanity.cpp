@@ -358,8 +358,8 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
 }
 END_GDRCOPY_TEST
 
-#if 0
-BEGIN_GDRCOPY_TEST(data_validation)
+template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn>
+void data_validation()
 {
     expecting_exception_signal = false;
     MB();
@@ -371,7 +371,10 @@ BEGIN_GDRCOPY_TEST(data_validation)
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
-    ASSERTDRV(gpuMemAlloc(&d_A, size));
+    gpu_mem_handle_t mhandle;
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    d_A = mhandle.ptr;
+
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
 
@@ -453,9 +456,15 @@ BEGIN_GDRCOPY_TEST(data_validation)
 
     ASSERT_EQ(gdr_close(g), 0);
 
-    ASSERTDRV(gpuMemFree(d_A));
+    ASSERTDRV(gfree_fn(&mhandle));
 
     finalize_cuda(0);
+}
+
+BEGIN_GDRCOPY_TEST(data_validation)
+{
+    data_validation<gpu_mem_alloc, gpu_mem_free>();
+    data_validation<gpu_vmm_alloc, gpu_vmm_free>();
 }
 END_GDRCOPY_TEST
 
@@ -1632,7 +1641,6 @@ BEGIN_GDRCOPY_TEST(basic_child_thread_pins_buffer)
     finalize_cuda(0);
 }
 END_GDRCOPY_TEST
-#endif
 
 int main(int argc, char *argv[])
 {
@@ -1673,9 +1681,9 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_basic, basic);
     tcase_add_test(tc_basic, basic_with_tokens);
     tcase_add_test(tc_basic, basic_unaligned_mapping);
-    //tcase_add_test(tc_basic, basic_child_thread_pins_buffer);
+    tcase_add_test(tc_basic, basic_child_thread_pins_buffer);
 
-    /*suite_add_tcase(s, tc_data_validation);
+    suite_add_tcase(s, tc_data_validation);
     tcase_add_test(tc_data_validation, data_validation);
 
     suite_add_tcase(s, tc_invalidation);
@@ -1688,10 +1696,10 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_invalidation, invalidation_fork_map_and_free);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map);
-    tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_pin_parent_with_tokens);*/
+    tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_pin_parent_with_tokens);
 
     tcase_set_timeout(tc_basic, 60);
-    /*tcase_set_timeout(tc_data_validation, 60);
+    tcase_set_timeout(tc_data_validation, 60);
     tcase_set_timeout(tc_invalidation, 180);*/
 
     srunner_run_all(sr, CK_ENV);
