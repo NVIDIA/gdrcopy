@@ -43,7 +43,7 @@ namespace gdrcopy {
             }
         }
 
-        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops);
+        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops)
         {
             CUresult ret = CUDA_SUCCESS;
             CUdeviceptr ptr, out_ptr;
@@ -80,7 +80,7 @@ namespace gdrcopy {
             return CUDA_SUCCESS;
         }
 
-        CUresult gpu_mem_free(gpu_mem_handle_t *handle);
+        CUresult gpu_mem_free(gpu_mem_handle_t *handle)
         {
             CUresult ret = CUDA_SUCCESS;
             CUdeviceptr ptr;
@@ -92,7 +92,7 @@ namespace gdrcopy {
             return ret;
         }
 
-        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops);
+        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops)
         {
             CUresult ret = CUDA_SUCCESS;
 
@@ -166,15 +166,6 @@ namespace gdrcopy {
                 goto out;
             }
 
-            if (set_sync_memops) {
-                unsigned int flag = 1;
-                ret = cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, ptr);
-                if (ret != CUDA_SUCCESS) {
-                    print_dbg("error in cuPointerSetAttribute\n");
-                    goto out;
-                }
-            }
-
             // cuMemAddressReserve always returns aligned ptr
             handle->ptr = ptr;
             handle->handle = mem_handle;
@@ -195,7 +186,7 @@ out:
             return ret;
         }
 
-        CUresult gpu_vmm_free(gpu_mem_handle_t *handle);
+        CUresult gpu_vmm_free(gpu_mem_handle_t *handle)
         {
             CUresult ret;
 
@@ -204,19 +195,19 @@ out:
 
             ret = cuMemUnmap(handle->ptr, handle->allocated_size);
             if (ret != CUDA_SUCCESS) {
-                ptrint_dbg("error in cuMemUnmap\n");
+                print_dbg("error in cuMemUnmap\n");
                 return ret;
             }
 
             ret = cuMemRelease(handle->handle);
             if (ret != CUDA_SUCCESS) {
-                ptrint_dbg("error in cuMemRelease\n");
+                print_dbg("error in cuMemRelease\n");
                 return ret;
             }
 
             ret = cuMemAddressFree(handle->ptr, handle->allocated_size);
             if (ret != CUDA_SUCCESS) {
-                ptrint_dbg("error in cuMemAddressFree\n");
+                print_dbg("error in cuMemAddressFree\n");
                 return ret;
             }
 

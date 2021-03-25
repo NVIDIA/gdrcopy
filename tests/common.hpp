@@ -121,13 +121,13 @@ namespace gdrcopy {
             union {
                 CUdeviceptr unaligned_ptr; // for tracking original ptr; may be unaligned.
                 CUmemGenericAllocationHandle handle;
-            }
+            };
             size_t size;
             size_t allocated_size;
         } gpu_mem_handle_t;
 
-        typedef CUresult gpu_memalloc_fn_t(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops);
-        typedef CUresult gpu_memfree_fn_t(gpu_mem_handle_t *handle);
+        typedef CUresult (*gpu_memalloc_fn_t)(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops);
+        typedef CUresult (*gpu_memfree_fn_t)(gpu_mem_handle_t *handle);
 
         static inline gdr_t gdr_open_safe()
         {

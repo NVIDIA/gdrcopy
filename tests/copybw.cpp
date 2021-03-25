@@ -39,106 +39,29 @@ using namespace gdrcopy::test;
 // manually tuned...
 int num_write_iters = 10000;
 int num_read_iters  = 100;
+size_t _size = 128*1024;
+size_t copy_size = 0;
+size_t copy_offset = 0;
+int dev_id = 0;
 
-int main(int argc, char *argv[])
+void print_usage(const char *path)
 {
-    size_t _size = 128*1024;
-    size_t copy_size = 0;
-    size_t copy_offset = 0;
-    int dev_id = 0;
+    cout << "Usage: " << path << " [-h][-s <size>][-c <size>][-o <offset>][-d <gpu>][-w <iters>][-r <iters>][-a <fn>]" << endl;
+    cout << endl;
+    cout << "Options:" << endl;
+    cout << "   -h              Print this help text" << endl;
+    cout << "   -s <size>       Buffer allocation size (default: " << _size << ")" << endl;
+    cout << "   -c <size>       Copy size (default: " << copy_size << ")" << endl;
+    cout << "   -o <offset>     Copy offset (default: " << copy_offset << ")" << endl;
+    cout << "   -d <gpu>        GPU ID (default: " << dev_id << ")" << endl;
+    cout << "   -w <iters>      Number of write iterations (default: " << num_write_iters << ")" << endl;
+    cout << "   -r <iters>      Number of read iterations (default: " << num_read_iters << ")" << endl;
+    cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
+    cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
+}
 
-    while(1) {        
-        int c;
-        c = getopt(argc, argv, "s:d:o:c:w:r:h");
-        if (c == -1)
-            break;
-
-        switch (c) {
-        case 's':
-            _size = strtol(optarg, NULL, 0);
-            break;
-        case 'c':
-            copy_size = strtol(optarg, NULL, 0);
-            break;
-        case 'o':
-            copy_offset = strtol(optarg, NULL, 0);
-            break;
-        case 'd':
-            dev_id = strtol(optarg, NULL, 0);
-            break;
-        case 'w':
-            num_write_iters = strtol(optarg, NULL, 0);
-            break;
-        case 'r':
-            num_read_iters = strtol(optarg, NULL, 0);
-            break;
-        case 'h':
-            printf("syntax: %s -s <buf size> -c <copy size> -o <copy offset> -d <gpu dev id> -w <write iters> -r <read iters> -h\n", argv[0]);
-            exit(EXIT_FAILURE);
-            break;
-        default:
-            fprintf(stderr, "ERROR: invalid option\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-    
-    if (!copy_size)
-        copy_size = _size;
-
-    if (copy_offset % sizeof(uint32_t) != 0) {
-        fprintf(stderr, "ERROR: offset must be multiple of 4 bytes\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (copy_offset + copy_size > _size) {
-        fprintf(stderr, "ERROR: offset + copy size run past the end of the buffer\n");
-        exit(EXIT_FAILURE);
-    }
-
-    size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
-
-    ASSERTDRV(cuInit(0));
-
-    int n_devices = 0;
-    ASSERTDRV(cuDeviceGetCount(&n_devices));
-
-    CUdevice dev;
-    for (int n=0; n<n_devices; ++n) {
-        
-        char dev_name[256];
-        int dev_pci_domain_id;
-        int dev_pci_bus_id;
-        int dev_pci_device_id;
-
-        ASSERTDRV(cuDeviceGet(&dev, n));
-        ASSERTDRV(cuDeviceGetName(dev_name, sizeof(dev_name) / sizeof(dev_name[0]), dev));
-        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_domain_id, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, dev));
-        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
-        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
-
-        cout << "GPU id:" << n << "; name: " << dev_name 
-            << "; Bus id: "
-            << std::hex 
-            << std::setfill('0') << std::setw(4) << dev_pci_domain_id
-            << ":" << std::setfill('0') << std::setw(2) << dev_pci_bus_id
-            << ":" << std::setfill('0') << std::setw(2) << dev_pci_device_id
-            << std::dec
-            << endl;
-    }
-    cout << "selecting device " << dev_id << endl;
-    ASSERTDRV(cuDeviceGet(&dev, dev_id));
-
-    CUcontext dev_ctx;
-    ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
-    ASSERTDRV(cuCtxSetCurrent(dev_ctx));
-
-    cout << "testing size: " << _size << endl;
-    cout << "rounded size: " << size << endl;
-
-    CUdeviceptr d_A;
-    ASSERTDRV(gpuMemAlloc(&d_A, size));
-    cout << "device ptr: " << hex << d_A << dec << endl;
-
+void run_test(CUdeviceptr d_A, size_t size)
+{
     uint32_t *init_buf = NULL;
     init_buf = (uint32_t *)malloc(size);
     ASSERT_NEQ(init_buf, (void*)0);
@@ -218,8 +141,128 @@ int main(int argc, char *argv[])
 
     cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
+}
 
-    ASSERTDRV(gpuMemFree(d_A));
+int main(int argc, char *argv[])
+{
+    gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
+    gpu_memfree_fn_t gfree_fn = gpu_mem_free;
+
+    while(1) {        
+        int c;
+        c = getopt(argc, argv, "s:d:o:c:w:r:a:h");
+        if (c == -1)
+            break;
+
+        switch (c) {
+        case 's':
+            _size = strtol(optarg, NULL, 0);
+            break;
+        case 'c':
+            copy_size = strtol(optarg, NULL, 0);
+            break;
+        case 'o':
+            copy_offset = strtol(optarg, NULL, 0);
+            break;
+        case 'd':
+            dev_id = strtol(optarg, NULL, 0);
+            break;
+        case 'w':
+            num_write_iters = strtol(optarg, NULL, 0);
+            break;
+        case 'r':
+            num_read_iters = strtol(optarg, NULL, 0);
+            break;
+        case 'a':
+            if (strcmp(optarg, "cuMemAlloc") == 0) {
+                galloc_fn = gpu_mem_alloc;
+                gfree_fn = gpu_mem_free;
+            }
+            else if (strcmp(optarg, "cuMemCreate") == 0) {
+                galloc_fn = gpu_vmm_alloc;
+                gfree_fn = gpu_vmm_free;
+            }
+            else {
+                cerr << "Unrecognized fn argument" << endl;
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'h':
+            print_usage(argv[0]);
+            exit(EXIT_SUCCESS);
+        default:
+            fprintf(stderr, "ERROR: invalid option\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+    
+    if (!copy_size)
+        copy_size = _size;
+
+    if (copy_offset % sizeof(uint32_t) != 0) {
+        fprintf(stderr, "ERROR: offset must be multiple of 4 bytes\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (copy_offset + copy_size > _size) {
+        fprintf(stderr, "ERROR: offset + copy size run past the end of the buffer\n");
+        exit(EXIT_FAILURE);
+    }
+
+    size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+
+    ASSERTDRV(cuInit(0));
+
+    int n_devices = 0;
+    ASSERTDRV(cuDeviceGetCount(&n_devices));
+
+    CUdevice dev;
+    for (int n=0; n<n_devices; ++n) {
+        
+        char dev_name[256];
+        int dev_pci_domain_id;
+        int dev_pci_bus_id;
+        int dev_pci_device_id;
+
+        ASSERTDRV(cuDeviceGet(&dev, n));
+        ASSERTDRV(cuDeviceGetName(dev_name, sizeof(dev_name) / sizeof(dev_name[0]), dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_domain_id, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
+
+        cout << "GPU id:" << n << "; name: " << dev_name 
+            << "; Bus id: "
+            << std::hex 
+            << std::setfill('0') << std::setw(4) << dev_pci_domain_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_bus_id
+            << ":" << std::setfill('0') << std::setw(2) << dev_pci_device_id
+            << std::dec
+            << endl;
+    }
+    cout << "selecting device " << dev_id << endl;
+    ASSERTDRV(cuDeviceGet(&dev, dev_id));
+
+    CUcontext dev_ctx;
+    ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
+    ASSERTDRV(cuCtxSetCurrent(dev_ctx));
+
+    cout << "testing size: " << _size << endl;
+    cout << "rounded size: " << size << endl;
+
+    if (galloc_fn == gpu_mem_alloc)
+        cout << "gpu alloc fn: cuMemAlloc" << endl;
+    else
+        cout << "gpu alloc fn: cuMemCreate" << endl;
+
+    CUdeviceptr d_A;
+    gpu_mem_handle_t mhandle;
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    d_A = mhandle.ptr;
+    cout << "device ptr: " << hex << d_A << dec << endl;
+
+    run_test(d_A, size);
+
+    ASSERTDRV(gfree_fn(&mhandle));
 
     ASSERTDRV(cuDevicePrimaryCtxRelease(dev));
 
