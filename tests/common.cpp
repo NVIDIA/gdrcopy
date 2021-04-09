@@ -43,14 +43,14 @@ namespace gdrcopy {
             }
         }
 
-        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops)
+        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops)
         {
             CUresult ret = CUDA_SUCCESS;
             CUdeviceptr ptr, out_ptr;
             size_t allocated_size;
 
-            if (align_to_gpu_page)
-                allocated_size = ROUND_UP(size, GPU_PAGE_SIZE);
+            if (aligned_mapping)
+                allocated_size = size + GPU_PAGE_SIZE - 1;
             else
                 allocated_size = size;
 
@@ -67,7 +67,7 @@ namespace gdrcopy {
                 }
             }
 
-            if (align_to_gpu_page)
+            if (aligned_mapping)
                 out_ptr = ROUND_UP(ptr, GPU_PAGE_SIZE);
             else
                 out_ptr = ptr;
@@ -92,11 +92,11 @@ namespace gdrcopy {
             return ret;
         }
 
-        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops)
+        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops)
         {
             CUresult ret = CUDA_SUCCESS;
 
-            size_t granularity;
+            size_t granularity, gran;
             CUmemAllocationProp mprop;
             CUdevice gpu_dev;
             size_t rounded_size;
@@ -129,11 +129,14 @@ namespace gdrcopy {
             mprop.location.id = gpu_dev;
             mprop.allocFlags.gpuDirectRDMACapable = 1;
 
-            ret = cuMemGetAllocationGranularity(&granularity, &mprop, CU_MEM_ALLOC_GRANULARITY_RECOMMENDED);
+            ret = cuMemGetAllocationGranularity(&gran, &mprop, CU_MEM_ALLOC_GRANULARITY_RECOMMENDED);
             if (ret != CUDA_SUCCESS) {
                 print_dbg("error in cuMemGetAllocationGranularity\n");
                 goto out;
             }
+
+            // In case gran is smaller than GPU_PAGE_SIZE
+            granularity = ROUND_UP(gran, GPU_PAGE_SIZE);
 
             rounded_size = ROUND_UP(size, granularity);
             ret = cuMemAddressReserve(&ptr, rounded_size, granularity, 0, 0);

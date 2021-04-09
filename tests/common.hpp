@@ -126,7 +126,7 @@ namespace gdrcopy {
             size_t allocated_size;
         } gpu_mem_handle_t;
 
-        typedef CUresult (*gpu_memalloc_fn_t)(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops);
+        typedef CUresult (*gpu_memalloc_fn_t)(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops);
         typedef CUresult (*gpu_memfree_fn_t)(gpu_mem_handle_t *handle);
 
         static inline gdr_t gdr_open_safe()
@@ -144,10 +144,10 @@ namespace gdrcopy {
 
         void print_dbg(const char* fmt, ...);
 
-        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops);
+        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops);
         CUresult gpu_mem_free(gpu_mem_handle_t *handle);
 
-        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool align_to_gpu_page, bool set_sync_memops);
+        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops);
         CUresult gpu_vmm_free(gpu_mem_handle_t *handle);
 
         static inline bool operator==(const gdr_mh_t &a, const gdr_mh_t &b) {
