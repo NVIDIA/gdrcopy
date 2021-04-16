@@ -698,7 +698,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
 out:
     if (ret && mr) {
         if (page_table) {
-            gdr_err("error, calling p2p_put_pages\n");
+            gdr_dbg("calling p2p_put_pages\n");
 
             // If gdrdrv_get_pages_free_callback is invoked, nvidia_p2p_put_pages will be blocked until it finishes.
             // We release the semaphore here to allow gdrdrv_get_pages_free_callback to progress.
