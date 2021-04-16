@@ -236,6 +236,14 @@ MODULE_PARM_DESC(info_enabled, "enable info tracing");
 #define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
 #endif
 
+#ifndef READ_ONCE
+#define READ_ONCE(x) ACCESS_ONCE(x)
+#endif
+
+#ifndef WRITE_ONCE
+#define WRITE_ONCE(x, v) (ACCESS_ONCE(x) = (v))
+#endif
+
 //-----------------------------------------------------------------------------
 
 struct gdr_mr {
@@ -255,6 +263,7 @@ struct gdr_mr {
     unsigned int tsc_khz;
     struct vm_area_struct *vma;
     struct address_space *mapping;
+    struct rw_semaphore sem;
 };
 typedef struct gdr_mr gdr_mr_t;
 
@@ -371,6 +380,7 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
     int retcode;
     gdr_info_t *info = filp->private_data;
     gdr_mr_t *mr = NULL;
+    nvidia_p2p_page_table_t *page_table = NULL;
     struct list_head *p, *n;
 
     gdr_dbg("closing\n");
@@ -387,22 +397,38 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
 
     mutex_lock(&info->lock);
     list_for_each_safe(p, n, &info->mr_list) {
+        page_table = NULL;
+
         mr = list_entry(p, gdr_mr_t, node);
+
+        down_write(&mr->sem);
         gdr_info("freeing MR=0x%px\n", mr);
+
         if (gdr_mr_is_mapped(mr)) {
-            mutex_unlock(&info->lock);
             gdr_mr_destroy_all_mappings(mr);
-            mutex_lock(&info->lock);
         }
-        if (!ACCESS_ONCE(mr->cb_flag)) {
-            mutex_unlock(&info->lock);
-            // this may call the invalidation cb, e.g. on L4T
-            retcode = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, mr->page_table);
-            if (retcode) {
-                gdr_err("error while calling put_pages\n");
+
+        if (!READ_ONCE(mr->cb_flag)) {
+            // We reach here before gdrdrv_get_pages_free_callback.
+            // However, it might be waiting on semaphore.
+            // Release the semaphore to let it progresses.
+            page_table = mr->page_table;
+            up_write(&mr->sem);
+
+            if (page_table) {
+                // This may call the invalidation cb, e.g. on L4T.
+                // On other systems, we might race with invalidation cb.
+                // However, nvidia_p2p_put_pages will turn into NOP if this page_table has already been removed.
+                retcode = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, page_table);
+                if (retcode) {
+                    gdr_err("error while calling put_pages\n");
+                }
             }
-            mutex_lock(&info->lock);
+
+            // Let's wait for the callback to finish.
+            down_write(&mr->sem);
         }
+
         list_del(&mr->node);
         memset(mr, 0, sizeof(*mr));
         kfree(mr);
@@ -434,14 +460,45 @@ static gdr_mr_t *gdr_mr_from_handle_unlocked(gdr_info_t *info, gdr_hnd_t handle)
     return mr;
 }
 
-static gdr_mr_t *gdr_mr_from_handle(gdr_info_t *info, gdr_hnd_t handle)
+/** 
+ * Convert handle to mr and semaphore-acquire it with read or write.
+ * If success, that mr is guaranteed to be available until gdr_put_mr is called.
+ * On success, return mr. Otherwise, return NULL.
+ */
+static inline gdr_mr_t *gdr_get_mr_from_handle(gdr_info_t *info, gdr_hnd_t handle, int write)
 {
     gdr_mr_t *mr;
     mutex_lock(&info->lock);
     mr = gdr_mr_from_handle_unlocked(info, handle);
+    if (mr) {
+        if (write)
+            down_write(&mr->sem);
+        else
+            down_read(&mr->sem);
+    }
     mutex_unlock(&info->lock);
     return mr;
 }
+
+#define gdr_get_mr_from_handle_read(info, handle)   (gdr_get_mr_from_handle((info), (handle), 0))
+#define gdr_get_mr_from_handle_write(info, handle)  (gdr_get_mr_from_handle((info), (handle), 1))
+
+//-----------------------------------------------------------------------------
+
+/**
+ * Put the mr object. The `write` parameter must match the previous gdr_get_mr_from_handle call.
+ * After this function returns, mr may cease to exist (freed). It must not be accessed again.
+ */
+static inline void gdr_put_mr(gdr_mr_t *mr, int write)
+{
+    if (write)
+        up_write(&mr->sem);
+    else
+        up_read(&mr->sem);
+}
+
+#define gdr_put_mr_read(mr)     (gdr_put_mr((mr), 0))
+#define gdr_put_mr_write(mr)    (gdr_put_mr((mr), 1))
 
 //-----------------------------------------------------------------------------
 // off is host page aligned, because of the kernel interface
@@ -453,7 +510,6 @@ static gdr_hnd_t gdrdrv_handle_from_off(unsigned long off)
 }
 
 //-----------------------------------------------------------------------------
-// BUG: mr access is not explicitly protected by a lock
 
 static void gdrdrv_get_pages_free_callback(void *data)
 {
@@ -462,7 +518,8 @@ static void gdrdrv_get_pages_free_callback(void *data)
     gdr_info("free callback\n");
     // can't take the info->lock here due to potential AB-BA
     // deadlock with internal NV driver lock(s)
-    ACCESS_ONCE(mr->cb_flag) = 1;
+    down_write(&mr->sem);
+    WRITE_ONCE(mr->cb_flag, 1);
     smp_wmb();
     page_table = xchg(&mr->page_table, NULL);
     if (page_table) {
@@ -470,8 +527,9 @@ static void gdrdrv_get_pages_free_callback(void *data)
         if (gdr_mr_is_mapped(mr))
             gdr_mr_destroy_all_mappings(mr);
     } else {
-        gdr_err("ERROR: free callback, page_table is NULL\n");
+        gdr_dbg("free callback, page_table is NULL\n");
     }
+    up_write(&mr->sem);
 }
 
 //-----------------------------------------------------------------------------
@@ -515,10 +573,9 @@ static inline int gdr_generate_mr_handle(gdr_info_t *info, gdr_mr_t *mr)
 
 //-----------------------------------------------------------------------------
 
-static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
+static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_token, u32 va_space, gdr_mr_t **p_mr)
 {
-    struct GDRDRV_IOC_PIN_BUFFER_PARAMS params = {0};
-    int ret = 0;
+    int ret = 0, retcode;
     struct nvidia_p2p_page_table *page_table = NULL;
     u64 page_virt_start;
     u64 page_virt_end;
@@ -527,18 +584,6 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     #ifndef CONFIG_ARM64
     cycles_t ta, tb;
     #endif
-
-    if (copy_from_user(&params, _params, sizeof(params))) {
-        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
-        ret = -EFAULT;
-        goto out;
-    }
-
-    if (!params.addr) {
-        gdr_err("NULL device pointer\n");
-        ret = -EINVAL;
-        goto out;
-    }
 
     mr = kmalloc(sizeof(gdr_mr_t), GFP_KERNEL);
     if (!mr) {
@@ -549,16 +594,16 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     memset(mr, 0, sizeof(*mr));
 
     // do proper alignment, as required by RM
-    page_virt_start  = params.addr & GPU_PAGE_MASK;
-    //page_virt_end    = (params.addr + params.size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
-    page_virt_end    = params.addr + params.size - 1;
+    page_virt_start  = addr & GPU_PAGE_MASK;
+    page_virt_end    = addr + size - 1;
     rounded_size     = page_virt_end - page_virt_start + 1;
-    //rounded_size     = (params.addr & GPU_PAGE_OFFSET) + params.size;
 
-    mr->offset       = params.addr & GPU_PAGE_OFFSET;
-    mr->length       = params.size;
-    mr->p2p_token    = params.p2p_token;
-    mr->va_space     = params.va_space;
+    init_rwsem(&mr->sem);
+
+    mr->offset       = addr & GPU_PAGE_OFFSET;
+    mr->length       = size;
+    mr->p2p_token    = p2p_token;
+    mr->va_space     = va_space;
     mr->va           = page_virt_start;
     mr->mapped_size  = rounded_size;
     mr->cpu_mapping_type = GDR_MR_NONE;
@@ -571,6 +616,14 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
     #ifndef CONFIG_ARM64
     ta = get_cycles();
     #endif
+
+    // After nvidia_p2p_get_pages returns (successfully), gdrdrv_get_pages_free_callback may be invoked anytime.
+    // mr setup must be done before calling that API.
+    smp_wmb();
+
+    // We take this semaphore to prevent race with gdrdrv_get_pages_free_callback.
+    down_write(&mr->sem);
+
     ret = nvidia_p2p_get_pages(mr->p2p_token, mr->va_space, mr->va, mr->mapped_size, &page_table,
                                gdrdrv_get_pages_free_callback, mr);
     #ifndef CONFIG_ARM64
@@ -634,34 +687,147 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
         ret = -ENOMEM;
     }
 
-    if (!ret)
+    if (!ret) {
         list_add(&mr->node, &info->mr_list);
+        *p_mr = mr;
+        up_write(&mr->sem);
+    }
     mutex_unlock(&info->lock);
 
+
 out:
-
-    if (ret && mr && mr->page_table) {
-        gdr_err("error, calling p2p_put_pages\n");
-        nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, mr->page_table);
-        page_table = NULL;
-        mr->page_table = NULL;
-    }
-
     if (ret && mr) {
+        if (page_table) {
+            gdr_err("error, calling p2p_put_pages\n");
+
+            // If gdrdrv_get_pages_free_callback is invoked, nvidia_p2p_put_pages will be blocked until it finishes.
+            // We release the semaphore here to allow gdrdrv_get_pages_free_callback to progress.
+            up_write(&mr->sem);
+
+            // This may call the invalidation cb, e.g. on L4T.
+            // On other systems, we might race with invalidation cb.
+            // However, nvidia_p2p_put_pages will turn into NOP if this page_table has already been removed.
+            retcode = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, page_table);
+            if (retcode) {
+                gdr_err("error while calling put_pages\n");
+            }
+
+            // Let's wait for the invalidation callback.
+            down_write(&mr->sem);
+        }
+
         memset(mr, 0, sizeof(*mr));
         kfree(mr);
         mr = NULL;
+
+        *p_mr = NULL;
     }
 
-    if (!ret) {
-        params.handle = mr->handle;
+    return ret;
+}
 
-        if (copy_to_user(_params, &params, sizeof(params))) {
-            gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
-            ret = -EFAULT;
+//-----------------------------------------------------------------------------
+
+static int __gdrdrv_unpin_buffer(gdr_info_t *info, gdr_hnd_t handle)
+{
+    int ret = 0;
+
+    gdr_mr_t *mr = NULL;
+    nvidia_p2p_page_table_t *page_table = NULL;
+
+    // someone might try to traverse the list and/or to do something
+    // to the mr at the same time, so let's lock here
+    mutex_lock(&info->lock);
+    mr = gdr_mr_from_handle_unlocked(info, handle);
+    if (NULL == mr) {
+        gdr_err("unexpected handle %llx while unmapping buffer\n", handle);
+        ret = -EINVAL;
+    } else {
+        // Found the mr. Let's lock it.
+        down_write(&mr->sem);
+        if (gdr_mr_is_mapped(mr)) {
+            gdr_mr_destroy_all_mappings(mr);
         }
+
+        // Remove this handle from the list under info->lock.
+        // Now race with gdrdrv_get_pages_free_callback is the only thing we need to be careful.
+        list_del(&mr->node);
+    }
+    mutex_unlock(&info->lock);
+
+    if (ret)
+        goto out;
+
+    if (!READ_ONCE(mr->cb_flag)) {
+        gdr_info("invoking nvidia_p2p_put_pages(va=0x%llx p2p_tok=%llx va_tok=%x)\n",
+                 mr->va, mr->p2p_token, mr->va_space);
+
+        // We reach here before gdrdrv_get_pages_free_callback.
+        // However, it might be waiting on semaphore.
+        // Release the semaphore to let it progresses.
+        page_table = mr->page_table;
+        up_write(&mr->sem);
+        if (page_table) {
+            ret = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, page_table);
+            if (ret) {
+                gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", ret);
+            }
+        }
+
+        // In case the invalidation callback is in flight, let's wait.
+        down_write(&mr->sem);
+    } else {
+        gdr_dbg("invoking unpin_buffer while callback has already been fired\n");
+        // not returning an error here because further clean-up is
+        // needed anyway
     }
 
+    memset(mr, 0, sizeof(*mr));
+    kfree(mr);
+
+ out:
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+
+static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
+{
+    int ret = 0;
+
+    struct GDRDRV_IOC_PIN_BUFFER_PARAMS params = {0};
+
+    gdr_mr_t *mr = NULL;
+
+    if (copy_from_user(&params, _params, sizeof(params))) {
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    if (!params.addr) {
+        gdr_err("NULL device pointer\n");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    ret = __gdrdrv_pin_buffer(info, params.addr, params.size, params.p2p_token, params.va_space, &mr);
+    if (ret)
+        goto out;
+
+    params.handle = mr->handle;
+
+    if (copy_to_user(_params, &params, sizeof(params))) {
+        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+    }
+
+
+out:
+    if (ret) {
+        if (mr)
+            __gdrdrv_unpin_buffer(info, mr->handle);
+    }
 
     return ret;
 }
@@ -671,45 +837,15 @@ out:
 static int gdrdrv_unpin_buffer(gdr_info_t *info, void __user *_params)
 {
     struct GDRDRV_IOC_UNPIN_BUFFER_PARAMS params = {0};
-    int ret = 0, retcode = 0;
-    gdr_mr_t *mr = NULL;
+    int ret = 0;
 
     if (copy_from_user(&params, _params, sizeof(params))) {
         gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
         return -EFAULT;
     }
 
-    // someone might try to traverse the list and/or to do something
-    // to the mr at the same time, so let's lock here
-    mutex_lock(&info->lock);
-    mr = gdr_mr_from_handle_unlocked(info, params.handle);
-    if (NULL == mr) {
-        gdr_err("unexpected handle %llx while unmapping buffer\n", params.handle);
-        ret = -EINVAL;
-    } else {
-        if (gdr_mr_is_mapped(mr)) {
-            gdr_mr_destroy_all_mappings(mr);
-        }
-        list_del(&mr->node);
-    }
-    mutex_unlock(&info->lock);
-    if (ret)
-        goto out;
-    if (!mr->cb_flag) {
-        gdr_info("invoking nvidia_p2p_put_pages(va=0x%llx p2p_tok=%llx va_tok=%x)\n",
-                 mr->va, mr->p2p_token, mr->va_space);
-        retcode = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, mr->page_table);
-        if (retcode) {
-            gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", retcode);
-        }
-    } else {
-        gdr_dbg("invoking unpin_buffer while callback has already been fired\n");
-        // not returning an error here because further clean-up is
-        // needed anyway
-    }
-    memset(mr, 0, sizeof(*mr));
-    kfree(mr);
- out:
+    ret = __gdrdrv_unpin_buffer(info, params.handle);
+
     return ret;
 }
 
@@ -725,19 +861,23 @@ static int gdrdrv_get_cb_flag(gdr_info_t *info, void __user *_params)
         gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
         return -EFAULT;
     }
-    mr = gdr_mr_from_handle(info, params.handle);
+
+    mr = gdr_get_mr_from_handle_read(info, params.handle);
     if (NULL == mr) {
         gdr_err("unexpected handle %llx in get_cb_flag\n", params.handle);
         ret = -EINVAL;
         goto out;
     }
 
-    params.flag = !!mr->cb_flag;
+    params.flag = !!READ_ONCE(mr->cb_flag);
+
+    gdr_put_mr_read(mr);
 
     if (copy_to_user(_params, &params, sizeof(params))) {
         gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
         ret = -EFAULT;
     }
+
  out:
     return ret;
 }
@@ -756,7 +896,7 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
         goto out;
     }
 
-    mr = gdr_mr_from_handle(info, params.handle);
+    mr = gdr_get_mr_from_handle_read(info, params.handle);
     if (NULL == mr) {
         gdr_err("unexpected handle %llx in get_cb_flag\n", params.handle);
         ret = -EINVAL;
@@ -770,6 +910,9 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
     params.tsc_khz     = mr->tsc_khz;
     params.mapped      = gdr_mr_is_mapped(mr);
     params.wc_mapping  = gdr_mr_is_wc_mapping(mr);
+
+    gdr_put_mr_read(mr);
+
     if (copy_to_user(_params, &params, sizeof(params))) {
         gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
         ret = -EFAULT;
@@ -948,8 +1091,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     }
 
     handle = gdrdrv_handle_from_off(vma->vm_pgoff);
-    mr = gdr_mr_from_handle(info, handle);
-    // BUG: mr needs locking
+    mr = gdr_get_mr_from_handle_write(info, handle);
     if (!mr) {
         gdr_dbg("cannot find handle in mr_list\n");
         ret = -EINVAL;
@@ -961,7 +1103,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         ret = -EINVAL;
         goto out;
     }
-    if (mr->cb_flag) {
+    if (READ_ONCE(mr->cb_flag)) {
         gdr_dbg("mr has been invalidated\n");
         ret = -EINVAL;
         goto out;
@@ -1071,6 +1213,10 @@ out:
         mr->mapping = filp->f_mapping;
         gdr_dbg("mr vma=0x%px mapping=0x%px\n", mr->vma, mr->mapping);
     }
+
+    if (mr)
+        gdr_put_mr_write(mr);
+
     return ret;
 }
 
