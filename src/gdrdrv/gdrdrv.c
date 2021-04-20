@@ -618,8 +618,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
     #endif
 
     // After nvidia_p2p_get_pages returns (successfully), gdrdrv_get_pages_free_callback may be invoked anytime.
-    // mr setup must be done before calling that API.
-    smp_wmb();
+    // mr setup must be done before calling that API. The memory barrier is included in down_write.
 
     // We take this semaphore to prevent race with gdrdrv_get_pages_free_callback.
     down_write(&mr->sem);
