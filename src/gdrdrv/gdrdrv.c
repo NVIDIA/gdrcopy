@@ -419,6 +419,7 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
                 // This may call the invalidation cb, e.g. on L4T.
                 // On other systems, we might race with invalidation cb.
                 // However, nvidia_p2p_put_pages will turn into NOP if this page_table has already been removed.
+                // Note: the locking sequence is info->lock, mr->sem, nvidia driver API lock.
                 retcode = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, page_table);
                 if (retcode) {
                     gdr_err("error while calling put_pages\n");
@@ -749,7 +750,7 @@ static int __gdrdrv_unpin_buffer(gdr_info_t *info, gdr_hnd_t handle)
         }
 
         // Remove this handle from the list under info->lock.
-        // Now race with gdrdrv_get_pages_free_callback is the only thing we need to be careful.
+        // Now race with gdrdrv_get_pages_free_callback is the only thing we need to care about.
         list_del(&mr->node);
     }
     mutex_unlock(&info->lock);
