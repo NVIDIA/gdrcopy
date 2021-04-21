@@ -716,6 +716,10 @@ out:
             down_write(&mr->sem);
         }
 
+        // From this point, no other code paths will access this mr.
+        // We release semaphore and clear the mr.
+        up_write(&mr->sem);
+
         memset(mr, 0, sizeof(*mr));
         kfree(mr);
         mr = NULL;
@@ -781,6 +785,10 @@ static int __gdrdrv_unpin_buffer(gdr_info_t *info, gdr_hnd_t handle)
         // not returning an error here because further clean-up is
         // needed anyway
     }
+
+    // From this point, no other code paths will access this mr.
+    // We release semaphore and clear the mr.
+    up_write(&mr->sem);
 
     memset(mr, 0, sizeof(*mr));
     kfree(mr);
