@@ -61,6 +61,15 @@ if [ "X$VERSION" == "X" ]; then
 fi
 FULL_VERSION="${VERSION}"
 
+NVIDIA_SRC_DIR=$(find /usr/src/nvidia-* -name "nv-p2p.h" -print -quit)
+if [ ${#NVIDIA_SRC_DIR} -gt 0 ]; then
+    NVIDIA_SRC_DIR=$(dirname ${NVIDIA_SRC_DIR})
+    NVIDIA_DRIVER_VERSION=$(basename $(dirname ${NVIDIA_SRC_DIR}))
+else
+    echo "Failed to find NVIDIA driver!" >&2
+    exit 1
+fi
+
 tmpdir=`mktemp -d /tmp/gdr.XXXXXX`
 if [ ! -d "$tmpdir" ]; then
     echo "Failed to create a temp directory!" >&2
@@ -91,7 +100,7 @@ ex mkdir -p $tmpdir/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
 ex cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
 ex cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
 
-rpmbuild -ba --nodeps --define '_build_id_links none' --define "_topdir $tmpdir/topdir" --define "_release ${RPM_VERSION}" --define 'dist %{nil}' --define "CUDA $CUDA" --define "GDR_VERSION ${VERSION}" --define "KVERSION $(uname -r)" --define "MODULE_LOCATION ${MODULE_SUBDIR}" $tmpdir/topdir/SPECS/gdrcopy.spec
+rpmbuild -ba --nodeps --define '_build_id_links none' --define "_topdir $tmpdir/topdir" --define "_release ${RPM_VERSION}" --define 'dist %{nil}' --define "CUDA $CUDA" --define "GDR_VERSION ${VERSION}" --define "KVERSION $(uname -r)" --define "MODULE_LOCATION ${MODULE_SUBDIR}" --define "NVIDIA_DRIVER_VERSION ${NVIDIA_DRIVER_VERSION}" --define "NVIDIA_SRC_DIR ${NVIDIA_SRC_DIR}" $tmpdir/topdir/SPECS/gdrcopy.spec
 rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
 srpm=`ls -1 $tmpdir/topdir/SRPMS/`
 echo $srpm $rpms

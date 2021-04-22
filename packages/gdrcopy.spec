@@ -3,12 +3,29 @@
 %{!?GDR_VERSION: %define GDR_VERSION 2.0}
 %{!?KVERSION: %define KVERSION %(uname -r)}
 %{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
+%{!?NVIDIA_DRIVER_VERSION: %define NVIDIA_DRIVER_VERSION UNKNOWN}
+%{!?NVIDIA_SRC_DIR: %define NVIDIA_SRC_DIR UNDEFINED}
 %global debug_package %{nil}
 %global krelver %(echo -n %{KVERSION} | sed -e 's/-/_/g')
 %define MODPROBE %(if ( /sbin/modprobe -c | grep -q '^allow_unsupported_modules  *0'); then echo -n "/sbin/modprobe --allow-unsupported-modules"; else echo -n "/sbin/modprobe"; fi )
 %define usr_src_dir /usr/src
 %define old_driver_install_dir /lib/modules/%{KVERSION}/%{MODULE_LOCATION}
 %global kmod kmod
+%global kmod_specific %{KVERSION}-%{NVIDIA_DRIVER_VERSION}
+
+%global gdrdrv_install_script                                           \
+/sbin/depmod -a %{KVERSION} &> /dev/null ||:                            \
+%{MODPROBE} -rq gdrdrv||:                                               \
+%{MODPROBE} gdrdrv||:                                                   \
+                                                                        \
+if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
+   true                                                                 \
+fi                                                                      \
+                                                                        \
+/sbin/chkconfig --add gdrcopy                                           \
+                                                                        \
+service gdrcopy start                                                    
+
 
 %global kmod_install_script                                             \
 echo "Start gdrcopy-kmod installation."                                 \
@@ -23,17 +40,7 @@ do                                                                      \
     dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :     \
 done                                                                    \
                                                                         \
-/sbin/depmod -a %{KVERSION} &> /dev/null ||:                            \
-%{MODPROBE} -rq gdrdrv||:                                               \
-%{MODPROBE} gdrdrv||:                                                   \
-                                                                        \
-if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
-   true                                                                 \
-fi                                                                      \
-                                                                        \
-/sbin/chkconfig --add gdrcopy                                           \
-                                                                        \
-service gdrcopy start                                                    
+%{gdrdrv_install_script}
 
 
 %global daemon_reload_script                                            \
@@ -74,6 +81,11 @@ BuildArch: noarch
 Recommends: kmod-nvidia-latest-dkms
 %endif
 
+%package %{kmod_specific}
+Summary: The kernel-mode driver
+Group: System Environment/Libraries
+Release: %{_release}%{?dist}
+
 %description
 GDRCopy, a low-latency GPU memory copy library and a kernel-mode driver, built on top of the 
 NVIDIA GPUDirect RDMA technology.
@@ -83,7 +95,10 @@ GDRCopy, a low-latency GPU memory copy library and a kernel-mode driver, built o
 NVIDIA GPUDirect RDMA technology.
 
 %description %{kmod}
-Kernel-mode driver for GDRCopy.
+Kernel-mode driver for GDRCopy with DKMS support.
+
+%description %{kmod_specific}
+Kernel-mode driver for GDRCopy built for driver %{NVIDIA_DRIVER_VERSION} and Linux kernel %{KVERSION}.
 
 %prep
 %setup
@@ -91,15 +106,23 @@ Kernel-mode driver for GDRCopy.
 
 %build
 echo "building"
-make -j CUDA=%{CUDA} config lib exes
+make -j8 CUDA=%{CUDA} config lib exes
+make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} driver
 
 %install
 # Install gdrcopy library and tests
 make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
 
+# Install gdrdrv driver
+make drv_install DESTDIR=$RPM_BUILD_ROOT
+
 # Install gdrdrv src
 mkdir -p $RPM_BUILD_ROOT%{usr_src_dir}
-cp -r -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
+mkdir -p $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
+cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/gdrdrv.c $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
+cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/gdrdrv.h $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
+cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/Makefile $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
+cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/nv-p2p-dummy.c $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
 
 # Install gdrdrv service script
@@ -124,6 +147,10 @@ if [ ! -e "%{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed" ]; then
 fi
 
 
+%post %{kmod_specific}
+%{gdrdrv_install_script}
+
+
 %preun %{kmod}
 service gdrcopy stop||:
 %{MODPROBE} -rq gdrdrv||:
@@ -142,7 +169,18 @@ find /lib/modules/*/weak-updates -name "gdrdrv.ko.*" -delete &> /dev/null || :
 find /lib/modules/*/weak-updates -name "gdrdrv.ko" -delete &> /dev/null || :
 
 
+%preun %{kmod_specific}
+service gdrcopy stop||:
+%{MODPROBE} -rq gdrdrv||:
+if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
+   true
+fi              
+
+
 %postun %{kmod}
+%{daemon_reload_script}
+
+%postun %{kmod_specific}
 %{daemon_reload_script}
 
 
@@ -208,6 +246,12 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{usr_src_dir}/gdrdrv-%{version}/Makefile
 %{usr_src_dir}/gdrdrv-%{version}/nv-p2p-dummy.c
 %{usr_src_dir}/gdrdrv-%{version}/dkms.conf
+
+
+%files %{kmod_specific}
+%defattr(-,root,root,-)
+/etc/init.d/gdrcopy
+%{old_driver_install_dir}/gdrdrv.ko
 
 
 %changelog
