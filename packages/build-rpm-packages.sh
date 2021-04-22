@@ -59,7 +59,7 @@ function show_help
 
 OPTIND=1	# Reset in case getopts has been used previously in the shell.
 
-generate_kmod_specific=0
+generate_kmod_nondkms=0
 
 while getopts "h?m" opt; do
     case "$opt" in
@@ -67,7 +67,7 @@ while getopts "h?m" opt; do
         show_help
         exit 0
         ;;
-    m)  generate_kmod_specific=1
+    m)  generate_kmod_nondkms=1
         ;;
     esac
 done
@@ -95,7 +95,7 @@ if [ "X$VERSION" == "X" ]; then
 fi
 FULL_VERSION="${VERSION}"
 
-if [[ ${generate_kmod_specific} == 1 ]]; then
+if [[ ${generate_kmod_nondkms} == 1 ]]; then
     if [ -z "${NVIDIA_SRC_DIR}" ]; then
         NVIDIA_SRC_DIR=$(find /usr/src/nvidia-* -name "nv-p2p.h" -print -quit)
         if [ ${#NVIDIA_SRC_DIR} -gt 0 ]; then
@@ -144,8 +144,8 @@ ex cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
 ex cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
 
 rpmbuild_params="-ba --nodeps --define '_build_id_links none' --define \"_topdir $tmpdir/topdir\" --define \"_release ${RPM_VERSION}\" --define 'dist %{nil}' --define \"CUDA $CUDA\" --define \"GDR_VERSION ${VERSION}\" --define \"KVERSION $(uname -r)\" --define \"MODULE_LOCATION ${MODULE_SUBDIR}\""
-if [[ ${generate_kmod_specific} == 1 ]]; then
-    rpmbuild_params="${rpmbuild_params} --define \"NVIDIA_DRIVER_VERSION ${NVIDIA_DRIVER_VERSION}\" --define \"NVIDIA_SRC_DIR ${NVIDIA_SRC_DIR}\" --define \"BUILD_KMOD_SPECIFIC 1\""
+if [[ ${generate_kmod_nondkms} == 1 ]]; then
+    rpmbuild_params="${rpmbuild_params} --define \"NVIDIA_DRIVER_VERSION ${NVIDIA_DRIVER_VERSION}\" --define \"NVIDIA_SRC_DIR ${NVIDIA_SRC_DIR}\" --define \"BUILD_KMOD_NONDKMS 1\""
 fi
 rpmbuild_params="${rpmbuild_params} $tmpdir/topdir/SPECS/gdrcopy.spec"
 eval "rpmbuild ${rpmbuild_params}"
