@@ -130,6 +130,25 @@ int main(int argc, char *argv[])
     cout << "selecting device " << dev_id << endl;
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
+    #if CUDA_VERSION >= 11030
+    int drv_version;
+    ASSERTDRV(cuDriverGetVersion(&drv_version));
+
+    // Starting from CUDA 11.3, CUDA provides an ability to check GPUDirect RDMA support.
+    if (drv_version >= 11030) {
+        int gdr_support = 0;
+        ASSERTDRV(cuDeviceGetAttribute(&gdr_support, CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED, dev));
+
+        if (!gdr_support)
+            cerr << "This GPU does not support GPUDirect RDMA." << endl;
+
+        ASSERT_NEQ(gdr_support, 0);
+    }
+
+    // For older versions, we fall back to detect this support when calling gdr_pin_buffer.
+    #endif
+
+
     CUcontext dev_ctx;
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
     ASSERTDRV(cuCtxSetCurrent(dev_ctx));
