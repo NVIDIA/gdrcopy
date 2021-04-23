@@ -139,7 +139,7 @@ echo "Building libgdrapi package ..."
 ex cd ${tmpdir}/libgdrapi-${VERSION}
 debuild_params="--set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
 if [ "${skip_dep_check}" -eq 1 ]; then
-    debuild_params+=" --set-envvar=C_INCLUDE_PATH=${C_INCLUDE_PATH} --set-envvar=CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH} --set-envvar=LIBRARY_PATH=${LIBRARY_PATH} --set-envvar=LD_LIBRARY_PATH=${LD_LIBRARY_PATH} -d"
+    debuild_params+=" --preserve-env -d"
     echo "Skip build dependency check. Use the environment variables instead ..."
 fi
 # --set-envvar needs to be placed before -us -uc
@@ -152,7 +152,7 @@ echo "Building gdrcopy-tests package ..."
 ex cd ${tmpdir}/gdrcopy-tests-${VERSION}
 debuild_params="--set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
 if [ "${skip_dep_check}" -eq 1 ]; then
-    debuild_params+=" --set-envvar=C_INCLUDE_PATH=${C_INCLUDE_PATH} --set-envvar=CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH} --set-envvar=LIBRARY_PATH=${LIBRARY_PATH} --set-envvar=LD_LIBRARY_PATH=${LD_LIBRARY_PATH} -d"
+    debuild_params+=" --preserve-env -d"
     echo "Skip build dependency check. Use the environment variables instead ..."
 fi
 # --set-envvar needs to be placed before -us -uc
