@@ -170,7 +170,7 @@ fi
 
 if [[ ${build_driver_package} == 1 ]]; then
     echo
-    echo "Building dkms module ..."
+    echo "Building gdrdrv-dkms package ..."
     ex cd ${tmpdir}/gdrcopy/src/gdrdrv
     ex make clean
 
@@ -191,6 +191,20 @@ if [[ ${build_driver_package} == 1 ]]; then
     ex cd ${dkmsdir}
     ex dpkg-buildpackage -rfakeroot -d -F -us -uc
 fi
+
+echo
+echo "Building gdrcopy package ..."
+metadir=${tmpdir}/gdrcopy-meta-${VERSION}
+ex mkdir -p ${metadir}
+ex cd ${TOP_DIR_PATH}
+ex cp packages/gdrcopy.cfg ${metadir}
+ex cp LICENSE ${metadir}/MIT
+ex cd ${metadir}
+ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
+ex equivs-build gdrcopy.cfg
+ex cp *.deb ../
 
 echo
 echo "Copying *.deb and supplementary files to the current working directory ..."
