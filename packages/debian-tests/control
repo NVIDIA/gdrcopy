@@ -12,4 +12,6 @@ Package: gdrcopy-tests
 Architecture: any
 Multi-Arch: same
 Depends: libsubunit0, libgdrapi (>= @VERSION@), ${shlibs:Depends}, ${misc:Depends}
+Replaces: gdrcopy (<= 2.2-1)
+Conflicts: gdrcopy (<= 2.2-1)
 Description: Test utilities for GDRCopy 

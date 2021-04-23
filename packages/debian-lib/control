@@ -12,5 +12,7 @@ Package: libgdrapi
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
+Replaces: gdrcopy (<= 2.2-1)
+Conflicts: gdrcopy (<= 2.2-1)
 Description: A low-latency GPU memory copy library 
  A low-latency GPU memory copy library based on NVIDIA GPUDirect RDMA technology.
