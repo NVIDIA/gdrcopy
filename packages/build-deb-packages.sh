@@ -30,6 +30,8 @@ TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."
 CWD=$(pwd)
 
 skip_dep_check=0
+build_test_package=1
+build_driver_package=1
 
 ex()
 {
@@ -46,23 +48,29 @@ ex()
 
 function show_help
 {
-    echo "Usage: [CUDA=<path>] $0 [-d] [-h]"
+    echo "Usage: [CUDA=<path>] $0 [-d] [-t] [-k] [-h]"
     echo ""
     echo "  CUDA=<path>     Set your installed CUDA path (ex. /usr/local/cuda)."
     echo "  -d              Don't check build dependencies. Use my environment variables such as C_INCLUDE_PATH instead."
+    echo "  -t              Skip building gdrcopy-tests package."
+    echo "  -k              Skip building gdrdrv-dkms package."
     echo "  -h              Show this help text."
     echo ""
 }
 
 OPTIND=1	# Reset in case getopts has been used previously in the shell.
 
-while getopts "hd" opt; do
+while getopts "hdtk" opt; do
     case "${opt}" in
     h)
         show_help
         exit 0
         ;;
     d)  skip_dep_check=1
+        ;;
+    t)  build_test_package=0
+        ;;
+    k)  build_driver_package=0
         ;;
     esac
 done
@@ -71,7 +79,7 @@ shift $((OPTIND-1))
 
 
 
-if [ "X$CUDA" == "X" ]; then
+if [[ ${build_test_package} == 1 ]] && [ "X$CUDA" == "X" ]; then
     echo "CUDA environment variable is not defined"; exit 1
 fi
 
@@ -146,41 +154,43 @@ fi
 debuild_params+=" -us -uc"
 ex debuild ${debuild_params}
 
-
-echo
-echo "Building gdrcopy-tests package ..."
-ex cd ${tmpdir}/gdrcopy-tests-${VERSION}
-debuild_params="--set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
-if [ "${skip_dep_check}" -eq 1 ]; then
-    debuild_params+=" --preserve-env -d"
-    echo "Skip build dependency check. Use the environment variables instead ..."
+if [[ ${build_test_package} == 1 ]]; then
+    echo
+    echo "Building gdrcopy-tests package ..."
+    ex cd ${tmpdir}/gdrcopy-tests-${VERSION}
+    debuild_params="--set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
+    if [ "${skip_dep_check}" -eq 1 ]; then
+        debuild_params+=" --preserve-env -d"
+        echo "Skip build dependency check. Use the environment variables instead ..."
+    fi
+    # --set-envvar needs to be placed before -us -uc
+    debuild_params+=" -us -uc"
+    ex debuild ${debuild_params}
 fi
-# --set-envvar needs to be placed before -us -uc
-debuild_params+=" -us -uc"
-ex debuild ${debuild_params}
 
+if [[ ${build_driver_package} == 1 ]]; then
+    echo
+    echo "Building dkms module ..."
+    ex cd ${tmpdir}/gdrcopy/src/gdrdrv
+    ex make clean
 
-echo
-echo "Building dkms module ..."
-ex cd ${tmpdir}/gdrcopy/src/gdrdrv
-ex make clean
+    dkmsdir="${tmpdir}/gdrdrv-dkms-${VERSION}"
+    ex mkdir -p ${dkmsdir}
+    ex cp -r ${tmpdir}/gdrcopy/src/gdrdrv ${dkmsdir}/gdrdrv-${VERSION}
+    ex rm -rf ${dkmsdir}/gdrdrv-${VERSION}/debian-*
+    ex cp ${SCRIPT_DIR_PATH}/dkms.conf ${dkmsdir}/gdrdrv-${VERSION}/
+    ex cd ${dkmsdir}
+    ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
+    ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
+    ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
+    ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
 
-dkmsdir="${tmpdir}/gdrdrv-dkms-${VERSION}"
-ex mkdir -p ${dkmsdir}
-ex cp -r ${tmpdir}/gdrcopy/src/gdrdrv ${dkmsdir}/gdrdrv-${VERSION}
-ex rm -rf ${dkmsdir}/gdrdrv-${VERSION}/debian-*
-ex cp ${SCRIPT_DIR_PATH}/dkms.conf ${dkmsdir}/gdrdrv-${VERSION}/
-ex cd ${dkmsdir}
-ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
-ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
-ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
-ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
+    ex cd ${tmpdir}
+    ex tar czvf gdrdrv-dkms_${VERSION}.orig.tar.gz gdrdrv-dkms-${VERSION}
 
-ex cd ${tmpdir}
-ex tar czvf gdrdrv-dkms_${VERSION}.orig.tar.gz gdrdrv-dkms-${VERSION}
-
-ex cd ${dkmsdir}
-ex dpkg-buildpackage -rfakeroot -d -F -us -uc
+    ex cd ${dkmsdir}
+    ex dpkg-buildpackage -rfakeroot -d -F -us -uc
+fi
 
 echo
 echo "Copying *.deb and supplementary files to the current working directory ..."
