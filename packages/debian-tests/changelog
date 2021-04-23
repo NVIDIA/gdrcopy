@@ -1,4 +1,4 @@
-gdrcopy (@FULL_VERSION@) stable; urgency=low
+gdrcopy-tests (@FULL_VERSION@) stable; urgency=low
 
   * Add support for ARM64.
   * Update various information on README.
@@ -14,7 +14,7 @@ gdrcopy (@FULL_VERSION@) stable; urgency=low
 
  -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Feb 2021 11:59:59 -0700
 
-gdrcopy (2.1) stable; urgency=low
+gdrcopy-tests (2.1) stable; urgency=low
 
   * fix build problem on RHL8 kernels
   * relax checks in gdrdrv to support multi-threading use cases
@@ -27,7 +27,7 @@ gdrcopy (2.1) stable; urgency=low
 
  -- Davide Rossetti <drossetti@nvidia.com>  Mon, 02 Mar 2020 11:59:59 -0700
 
-gdrcopy (2.0) stable; urgency=low
+gdrcopy-tests (2.0) stable; urgency=low
 
   * Improve copy performance with unrolling in POWERPC.
   * Create sanity unit test for testing the functionality and security.

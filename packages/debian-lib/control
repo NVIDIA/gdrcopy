@@ -1,0 +1,16 @@
+Source: libgdrapi
+Priority: optional
+Maintainer: Davide Rossetti <drossetti@nvidia.com>
+Build-Depends: debhelper (>= 10)
+Standards-Version: @FULL_VERSION@
+Section: libs
+Homepage: https://github.com/NVIDIA/gdrcopy
+#Vcs-Git: https://anonscm.debian.org/git/collab-maint/gdrcopy.git
+#Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/gdrcopy.git
+
+Package: libgdrapi
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A low-latency GPU memory copy library 
+ A low-latency GPU memory copy library based on NVIDIA GPUDirect RDMA technology.

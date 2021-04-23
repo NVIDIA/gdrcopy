@@ -1,0 +1,43 @@
+libgdrapi (@FULL_VERSION@) stable; urgency=low
+
+  * Add support for ARM64.
+  * Update various information on README.
+  * Improve Makefile.
+  * Add multi-arch support.
+  * Handle removal of HAVE_UNLOCKED_IOCTL in Linux kernel v5.9 and later.
+  * Prevent dpkg package creation to unnecessarily compile gdrdrv.
+  * Improve gdr_open error message.
+  * Fix bug that prevents sanity from correctly summarizing failure.
+  * Add dkms support in kmod package.
+  * Handle the removal of kzfree in Linux kernel v5.10 and later.
+  * Improve small-size copy-to-mapping.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Feb 2021 11:59:59 -0700
+
+libgdrapi (2.1) stable; urgency=low
+
+  * fix build problem on RHL8 kernels
+  * relax checks in gdrdrv to support multi-threading use cases
+  * fix fd leak in gdr_open()
+  * Introduce copylat test application.
+  * Introduce basic_with_tokens and invalidation_fork_child_gdr_pin_parent_with_tokens sub-tests in sanity.
+  * Remove the dependency with libcudart.so.
+  * Clean up the code in the tests folder.
+  * Change the package maintainer to Davide Rossetti.
+
+ -- Davide Rossetti <drossetti@nvidia.com>  Mon, 02 Mar 2020 11:59:59 -0700
+
+libgdrapi (2.0) stable; urgency=low
+
+  * Improve copy performance with unrolling in POWERPC.
+  * Create sanity unit test for testing the functionality and security.
+  * Consolidate basic and validate into sanity unit test.
+  * Introduce compile time and runtime version checking in libgdrapi.
+  * Improve rpm packaging.
+  * Introduce deb packaging for the userspace library and the applications.
+  * Introduce dkms packaging for the gdrdrv driver.
+  * Rename gdr_copy_from/to_bar to gdr_copy_from/to_mapping.
+  * Update README
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 16 Sep 2019 11:59:59 -0700
+

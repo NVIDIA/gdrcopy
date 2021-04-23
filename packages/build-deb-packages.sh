@@ -104,20 +104,52 @@ ex cd ${TOP_DIR_PATH}
 
 ex mkdir -p ${tmpdir}/gdrcopy
 ex rm -rf ${tmpdir}/gdrcopy/*
-ex cp -r Makefile README.md include src tests LICENSE config_arch packages/debian ${tmpdir}/gdrcopy/
-ex cp README.md ${tmpdir}/gdrcopy/debian/README.Debian
-ex cp README.md ${tmpdir}/gdrcopy/debian/README.source
-ex rm -f ${tmpdir}/gdrcopy_${VERSION}.orig.tar.gz
+ex cp -r Makefile README.md include src tests LICENSE config_arch ${tmpdir}/gdrcopy/
+ex cp -r packages/debian-lib ${tmpdir}/gdrcopy/
+ex cp -r packages/debian-tests ${tmpdir}/gdrcopy/
+ex cp README.md ${tmpdir}/gdrcopy/debian-lib/README.Debian
+ex cp README.md ${tmpdir}/gdrcopy/debian-lib/README.source
+ex cp README.md ${tmpdir}/gdrcopy/debian-tests/README.Debian
+ex cp README.md ${tmpdir}/gdrcopy/debian-tests/README.source
 
 ex cd ${tmpdir}/gdrcopy
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 
-ex cd ${tmpdir}
-ex mv gdrcopy gdrcopy-${VERSION}
-ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
+ex rm -f ${tmpdir}/libgdrapi_${VERSION}.orig.tar.gz
+ex rm -f ${tmpdir}/gdrcopy-tests_${VERSION}.orig.tar.gz
 
-ex cd ${tmpdir}/gdrcopy-${VERSION}
+ex cd ${tmpdir}
+ex cp -r gdrcopy libgdrapi-${VERSION}
+ex cd ${tmpdir}/libgdrapi-${VERSION}
+ex mv debian-lib debian
+ex rm -rf debian-*
+
+ex cd ${tmpdir}
+ex cp -r gdrcopy gdrcopy-tests-${VERSION}
+ex cd ${tmpdir}/gdrcopy-tests-${VERSION}
+ex mv debian-tests debian
+ex rm -rf debian-*
+
+ex cd ${tmpdir}
+ex tar czvf libgdrapi_${VERSION}.orig.tar.gz libgdrapi-${VERSION}
+ex tar czvf gdrcopy-tests_${VERSION}.orig.tar.gz gdrcopy-tests-${VERSION}
+
+echo "Building libgdrapi package ..."
+ex cd ${tmpdir}/libgdrapi-${VERSION}
+debuild_params="--set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
+if [ "${skip_dep_check}" -eq 1 ]; then
+    debuild_params+=" --set-envvar=C_INCLUDE_PATH=${C_INCLUDE_PATH} --set-envvar=CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH} --set-envvar=LIBRARY_PATH=${LIBRARY_PATH} --set-envvar=LD_LIBRARY_PATH=${LD_LIBRARY_PATH} -d"
+    echo "Skip build dependency check. Use the environment variables instead ..."
+fi
+# --set-envvar needs to be placed before -us -uc
+debuild_params+=" -us -uc"
+ex debuild ${debuild_params}
+
+
+echo
+echo "Building gdrcopy-tests package ..."
+ex cd ${tmpdir}/gdrcopy-tests-${VERSION}
 debuild_params="--set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
 if [ "${skip_dep_check}" -eq 1 ]; then
     debuild_params+=" --set-envvar=C_INCLUDE_PATH=${C_INCLUDE_PATH} --set-envvar=CPLUS_INCLUDE_PATH=${CPLUS_INCLUDE_PATH} --set-envvar=LIBRARY_PATH=${LIBRARY_PATH} --set-envvar=LD_LIBRARY_PATH=${LD_LIBRARY_PATH} -d"
@@ -130,12 +162,13 @@ ex debuild ${debuild_params}
 
 echo
 echo "Building dkms module ..."
-ex cd ${tmpdir}/gdrcopy-${VERSION}/src/gdrdrv
+ex cd ${tmpdir}/gdrcopy/src/gdrdrv
 ex make clean
 
 dkmsdir="${tmpdir}/gdrdrv-dkms-${VERSION}"
 ex mkdir -p ${dkmsdir}
-ex cp -r ${tmpdir}/gdrcopy-${VERSION}/src/gdrdrv ${dkmsdir}/gdrdrv-${VERSION}
+ex cp -r ${tmpdir}/gdrcopy/src/gdrdrv ${dkmsdir}/gdrdrv-${VERSION}
+ex rm -rf ${dkmsdir}/gdrdrv-${VERSION}/debian-*
 ex cp ${SCRIPT_DIR_PATH}/dkms.conf ${dkmsdir}/gdrdrv-${VERSION}/
 ex cd ${dkmsdir}
 ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
