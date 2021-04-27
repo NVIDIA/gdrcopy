@@ -240,10 +240,6 @@ MODULE_PARM_DESC(info_enabled, "enable info tracing");
 #define READ_ONCE(x) ACCESS_ONCE(x)
 #endif
 
-#ifndef WRITE_ONCE
-#define WRITE_ONCE(x, v) (ACCESS_ONCE(x) = (v))
-#endif
-
 //-----------------------------------------------------------------------------
 
 struct gdr_mr {
@@ -430,6 +426,10 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
             down_write(&mr->sem);
         }
 
+        // From this point, no other code paths will access this mr.
+        // We release semaphore and clear the mr.
+        up_write(&mr->sem);
+
         list_del(&mr->node);
         memset(mr, 0, sizeof(*mr));
         kfree(mr);
@@ -520,9 +520,8 @@ static void gdrdrv_get_pages_free_callback(void *data)
     // can't take the info->lock here due to potential AB-BA
     // deadlock with internal NV driver lock(s)
     down_write(&mr->sem);
-    WRITE_ONCE(mr->cb_flag, 1);
-    smp_wmb();
-    page_table = xchg(&mr->page_table, NULL);
+    mr->cb_flag = 1;
+    page_table = mr->page_table;
     if (page_table) {
         nvidia_p2p_free_page_table(page_table);
         if (gdr_mr_is_mapped(mr))
