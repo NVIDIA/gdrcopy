@@ -575,6 +575,7 @@ static void gdrdrv_get_pages_free_callback(void *data)
  *
  * Prerequisite:
  * - mr->mapped_size is set and round to max(PAGE_SIZE, GPU_PAGE_SIZE)
+ * - mr->sem must be under down_write before calling this function.
  *
  * Return 0 if success, -1 if failed.
  */
@@ -609,7 +610,7 @@ static inline int gdr_generate_mr_handle(gdr_info_t *info, gdr_mr_t *mr)
 
 //-----------------------------------------------------------------------------
 
-static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_token, u32 va_space, gdr_mr_t **p_mr)
+static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_token, u32 va_space, gdr_hnd_t *p_handle)
 {
     int ret = 0;
     struct nvidia_p2p_page_table *page_table = NULL;
@@ -724,7 +725,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
 
     if (!ret) {
         list_add(&mr->node, &info->mr_list);
-        *p_mr = mr;
+        *p_handle = mr->handle;
         up_write(&mr->sem);
     }
     mutex_unlock(&info->lock);
@@ -734,7 +735,6 @@ out:
     if (ret && mr) {
         gdr_free_mr_unlocked(mr);
         mr = NULL;
-        *p_mr = NULL;
     }
 
     return ret;
@@ -785,7 +785,8 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
 
     struct GDRDRV_IOC_PIN_BUFFER_PARAMS params = {0};
 
-    gdr_mr_t *mr = NULL;
+    int has_handle = 0;
+    gdr_hnd_t handle;
 
     if (copy_from_user(&params, _params, sizeof(params))) {
         gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
@@ -799,11 +800,12 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
         goto out;
     }
 
-    ret = __gdrdrv_pin_buffer(info, params.addr, params.size, params.p2p_token, params.va_space, &mr);
+    ret = __gdrdrv_pin_buffer(info, params.addr, params.size, params.p2p_token, params.va_space, &handle);
     if (ret)
         goto out;
 
-    params.handle = mr->handle;
+    has_handle = 1;
+    params.handle = handle;
 
     if (copy_to_user(_params, &params, sizeof(params))) {
         gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
@@ -813,8 +815,8 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
 
 out:
     if (ret) {
-        if (mr)
-            __gdrdrv_unpin_buffer(info, mr->handle);
+        if (has_handle)
+            __gdrdrv_unpin_buffer(info, handle);
     }
 
     return ret;
