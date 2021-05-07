@@ -395,7 +395,7 @@ out:
  * After this function returns, mr is freed and cannot be accessed anymore.
  *
  */
-static void gdr_free_mr_locked(gdr_mr_t *mr)
+static void gdr_free_mr_unlocked(gdr_mr_t *mr)
 {
     int status = 0;
     nvidia_p2p_page_table_t *page_table = NULL;
@@ -467,7 +467,7 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
 
         list_del(&mr->node);
 
-        gdr_free_mr_locked(mr);
+        gdr_free_mr_unlocked(mr);
     }
     mutex_unlock(&info->lock);
 
@@ -732,7 +732,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
 
 out:
     if (ret && mr) {
-        gdr_free_mr_locked(mr);
+        gdr_free_mr_unlocked(mr);
         mr = NULL;
         *p_mr = NULL;
     }
@@ -771,7 +771,7 @@ static int __gdrdrv_unpin_buffer(gdr_info_t *info, gdr_hnd_t handle)
     if (ret)
         goto out;
 
-    gdr_free_mr_locked(mr);
+    gdr_free_mr_unlocked(mr);
 
  out:
     return ret;
