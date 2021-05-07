@@ -594,33 +594,28 @@ static void gdr_free_mr_locked(gdr_mr_t *mr)
     BUG_ON(!mr);
     BUG_ON(gdr_mr_is_mapped(mr));
 
-    if (!READ_ONCE(mr->cb_flag)) {
+    page_table = mr->page_table;
+    if (!page_table) {
         gdr_info("invoking nvidia_p2p_put_pages(va=0x%llx p2p_tok=%llx va_tok=%x)\n",
                  mr->va, mr->p2p_token, mr->va_space);
 
         // We reach here before gdrdrv_get_pages_free_callback.
         // However, it might be waiting on semaphore.
         // Release the semaphore to let it progresses.
-        page_table = mr->page_table;
         up_write(&mr->sem);
-        if (page_table) {
-            status = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, page_table);
-            if (status) {
-                gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", status);
-            }
-        }
 
-        // In case the invalidation callback is in flight, let's wait.
-        down_write(&mr->sem);
+        // In case gdrdrv_get_pages_free_callback is inflight, nvidia_p2p_put_pages will be blocked.
+        status = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, page_table);
+        if (status) {
+            gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", status);
+        }
     } else {
         gdr_dbg("invoking unpin_buffer while callback has already been fired\n");
-        // not returning an error here because further clean-up is
-        // needed anyway
-    }
 
-    // From this point, no other code paths will access this mr.
-    // We release semaphore and clear the mr.
-    up_write(&mr->sem);
+        // From this point, no other code paths will access this mr.
+        // We release semaphore and clear the mr.
+        up_write(&mr->sem);
+    }
 
     memset(mr, 0, sizeof(*mr));
     kfree(mr);
