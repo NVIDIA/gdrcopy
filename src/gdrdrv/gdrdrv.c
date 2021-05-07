@@ -263,11 +263,19 @@ struct gdr_mr {
 };
 typedef struct gdr_mr gdr_mr_t;
 
+/**
+ * Prerequisite:
+ * - mr must be protected by down_read(mr->sem) or stronger.
+ */
 static int gdr_mr_is_mapped(gdr_mr_t *mr)
 {
     return mr->cpu_mapping_type != GDR_MR_NONE;
 }
 
+/**
+ * Prerequisite:
+ * - mr must be protected by down_read(mr->sem) or stronger.
+ */
 static int gdr_mr_is_wc_mapping(gdr_mr_t *mr)
 {
     return (mr->cpu_mapping_type == GDR_MR_WC) ? 1 : 0;
@@ -281,6 +289,10 @@ static inline void gdrdrv_zap_vma(struct address_space *mapping, struct vm_area_
     unmap_mapping_range(mapping, vma->vm_pgoff << PAGE_SHIFT, vma->vm_end - vma->vm_start, 0);
 }
 
+/**
+ * Prerequisite:
+ * - mr must be protected by down_write(mr->sem).
+ */
 static void gdr_mr_destroy_all_mappings(gdr_mr_t *mr)
 {
     // there is a single mapping at the moment
