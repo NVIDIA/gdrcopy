@@ -43,13 +43,13 @@ REL_MAJOR  := $(word 1,$(REL))
 REL_MEDIUM := $(word 2,$(REL))
 REL_MINOR  := $(word 3,$(REL))
 
-all: module
+all: gdrdrv.ko
 
-module:
+gdrdrv.ko:
 	@ echo "Picking NVIDIA driver sources from NVIDIA_SRC_DIR=$(NVIDIA_SRC_DIR). If that does not meet your expectation, you might have a stale driver still around and that might cause problems."
 	@ $(MAKE) -C $(KDIR) $(MAKE_PARAMS) M=$(PWD) modules
 
-install:
+install: gdrdrv.ko
 	[ -d $(DESTDIR)/$(MODULE_DESTDIR) ] || mkdir -p $(DESTDIR)/$(MODULE_DESTDIR)
 	cp gdrdrv.ko $(DESTDIR)/$(MODULE_DESTDIR)
 	if [ ! -n "$(DESTDIR)" ]; then $(DEPMOD) -r -ae $(KVER); fi
