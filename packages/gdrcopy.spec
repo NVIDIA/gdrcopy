@@ -125,7 +125,7 @@ make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
 
 %if %{BUILD_KMOD_NONDKMS} > 0
 # Install gdrdrv driver
-make drv_install DESTDIR=$RPM_BUILD_ROOT
+make drv_install DESTDIR=$RPM_BUILD_ROOT NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR}
 %endif
 
 # Install gdrdrv src
