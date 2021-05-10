@@ -14,7 +14,7 @@
 %global kmod kmod
 
 %if %{BUILD_KMOD_NONDKMS} > 0
-%global kmod_nondkms %{KVERSION}-%{NVIDIA_DRIVER_VERSION}
+%global kmod_nondkms %{kmod}-%{KVERSION}-%{NVIDIA_DRIVER_VERSION}
 %endif
 
 %global gdrdrv_install_script                                           \
@@ -64,12 +64,12 @@ License:        MIT
 URL:            https://github.com/NVIDIA/gdrcopy
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  gcc kernel-headers check-devel
-Requires:       %{name}-%{kmod} check
+Requires:       check
 
 %package devel
 Summary: The development files
 Group: System Environment/Libraries
-Requires: %{name} = %{version}-%{release}
+Requires: %{name} = %{version}-%{_release}
 BuildArch: noarch
 
 %package %{kmod}
@@ -79,6 +79,7 @@ Requires: dkms >= 1.00
 Requires: bash
 Release: %{_release}%{?dist}dkms
 BuildArch: noarch
+Provides: %{name}-%{kmod} = %{version}-%{_release}
 %if 0%{?rhel} >= 8
 # Recommends tag is a weak dependency, whose support started in RHEL8.
 # See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/packaging_and_distributing_software/new-features-in-rhel-8_packaging-and-distributing-software#support-for-weak-dependencies_new-features-in-rhel-8.
@@ -90,6 +91,7 @@ Recommends: kmod-nvidia-latest-dkms
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
 Release: %{_release}%{?dist}
+Provides: %{name}-%{kmod} = %{version}-%{_release}
 %endif
 
 %description
