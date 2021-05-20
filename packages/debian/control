@@ -11,6 +11,6 @@ Homepage: https://github.com/NVIDIA/gdrcopy
 Package: gdrcopy
 Architecture: any
 Multi-Arch: same
-Depends: gdrdrv-dkms (>= @FULL_VERSION@), ${shlibs:Depends}, ${misc:Depends}
+Depends: libsubunit0, ${shlibs:Depends}, ${misc:Depends}
 Description: A low-latency GPU memory copy library 
  A low-latency GPU memory copy library based on NVIDIA GPUDirect RDMA technology.
