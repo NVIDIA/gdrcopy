@@ -25,7 +25,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <map>
-#include <iostream>
 #include <cuda.h>
 #include "common.hpp"
 
@@ -48,7 +47,7 @@ namespace gdrcopy {
         {
             int diff = 0;
             if (size % 4 != 0U) {
-                printf("warning: buffer size %zu is not dword aligned, ignoring trailing bytes\n", size);
+                print_dbg("warning: buffer size %zu is not dword aligned, ignoring trailing bytes\n", size);
                 size -= (size % 4);
             }
             unsigned ndwords = size/sizeof(uint32_t);
@@ -64,7 +63,7 @@ namespace gdrcopy {
                 }
             }
             if (diff) {
-                printf("check error: %d different dwords out of %d\n", diff, ndwords);
+                print_dbg("check error: %d different dwords out of %d\n", diff, ndwords);
             }
             return diff;
         }
@@ -103,7 +102,7 @@ namespace gdrcopy {
                 ASSERTDRV(cuDeviceGetAttribute(&gdr_support, CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED, dev));
 
                 if (!gdr_support)
-                    std::cerr << "This GPU does not support GPUDirect RDMA." << std::endl;
+                    print_dbg("This GPU does not support GPUDirect RDMA.\n");
 
                 return !!gdr_support;
             }
@@ -119,8 +118,8 @@ namespace gdrcopy {
             gdr_mh_t mh;
             int status = gdr_pin_buffer(g, d_A, size, 0, 0, &mh);
             if (status != 0) {
-                std::cerr << "error in gdr_pin_buffer with code=" << status << std::endl;
-                std::cerr << "Your GPU might not support GPUDirect RDMA" << std::endl;
+                print_dbg("error in gdr_pin_buffer with code=%d\n", status);
+                print_dbg("Your GPU might not support GPUDirect RDMA\n");
             }
             else
                 ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
