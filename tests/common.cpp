@@ -92,6 +92,7 @@ namespace gdrcopy {
             return ret;
         }
 
+#if CUDA_VERSION >= 10020
         CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops)
         {
             CUresult ret = CUDA_SUCCESS;
@@ -102,8 +103,11 @@ namespace gdrcopy {
             size_t rounded_size;
             CUdeviceptr ptr = 0;
             CUmemGenericAllocationHandle mem_handle = 0;
-            int RDMASupported = 0;
             bool is_mapped = false;
+
+            #if CUDA_VERSION >= 11000
+            int RDMASupported = 0;
+            #endif
 
             ret = cuCtxGetDevice(&gpu_dev);
             if (ret != CUDA_SUCCESS) {
@@ -111,6 +115,10 @@ namespace gdrcopy {
                 goto out;
             }
 
+            #if CUDA_VERSION >= 11000
+            // CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_CUDA_VMM_SUPPORTED is available from CUDA 11.0.
+            // For older CUDA versions, we will assume that VMM supports GDR.
+            // gdr_pin_buffer would return an error if it is not supported.
             ret = cuDeviceGetAttribute(&RDMASupported, CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_CUDA_VMM_SUPPORTED, gpu_dev);
             if (ret != CUDA_SUCCESS) {
                 print_dbg("error in cuDeviceGetAttribute\n");
@@ -122,6 +130,7 @@ namespace gdrcopy {
                 ret = CUDA_ERROR_NOT_SUPPORTED;
                 goto out;
             }
+            #endif
 
             memset(&mprop, 0, sizeof(CUmemAllocationProp));
             mprop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
@@ -218,6 +227,18 @@ out:
 
             return CUDA_SUCCESS;
         }
+#else
+        /* VMM is not available before CUDA 10.2 */
+        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops)
+        {
+            return CUDA_ERROR_NOT_SUPPORTED;
+        }
+
+        CUresult gpu_vmm_free(gpu_mem_handle_t *handle)
+        {
+            return CUDA_ERROR_NOT_SUPPORTED;
+        }
+#endif
 
         int compare_buf(uint32_t *ref_buf, uint32_t *buf, size_t size)
         {
