@@ -1815,14 +1815,14 @@ int main(int argc, char *argv[])
 {
     int c;
 
-    while ((c = getopt(argc, argv, "h::v::")) != -1) {
+    while ((c = getopt(argc, argv, "vh")) != -1) {
         switch (c) {
             case 'v':
                 gdrcopy::test::print_dbg_msg = true;
                 break;
             case 'h':
                 cout << "Usage: " << argv[0] << " [-v] [-h]" << endl;
-                break;
+                return EXIT_SUCCESS;
             case '?':
                 if (isprint(optopt))
                     fprintf(stderr, "Unknown option `-%c'.\n", optopt);
@@ -1830,7 +1830,7 @@ int main(int argc, char *argv[])
                     fprintf(stderr,
                             "Unknown option character `\\x%x'.\n",
                             optopt);
-                return 1;
+                return EXIT_FAILURE;
             default:
                 abort();
         }
