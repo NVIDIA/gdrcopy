@@ -1847,37 +1847,45 @@ int main(int argc, char *argv[])
     int nf;
 
     suite_add_tcase(s, tc_basic);
+    suite_add_tcase(s, tc_data_validation);
+    suite_add_tcase(s, tc_invalidation);
+
     tcase_add_test(tc_basic, basic_cumemalloc);
-    tcase_add_test(tc_basic, basic_vmmalloc);
     tcase_add_test(tc_basic, basic_with_tokens);
     tcase_add_test(tc_basic, basic_unaligned_mapping);
     tcase_add_test(tc_basic, basic_child_thread_pins_buffer_cumemalloc);
+
+    tcase_add_test(tc_data_validation, data_validation_cumemalloc);
+
+    tcase_add_test(tc_invalidation, invalidation_access_after_gdr_close_cumemalloc);
+    tcase_add_test(tc_invalidation, invalidation_access_after_free_cumemalloc);
+    tcase_add_test(tc_invalidation, invalidation_two_mappings_cumemalloc);
+    tcase_add_test(tc_invalidation, invalidation_fork_access_after_free_cumemalloc);
+    tcase_add_test(tc_invalidation, invalidation_fork_after_gdr_map_cumemalloc);
+    tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_map_parent_cumemalloc);
+    tcase_add_test(tc_invalidation, invalidation_fork_map_and_free_cumemalloc);
+    tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer_cumemalloc);
+    tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map_cumemalloc);
+    tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_pin_parent_with_tokens);
+
+
+    #if CUDA_VERSION >= 10020
+    // VMM is available since CUDA 10.2
+    tcase_add_test(tc_basic, basic_vmmalloc);
     tcase_add_test(tc_basic, basic_child_thread_pins_buffer_vmmalloc);
 
-    suite_add_tcase(s, tc_data_validation);
-    tcase_add_test(tc_data_validation, data_validation_cumemalloc);
     tcase_add_test(tc_data_validation, data_validation_vmmalloc);
 
-    suite_add_tcase(s, tc_invalidation);
-    tcase_add_test(tc_invalidation, invalidation_access_after_gdr_close_cumemalloc);
     tcase_add_test(tc_invalidation, invalidation_access_after_gdr_close_vmmalloc);
-    tcase_add_test(tc_invalidation, invalidation_access_after_free_cumemalloc);
     tcase_add_test(tc_invalidation, invalidation_access_after_free_vmmalloc);
-    tcase_add_test(tc_invalidation, invalidation_two_mappings_cumemalloc);
     tcase_add_test(tc_invalidation, invalidation_two_mappings_vmmalloc);
-    tcase_add_test(tc_invalidation, invalidation_fork_access_after_free_cumemalloc);
     tcase_add_test(tc_invalidation, invalidation_fork_access_after_free_vmmalloc);
-    tcase_add_test(tc_invalidation, invalidation_fork_after_gdr_map_cumemalloc);
     tcase_add_test(tc_invalidation, invalidation_fork_after_gdr_map_vmmalloc);
-    tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_map_parent_cumemalloc);
     tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_map_parent_vmmalloc);
-    tcase_add_test(tc_invalidation, invalidation_fork_map_and_free_cumemalloc);
     tcase_add_test(tc_invalidation, invalidation_fork_map_and_free_vmmalloc);
-    tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer_cumemalloc);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_pin_buffer_vmmalloc);
-    tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map_cumemalloc);
     tcase_add_test(tc_invalidation, invalidation_unix_sock_shared_fd_gdr_map_vmmalloc);
-    tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_pin_parent_with_tokens);
+    #endif
 
     tcase_set_timeout(tc_basic, 60);
     tcase_set_timeout(tc_data_validation, 60);
