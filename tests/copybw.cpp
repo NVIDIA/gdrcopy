@@ -42,8 +42,6 @@ int num_read_iters  = 100;
 
 int main(int argc, char *argv[])
 {
-    int status = 0;
-
     size_t _size = 128*1024;
     size_t copy_size = 0;
     size_t copy_offset = 0;
@@ -130,24 +128,6 @@ int main(int argc, char *argv[])
     cout << "selecting device " << dev_id << endl;
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
-    #if CUDA_VERSION >= 11030
-    int drv_version;
-    ASSERTDRV(cuDriverGetVersion(&drv_version));
-
-    // Starting from CUDA 11.3, CUDA provides an ability to check GPUDirect RDMA support.
-    if (drv_version >= 11030) {
-        int gdr_support = 0;
-        ASSERTDRV(cuDeviceGetAttribute(&gdr_support, CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED, dev));
-
-        if (!gdr_support)
-            cerr << "This GPU does not support GPUDirect RDMA." << endl;
-
-        ASSERT_NEQ(gdr_support, 0);
-    }
-
-    // For older versions, we fall back to detect this support when calling gdr_pin_buffer.
-    #endif
-
 
     CUcontext dev_ctx;
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
@@ -155,6 +135,8 @@ int main(int argc, char *argv[])
 
     cout << "testing size: " << _size << endl;
     cout << "rounded size: " << size << endl;
+
+    ASSERT_EQ(check_gdr_support(dev), true);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -170,12 +152,7 @@ int main(int argc, char *argv[])
     gdr_mh_t mh;
     BEGIN_CHECK {
         // tokens are optional in CUDA 6.0
-        status = gdr_pin_buffer(g, d_A, size, 0, 0, &mh);
-        if (status != 0) {
-            cerr << "error in gdr_pin_buffer with code=" << status << endl;
-            cerr << "Does the selected GPU support GPUDirect RDMA?" << endl;
-        }
-        ASSERT_EQ(status, 0);
+        ASSERT_EQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
         ASSERT_NEQ(mh, null_mh);
 
         void *map_d_ptr  = NULL;
