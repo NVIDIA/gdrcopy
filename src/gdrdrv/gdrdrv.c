@@ -404,7 +404,7 @@ static void gdr_free_mr_unlocked(gdr_mr_t *mr)
     BUG_ON(gdr_mr_is_mapped(mr));
 
     page_table = mr->page_table;
-    if (!page_table) {
+    if (page_table) {
         gdr_info("invoking nvidia_p2p_put_pages(va=0x%llx p2p_tok=%llx va_tok=%x)\n",
                  mr->va, mr->p2p_token, mr->va_space);
 
