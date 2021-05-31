@@ -291,12 +291,10 @@ Neither CUDA Runtime nor Driver APIs guarantees that GPU memory allocation
 functions return aligned addresses. Users are responsible for proper alignment
 of addresses passed to the library.
 
-Normally, pinning the same GPU address multiple times consumes the same amount
-of BAR1 space as doing it for the first time on that address because of the BAR1
-address reuse. However, GPU driver has a bug that prevents address reuse when
-pinning larger than a certain size (depending on platforms and GPU types). The
-fix will be in the next release of GPU driver v460, v470, and newer. Note that
-driver v465 will not get this fix.
+In some GPU driver versions, pinning the same GPU address multiple times consume
+additional BAR1 space. This is because the space is not properly reused. If you
+encounter this issue, we suggest that you try the latest version of NVIDIA GPU
+driver.
 
 On POWER9 where CPU and GPU are connected via NVLink, CUDA9.2 and GPU Driver
 v396.37 are the minimum requirements in order to achieve the full performance.
