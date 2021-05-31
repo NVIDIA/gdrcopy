@@ -63,8 +63,9 @@ $ sudo apt install check libsubunit0 libsubunit-dev
 CUDA and GPU display driver must be installed before building and/or installing GDRCopy.
 The installation instructions can be found in https://developer.nvidia.com/cuda-downloads.
 
-GPU display driver header files are also required. If you install the driver (or CUDA) using *runfile*, DKMS support
-option must be selected. If you install it via package management,
+GPU display driver header files are also required. They are installed as a part
+of the driver (or CUDA) installation with  *runfile*. If you install the driver
+via package management, we suggest
 - On RHEL, `sudo dnf module install nvidia-driver:latest-dkms`.
 - On Debian, `sudo apt install nvidia-dkms-<your-nvidia-driver-version>`.
 
