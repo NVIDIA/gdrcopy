@@ -199,6 +199,8 @@ ex mkdir -p ${metadir}
 ex cd ${TOP_DIR_PATH}
 ex cp packages/gdrcopy.cfg ${metadir}
 ex cp LICENSE ${metadir}/MIT
+ex cp README.md ${metadir}/
+ex cp packages/debian-meta/changelog ${metadir}/
 ex cd ${metadir}
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
