@@ -128,12 +128,15 @@ int main(int argc, char *argv[])
     cout << "selecting device " << dev_id << endl;
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
+
     CUcontext dev_ctx;
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
     ASSERTDRV(cuCtxSetCurrent(dev_ctx));
 
     cout << "testing size: " << _size << endl;
     cout << "rounded size: " << size << endl;
+
+    ASSERT_EQ(check_gdr_support(dev), true);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -149,8 +152,7 @@ int main(int argc, char *argv[])
     gdr_mh_t mh;
     BEGIN_CHECK {
         // tokens are optional in CUDA 6.0
-        // wave out the test if GPUDirectRDMA is not enabled
-        BREAK_IF_NEQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
+        ASSERT_EQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
         ASSERT_NEQ(mh, null_mh);
 
         void *map_d_ptr  = NULL;

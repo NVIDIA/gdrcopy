@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <map>
+#include <cuda.h>
 #include "common.hpp"
 
 namespace gdrcopy {
@@ -46,7 +47,7 @@ namespace gdrcopy {
         {
             int diff = 0;
             if (size % 4 != 0U) {
-                printf("warning: buffer size %zu is not dword aligned, ignoring trailing bytes\n", size);
+                print_dbg("warning: buffer size %zu is not dword aligned, ignoring trailing bytes\n", size);
                 size -= (size % 4);
             }
             unsigned ndwords = size/sizeof(uint32_t);
@@ -62,7 +63,7 @@ namespace gdrcopy {
                 }
             }
             if (diff) {
-                printf("check error: %d different dwords out of %d\n", diff, ndwords);
+                print_dbg("check error: %d different dwords out of %d\n", diff, ndwords);
             }
             return diff;
         }
@@ -87,6 +88,47 @@ namespace gdrcopy {
             //OUT << "filling mem with walking bit " << endl;
             for(w = 0; w<size/sizeof(uint32_t); ++w)
                 h_buf[w] = w;
+        }
+
+        bool check_gdr_support(CUdevice dev)
+        {
+            #if CUDA_VERSION >= 11030
+            int drv_version;
+            ASSERTDRV(cuDriverGetVersion(&drv_version));
+
+            // Starting from CUDA 11.3, CUDA provides an ability to check GPUDirect RDMA support.
+            if (drv_version >= 11030) {
+                int gdr_support = 0;
+                ASSERTDRV(cuDeviceGetAttribute(&gdr_support, CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_SUPPORTED, dev));
+
+                if (!gdr_support)
+                    print_dbg("This GPU does not support GPUDirect RDMA.\n");
+
+                return !!gdr_support;
+            }
+            #endif
+
+            // For older versions, we fall back to detect this support with gdr_pin_buffer.
+            const size_t size = GPU_PAGE_SIZE;
+            CUdeviceptr d_A;
+            ASSERTDRV(gpuMemAlloc(&d_A, size));
+
+            gdr_t g = gdr_open_safe();
+
+            gdr_mh_t mh;
+            int status = gdr_pin_buffer(g, d_A, size, 0, 0, &mh);
+            if (status != 0) {
+                print_dbg("error in gdr_pin_buffer with code=%d\n", status);
+                print_dbg("Your GPU might not support GPUDirect RDMA\n");
+            }
+            else
+                ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+
+            ASSERT_EQ(gdr_close(g), 0);
+
+            ASSERTDRV(gpuMemFree(d_A));
+
+            return status == 0;
         }
     }
 }

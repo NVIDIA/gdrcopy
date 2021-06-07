@@ -64,8 +64,11 @@ static void init_cuda(int dev_id)
     CUcontext dev_ctx;
     ASSERTDRV(cuInit(0));
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
+
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
     ASSERTDRV(cuCtxSetCurrent(dev_ctx));
+
+    ASSERT_EQ(check_gdr_support(dev), true);
 }
 
 static void finalize_cuda(int dev_id)
