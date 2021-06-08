@@ -5,16 +5,18 @@
 %{!?MODULE_LOCATION: %define MODULE_LOCATION /kernel/drivers/misc/}
 %{!?NVIDIA_DRIVER_VERSION: %define NVIDIA_DRIVER_VERSION UNKNOWN}
 %{!?NVIDIA_SRC_DIR: %define NVIDIA_SRC_DIR UNDEFINED}
-%{!?BUILD_KMOD_NONDKMS: %define BUILD_KMOD_NONDKMS 0}
+%{!?BUILD_KMOD: %define BUILD_KMOD 0}
 %global debug_package %{nil}
 %global krelver %(echo -n %{KVERSION} | sed -e 's/-/_/g')
 %define MODPROBE %(if ( /sbin/modprobe -c | grep -q '^allow_unsupported_modules  *0'); then echo -n "/sbin/modprobe --allow-unsupported-modules"; else echo -n "/sbin/modprobe"; fi )
 %define usr_src_dir /usr/src
 %define old_driver_install_dir /lib/modules/%{KVERSION}/%{MODULE_LOCATION}
-%global kmod kmod
 
-%if %{BUILD_KMOD_NONDKMS} > 0
-%global kmod_nondkms %{kmod}-%{KVERSION}-%{NVIDIA_DRIVER_VERSION}
+# This is to set the dkms package name. For backward compatibility with the previous versions, we need to keep using "kmod".
+%global dkms kmod
+
+%if %{BUILD_KMOD} > 0
+%global kmod_fullname kmod-%{KVERSION}-%{NVIDIA_DRIVER_VERSION}
 %endif
 
 %global gdrdrv_install_script                                           \
@@ -31,7 +33,7 @@ fi                                                                      \
 service gdrcopy start                                                    
 
 
-%global kmod_install_script                                             \
+%global dkms_install_script                                             \
 echo "Start gdrcopy-kmod installation."                                 \
 dkms add -m gdrdrv -v %{version} -q --rpm_safe_upgrade || :             \
                                                                         \
@@ -72,26 +74,27 @@ Group: System Environment/Libraries
 Requires: %{name} = %{version}-%{_release}
 BuildArch: noarch
 
-%package %{kmod}
+%package %{dkms}
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
 Requires: dkms >= 1.00
 Requires: bash
 Release: %{_release}%{?dist}dkms
 BuildArch: noarch
-Provides: %{name}-%{kmod} = %{version}-%{_release}
+Provides: %{name}-kmod = %{version}-%{_release}
 %if 0%{?rhel} >= 8
 # Recommends tag is a weak dependency, whose support started in RHEL8.
 # See https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/packaging_and_distributing_software/new-features-in-rhel-8_packaging-and-distributing-software#support-for-weak-dependencies_new-features-in-rhel-8.
 Recommends: kmod-nvidia-latest-dkms
 %endif
 
-%if %{BUILD_KMOD_NONDKMS} > 0
-%package %{kmod_nondkms}
+%if %{BUILD_KMOD} > 0
+# This is the real kmod package, which contains prebuilt gdrdrv.ko.
+%package %{kmod_fullname}
 Summary: The kernel-mode driver
 Group: System Environment/Libraries
 Release: %{_release}%{?dist}
-Provides: %{name}-%{kmod} = %{version}-%{_release}
+Provides: %{name}-kmod = %{version}-%{_release}
 %endif
 
 %description
@@ -102,11 +105,11 @@ NVIDIA GPUDirect RDMA technology.
 GDRCopy, a low-latency GPU memory copy library and a kernel-mode driver, built on top of the 
 NVIDIA GPUDirect RDMA technology.
 
-%description %{kmod}
+%description %{dkms}
 Kernel-mode driver for GDRCopy with DKMS support.
 
-%if %{BUILD_KMOD_NONDKMS} > 0
-%description %{kmod_nondkms}
+%if %{BUILD_KMOD} > 0
+%description %{kmod_fullname}
 Kernel-mode driver for GDRCopy built for GPU driver %{NVIDIA_DRIVER_VERSION} and Linux kernel %{KVERSION}.
 %endif
 
@@ -117,7 +120,7 @@ Kernel-mode driver for GDRCopy built for GPU driver %{NVIDIA_DRIVER_VERSION} and
 %build
 echo "building"
 make -j8 CUDA=%{CUDA} config lib exes
-%if %{BUILD_KMOD_NONDKMS} > 0
+%if %{BUILD_KMOD} > 0
 make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} driver
 %endif
 
@@ -125,7 +128,7 @@ make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} driver
 # Install gdrcopy library and tests
 make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
 
-%if %{BUILD_KMOD_NONDKMS} > 0
+%if %{BUILD_KMOD} > 0
 # Install gdrdrv driver
 make drv_install DESTDIR=$RPM_BUILD_ROOT NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR}
 %endif
@@ -143,7 +146,7 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/
 install -d $RPM_BUILD_ROOT/etc/init.d
 install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
 
-%post %{kmod}
+%post %{dkms}
 if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
     echo "Old package is detected. Defer installation until after the old package is removed."
 
@@ -154,20 +157,20 @@ if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
 fi
 
 # Prevent race with kmod-nvidia-latest-dkms triggerin
-if [ ! -e "%{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed" ]; then
-    %{kmod_install_script}
-    mkdir -p %{_localstatedir}/lib/rpm-state/gdrcopy-kmod
-    touch %{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed
+if [ ! -e "%{_localstatedir}/lib/rpm-state/gdrcopy-dkms/installed" ]; then
+    %{dkms_install_script}
+    mkdir -p %{_localstatedir}/lib/rpm-state/gdrcopy-dkms
+    touch %{_localstatedir}/lib/rpm-state/gdrcopy-dkms/installed
 fi
 
 
-%if %{BUILD_KMOD_NONDKMS} > 0
-%post %{kmod_nondkms}
+%if %{BUILD_KMOD} > 0
+%post %{kmod_fullname}
 %{gdrdrv_install_script}
 %endif
 
 
-%preun %{kmod}
+%preun %{dkms}
 service gdrcopy stop||:
 %{MODPROBE} -rq gdrdrv||:
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
@@ -185,8 +188,8 @@ find /lib/modules/*/weak-updates -name "gdrdrv.ko.*" -delete &> /dev/null || :
 find /lib/modules/*/weak-updates -name "gdrdrv.ko" -delete &> /dev/null || :
 
 
-%if %{BUILD_KMOD_NONDKMS} > 0
-%preun %{kmod_nondkms}
+%if %{BUILD_KMOD} > 0
+%preun %{kmod_fullname}
 service gdrcopy stop||:
 %{MODPROBE} -rq gdrdrv||:
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
@@ -194,35 +197,35 @@ if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
 fi              
 %endif
 
-%postun %{kmod}
+%postun %{dkms}
 %{daemon_reload_script}
 
-%if %{BUILD_KMOD_NONDKMS} > 0
-%postun %{kmod_nondkms}
+%if %{BUILD_KMOD} > 0
+%postun %{kmod_fullname}
 %{daemon_reload_script}
 %endif
 
 
-%triggerpostun %{kmod} -- gdrcopy-kmod <= 2.1-1
-%{kmod_install_script}
+%triggerpostun %{dkms} -- gdrcopy-kmod <= 2.1-1
+%{dkms_install_script}
 
 
-%triggerin %{kmod} -- kmod-nvidia-latest-dkms
+%triggerin %{dkms} -- kmod-nvidia-latest-dkms
 if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
     echo "kmod-nvidia-latest-dkms is detected but defer installation because of the old gdrcopy-kmod package."
     exit 0;
 fi
 
 # Prevent race with post
-if [ ! -e "%{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed" ]; then
-    %{kmod_install_script}
-    mkdir -p %{_localstatedir}/lib/rpm-state/gdrcopy-kmod
-    touch %{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed
+if [ ! -e "%{_localstatedir}/lib/rpm-state/gdrcopy-dkms/installed" ]; then
+    %{dkms_install_script}
+    mkdir -p %{_localstatedir}/lib/rpm-state/gdrcopy-dkms
+    touch %{_localstatedir}/lib/rpm-state/gdrcopy-dkms/installed
 fi
 
 
-%triggerun %{kmod} -- kmod-nvidia-latest-dkms
-# This kmod package has only weak dependency with kmod-nvidia-latest-dkms, which is not enforced by RPM.
+%triggerun %{dkms} -- kmod-nvidia-latest-dkms
+# This dkms package has only weak dependency with kmod-nvidia-latest-dkms, which is not enforced by RPM.
 # Uninstalling kmod-nvidia-latest-dkms would not result in uninstalling this package.
 # However, gdrdrv may prevent the removal of nvidia.ko.
 # Hence, we rmmod gdrdrv before starting kmod-nvidia-latest-dkms uninstallation.
@@ -231,10 +234,10 @@ service gdrcopy stop||:
 service gdrcopy start > /dev/null 2>&1 ||:
 
 
-%posttrans %{kmod}
+%posttrans %{dkms}
 # Cleaning up
-if [ -e "%{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed" ]; then
-    rm -f %{_localstatedir}/lib/rpm-state/gdrcopy-kmod/installed
+if [ -e "%{_localstatedir}/lib/rpm-state/gdrcopy-dkms/installed" ]; then
+    rm -f %{_localstatedir}/lib/rpm-state/gdrcopy-dkms/installed
 fi
 
 
@@ -257,7 +260,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %doc README.md
 
 
-%files %{kmod}
+%files %{dkms}
 %defattr(-,root,root,-)
 /etc/init.d/gdrcopy
 %{usr_src_dir}/gdrdrv-%{version}/gdrdrv.c
@@ -267,8 +270,8 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{usr_src_dir}/gdrdrv-%{version}/dkms.conf
 
 
-%if %{BUILD_KMOD_NONDKMS} > 0
-%files %{kmod_nondkms}
+%if %{BUILD_KMOD} > 0
+%files %{kmod_fullname}
 %defattr(-,root,root,-)
 /etc/init.d/gdrcopy
 %{old_driver_install_dir}/gdrdrv.ko
