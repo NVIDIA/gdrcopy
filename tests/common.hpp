@@ -73,6 +73,7 @@ START_TEST(__testname) {                                                \
             print_dbg("&&&& FAILED %s\n", gdrcopy::test::testname);     \
             ck_abort();                                                 \
         }                                                               \
+        __child_exit_status = WEXITSTATUS(__child_exit_status);         \
         if (__child_exit_status == EXIT_SUCCESS)                        \
             print_dbg("&&&& PASSED %s\n", gdrcopy::test::testname);     \
         else if (__child_exit_status == EXIT_WAIVED)                    \
