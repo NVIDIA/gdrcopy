@@ -1,6 +1,6 @@
 Source: gdrcopy-tests
 Priority: optional
-Maintainer: Davide Rossetti <drossetti@nvidia.com>
+Maintainer: Pak Markthub <pmarkthub@nvidia.com>
 Build-Depends: debhelper (>= 10), check, libsubunit-dev
 Standards-Version: @FULL_VERSION@
 Section: utils

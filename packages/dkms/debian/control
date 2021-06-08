@@ -1,7 +1,7 @@
 Source: gdrdrv-dkms
 Section: misc
 Priority: optional
-Maintainer: Davide Rossetti <drossetti@nvidia.com>
+Maintainer: Pak Markthub <pmarkthub@nvidia.com>
 Build-Depends: debhelper (>= 10), dkms
 Standards-Version: @FULL_VERSION@
 

@@ -1,6 +1,6 @@
 Source: libgdrapi
 Priority: optional
-Maintainer: Davide Rossetti <drossetti@nvidia.com>
+Maintainer: Pak Markthub <pmarkthub@nvidia.com>
 Build-Depends: debhelper (>= 10)
 Standards-Version: @FULL_VERSION@
 Section: libs
