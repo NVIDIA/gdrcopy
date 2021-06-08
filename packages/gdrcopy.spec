@@ -10,17 +10,24 @@
 %global krelver %(echo -n %{KVERSION} | sed -e 's/-/_/g')
 %define MODPROBE %(if ( /sbin/modprobe -c | grep -q '^allow_unsupported_modules  *0'); then echo -n "/sbin/modprobe --allow-unsupported-modules"; else echo -n "/sbin/modprobe"; fi )
 %define usr_src_dir /usr/src
-%define old_driver_install_dir /lib/modules/%{KVERSION}/%{MODULE_LOCATION}
+
+# For DKMS, dynamic
+%define dkms_kernel_version $(uname -r)
+# For kmod, static
+%define kmod_kernel_version %{KVERSION}
+
+%define kernel_version %{dkms_kernel_version}
+%define old_driver_install_dir /lib/modules/%{kernel_version}/%{MODULE_LOCATION}
 
 # This is to set the dkms package name. For backward compatibility with the previous versions, we need to keep using "kmod".
 %global dkms kmod
 
 %if %{BUILD_KMOD} > 0
-%global kmod_fullname kmod-%{KVERSION}-%{NVIDIA_DRIVER_VERSION}
+%global kmod_fullname kmod-%{kmod_kernel_version}-%{NVIDIA_DRIVER_VERSION}
 %endif
 
-%global gdrdrv_install_script                                           \
-/sbin/depmod -a %{KVERSION} &> /dev/null ||:                            \
+%define gdrdrv_install_script                                           \
+/sbin/depmod -a %{kernel_version} &> /dev/null ||:                      \
 %{MODPROBE} -rq gdrdrv||:                                               \
 %{MODPROBE} gdrdrv||:                                                   \
                                                                         \
@@ -46,6 +53,7 @@ do                                                                      \
     dkms install -m gdrdrv -v %{version} -k ${kver} -q --force || :     \
 done                                                                    \
                                                                         \
+%define kernel_version %{dkms_kernel_version}                           \
 %{gdrdrv_install_script}
 
 
@@ -166,6 +174,7 @@ fi
 
 %if %{BUILD_KMOD} > 0
 %post %{kmod_fullname}
+%define kernel_version %{kmod_kernel_version}
 %{gdrdrv_install_script}
 %endif
 
