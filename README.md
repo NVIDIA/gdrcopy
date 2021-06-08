@@ -53,7 +53,7 @@ subunit.
 
 DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL,
 however, users have an option to build kmod and install it instead of the DKMS
-package. See [Build and installation][] section for more details.
+package. See [Build and installation](#build-and-installation) section for more details.
 
 ```shell
 # On RHEL
