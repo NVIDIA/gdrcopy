@@ -48,6 +48,7 @@ using namespace std;
 using namespace gdrcopy::test;
 
 volatile bool expecting_exception_signal = false;
+int gpu_id = 0;
 
 void exception_signal_handle(int sig)
 {
@@ -171,7 +172,7 @@ BEGIN_GDRCOPY_TEST(basic)
     expecting_exception_signal = false;
     MB();
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -203,7 +204,7 @@ BEGIN_GDRCOPY_TEST(basic_with_tokens)
     expecting_exception_signal = false;
     MB();
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -243,7 +244,7 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
     expecting_exception_signal = false;
     MB();
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     // Allocate for a few bytes so that cuMemAlloc returns an unaligned address
     // in the next allocation. This behavior is observed in GPU Driver 410 and
@@ -337,7 +338,7 @@ BEGIN_GDRCOPY_TEST(data_validation)
     expecting_exception_signal = false;
     MB();
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     const size_t _size = 256*1024+16;
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
@@ -460,7 +461,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_gdr_close)
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -535,7 +536,7 @@ BEGIN_GDRCOPY_TEST(invalidation_access_after_cumemfree)
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -610,7 +611,7 @@ BEGIN_GDRCOPY_TEST(invalidation_two_mappings)
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     CUdeviceptr d_A[2];
 
@@ -758,7 +759,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_access_after_cumemfree)
     if (pid == 0)
         mydata += 10;
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -866,7 +867,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_after_gdr_map)
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -1005,7 +1006,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_map_parent)
     const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     const char *myname;
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -1117,7 +1118,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_map_and_free)
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -1221,7 +1222,7 @@ BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer)
 
     print_dbg("%s: Start\n", myname);
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -1335,7 +1336,7 @@ BEGIN_GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_map)
         write_fd = filedes_1[1];
     }
 
-    init_cuda(0);
+    init_cuda(gpu_id);
 
     CUdeviceptr d_A;
     ASSERTDRV(gpuMemAlloc(&d_A, size));
@@ -1476,7 +1477,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
         read_fd = filedes_0[0];
         write_fd = filedes_1[1];
 
-        init_cuda(0);
+        init_cuda(gpu_id);
 
         ASSERTDRV(gpuMemAlloc(&d_A, size));
         ASSERTDRV(cuPointerGetAttribute(&tokens, CU_POINTER_ATTRIBUTE_P2P_TOKENS, d_A));
@@ -1610,13 +1611,16 @@ int main(int argc, char *argv[])
 {
     int c;
 
-    while ((c = getopt(argc, argv, "h::v::")) != -1) {
+    while ((c = getopt(argc, argv, "d:h::v::")) != -1) {
         switch (c) {
+            case 'd':
+                gpu_id = atoi(optarg);
+                break;
             case 'v':
                 gdrcopy::test::print_dbg_msg = true;
                 break;
             case 'h':
-                cout << "Usage: " << argv[0] << " [-v] [-h]" << endl;
+                cout << "Usage: " << argv[0] << " [-d gpuid] [-v] [-h]" << endl;
                 break;
             case '?':
                 if (isprint(optopt))
