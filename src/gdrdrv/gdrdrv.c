@@ -365,7 +365,7 @@ static int gdrdrv_open(struct inode *inode, struct file *filp)
     mutex_init(&info->lock);
 
     // GPU driver does not support sharing GPU allocations at fork time. Hence
-    // here we track the task group owning the driver fd and prevent other process
+    // here we track the task group owning the driver fd and prevent other processes
     // to use it.
     info->tgid = task_tgid(current);
 
