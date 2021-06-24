@@ -300,6 +300,12 @@ Neither CUDA Runtime nor Driver APIs guarantees that GPU memory allocation
 functions return aligned addresses. Users are responsible for proper alignment
 of addresses passed to the library.
 
+Two cudaMalloc'd memory regions may be contiguous. Users may call
+`gdr_pin_buffer` and `gdr_map` with address and size that extend across these
+two regions. This use case is not well-supported in GDRCopy. On rare occassions,
+users may experience 1.) an error in `gdr_map`, or 2.) low copy performance
+because `gdr_map` cannot provide write-combined mapping.
+
 On POWER9 where CPU and GPU are connected via NVLink, CUDA9.2 and GPU Driver
 v396.37 are the minimum requirements in order to achieve the full performance.
 GDRCopy works with ealier CUDA and GPU driver versions but the achievable
