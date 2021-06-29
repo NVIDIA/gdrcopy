@@ -19,7 +19,7 @@ CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
 LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
-SRCS := copybw.cpp sanity.cpp copylat.cpp
+SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
 EXES := $(SRCS:.cpp=)
 
 all: exes
@@ -30,6 +30,7 @@ common.o: common.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 copybw.o: copybw.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 sanity.o: sanity.cpp $(GDRAPI_INC)/gdrapi.h $(GDRAPI_SRC)/gdrapi_internal.h common.hpp
 copylat.o: copylat.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
+apiperf.o: apiperf.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 
 copybw: copybw.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
@@ -40,6 +41,9 @@ sanity: sanity.o common.o
 copylat: copylat.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
+apiperf: apiperf.o common.o
+	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
+
 clean:
 	rm -f *.o $(EXES) *~ core.*
 
@@ -48,6 +52,7 @@ install: exes
 	mkdir -p $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx copybw -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx copylat -t $(DESTBIN) && \
+	install -D -v -m u=rwx,g=rx,o=rx apiperf -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx sanity -t $(DESTBIN)
 
 .PHONY: clean all exes install
