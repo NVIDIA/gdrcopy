@@ -51,6 +51,10 @@ The device driver requires GPU display driver >= 418.40 on ppc64le and >= 331.14
 require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
 subunit.
 
+DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL,
+however, users have an option to build kmod and install it instead of the DKMS
+package. See [Build and installation](#build-and-installation) section for more details.
+
 ```shell
 # On RHEL
 # dkms can be installed from epel-release. See https://fedoraproject.org/wiki/EPEL.
@@ -83,16 +87,20 @@ We provide three ways for building and installing GDRCopy.
 ### rpm package
 
 ```shell
-# dkms can be installed from epel-release. See https://fedoraproject.org/wiki/EPEL.
-
 $ sudo yum groupinstall 'Development Tools'
 $ sudo yum install dkms rpm-build make check check-devel subunit subunit-devel
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
-$ sudo rpm -Uvh gdrcopy-kmod-<version>.<platform>.rpm
+$ sudo rpm -Uvh gdrcopy-kmod-<version>dkms.noarch.rpm
 $ sudo rpm -Uvh gdrcopy-<version>.<platform>.rpm
-$ sudo rpm -Uvh gdrcopy-devel-<version>.<platform>.rpm
+$ sudo rpm -Uvh gdrcopy-devel-<version>.noarch.rpm
 ```
+DKMS package is the default kernel module package that `build-rpm-packages.sh`
+generates. To create kmod package, `-m` option must be passed to the script.
+Unlike the DKMS package, the kmod package contains a prebuilt GDRCopy kernel
+module which is specific to the NVIDIA driver version and the Linux kernel
+version used to build it.
+
 
 ### deb package
 
