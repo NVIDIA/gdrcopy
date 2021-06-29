@@ -308,6 +308,12 @@ Neither CUDA Runtime nor Driver APIs guarantees that GPU memory allocation
 functions return aligned addresses. Users are responsible for proper alignment
 of addresses passed to the library.
 
+Two cudaMalloc'd memory regions may be contiguous. Users may call
+`gdr_pin_buffer` and `gdr_map` with address and size that extend across these
+two regions. This use case is not well-supported in GDRCopy. On rare occassions,
+users may experience 1.) an error in `gdr_map`, or 2.) low copy performance
+because `gdr_map` cannot provide write-combined mapping.
+
 In some GPU driver versions, pinning the same GPU address multiple times
 consumes additional BAR1 space. This is because the space is not properly
 reused. If you encounter this issue, we suggest that you try the latest version
