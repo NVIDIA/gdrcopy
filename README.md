@@ -51,6 +51,10 @@ The device driver requires GPU display driver >= 418.40 on ppc64le and >= 331.14
 require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
 subunit.
 
+DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL,
+however, users have an option to build kmod and install it instead of the DKMS
+package. See [Build and installation](#build-and-installation) section for more details.
+
 ```shell
 # On RHEL
 # dkms can be installed from epel-release. See https://fedoraproject.org/wiki/EPEL.
@@ -59,6 +63,15 @@ $ sudo yum install dkms check check-devel subunit subunit-devel
 # On Debian
 $ sudo apt install check libsubunit0 libsubunit-dev
 ```
+
+CUDA and GPU display driver must be installed before building and/or installing GDRCopy.
+The installation instructions can be found in https://developer.nvidia.com/cuda-downloads.
+
+GPU display driver header files are also required. They are installed as a part
+of the driver (or CUDA) installation with  *runfile*. If you install the driver
+via package management, we suggest
+- On RHEL, `sudo dnf module install nvidia-driver:latest-dkms`.
+- On Debian, `sudo apt install nvidia-dkms-<your-nvidia-driver-version>`.
 
 Developed and tested on RH7.x and Ubuntu18_04. The supported architectures are
 Linux x86_64, ppc64le, and arm64.
@@ -69,21 +82,25 @@ driver.
 
 ## Build and installation
 
-We provide three ways for building and installing GDRCopy
+We provide three ways for building and installing GDRCopy.
 
 ### rpm package
 
 ```shell
-# dkms can be installed from epel-release. See https://fedoraproject.org/wiki/EPEL.
-
 $ sudo yum groupinstall 'Development Tools'
 $ sudo yum install dkms rpm-build make check check-devel subunit subunit-devel
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
-$ sudo rpm -Uvh gdrcopy-kmod-<version>.<platform>.rpm
+$ sudo rpm -Uvh gdrcopy-kmod-<version>dkms.noarch.rpm
 $ sudo rpm -Uvh gdrcopy-<version>.<platform>.rpm
-$ sudo rpm -Uvh gdrcopy-devel-<version>.<platform>.rpm
+$ sudo rpm -Uvh gdrcopy-devel-<version>.noarch.rpm
 ```
+DKMS package is the default kernel module package that `build-rpm-packages.sh`
+generates. To create kmod package, `-m` option must be passed to the script.
+Unlike the DKMS package, the kmod package contains a prebuilt GDRCopy kernel
+module which is specific to the NVIDIA driver version and the Linux kernel
+version used to build it.
+
 
 ### deb package
 
@@ -290,6 +307,17 @@ In contrast, `gdr_map()` requires that the pinned address is aligned to the GPU 
 Neither CUDA Runtime nor Driver APIs guarantees that GPU memory allocation
 functions return aligned addresses. Users are responsible for proper alignment
 of addresses passed to the library.
+
+Two cudaMalloc'd memory regions may be contiguous. Users may call
+`gdr_pin_buffer` and `gdr_map` with address and size that extend across these
+two regions. This use case is not well-supported in GDRCopy. On rare occassions,
+users may experience 1.) an error in `gdr_map`, or 2.) low copy performance
+because `gdr_map` cannot provide write-combined mapping.
+
+In some GPU driver versions, pinning the same GPU address multiple times
+consumes additional BAR1 space. This is because the space is not properly
+reused. If you encounter this issue, we suggest that you try the latest version
+of NVIDIA GPU driver.
 
 On POWER9 where CPU and GPU are connected via NVLink, CUDA9.2 and GPU Driver
 v396.37 are the minimum requirements in order to achieve the full performance.

@@ -242,12 +242,15 @@ int main(int argc, char *argv[])
     cout << "selecting device " << dev_id << endl;
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
 
+
     CUcontext dev_ctx;
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
     ASSERTDRV(cuCtxSetCurrent(dev_ctx));
 
     cout << "testing size: " << _size << endl;
     cout << "rounded size: " << size << endl;
+
+    ASSERT_EQ(check_gdr_support(dev), true);
 
     if (galloc_fn == gpu_mem_alloc)
         cout << "gpu alloc fn: cuMemAlloc" << endl;

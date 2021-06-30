@@ -165,5 +165,9 @@ namespace gdrcopy {
         void init_hbuf_walking_bit(uint32_t *h_buf, size_t size);
 
         void init_hbuf_linear_ramp(uint32_t *h_buf, size_t size);
+
+        bool check_gdr_support(CUdevice dev);
+
+        void print_histogram(double *lat_arr, int count, int *bin_arr, int num_bins, double min, double max);
     }
 }
