@@ -859,7 +859,7 @@ static int gdrdrv_get_cb_flag(gdr_info_t *info, void __user *_params)
         goto out;
     }
 
-    params.flag = !!READ_ONCE(mr->cb_flag);
+    params.flag = !!(mr->cb_flag);
 
     gdr_put_mr_read(mr);
 
@@ -1093,7 +1093,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         ret = -EINVAL;
         goto out;
     }
-    if (READ_ONCE(mr->cb_flag)) {
+    if (mr->cb_flag) {
         gdr_dbg("mr has been invalidated\n");
         ret = -EINVAL;
         goto out;
