@@ -1,0 +1,7 @@
+gdrcopy-tests (@FULL_VERSION@) stable; urgency=low
+
+  * Initial version of gdrcopy-tests package -- was a part of gdrcopy package.
+  * TBD
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Feb 2021 11:59:59 -0700
+
