@@ -256,6 +256,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %files
+%{_prefix}/bin/apiperf
 %{_prefix}/bin/copybw
 %{_prefix}/bin/copylat
 %{_prefix}/bin/sanity
