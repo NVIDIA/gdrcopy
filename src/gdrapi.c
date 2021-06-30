@@ -330,8 +330,11 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
     }
     mh->mapped = info.mapped;
     if (!mh->mapped) {
-        gdr_err("mh should have been mapped at this point\n");
-        abort();
+        // Race could cause this issue.
+        // E.g., gdr_map and cuMemFree are triggered concurrently.
+        // The above mmap is successful but cuMemFree causes unmapping immediately.
+        gdr_err("mh is not mapped\n");
+        ret = EAGAIN;
     }
     mh->wc_mapping = info.wc_mapping;
     gdr_dbg("wc_mapping=%d\n", mh->wc_mapping);
