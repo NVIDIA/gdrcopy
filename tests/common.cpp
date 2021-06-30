@@ -92,7 +92,12 @@ namespace gdrcopy {
             return ret;
         }
 
-#if CUDA_VERSION >= 10020
+#if CUDA_VERSION >= 11000
+        /**
+         * Allocating GPU memory using VMM API.
+         * VMM API is available since CUDA 10.2. However, the RDMA support is added in CUDA 11.0.
+         * Our tests are not useful without RDMA support. So, we enable this VMM allocation from CUDA 11.0.
+         */
         CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops)
         {
             CUresult ret = CUDA_SUCCESS;
@@ -105,9 +110,21 @@ namespace gdrcopy {
             CUmemGenericAllocationHandle mem_handle = 0;
             bool is_mapped = false;
 
-            #if CUDA_VERSION >= 11000
             int RDMASupported = 0;
-            #endif
+
+            int version;
+
+            ret = cuDriverGetVersion(&version);
+            if (ret != CUDA_SUCCESS) {
+                print_dbg("error in cuDriverGetVersion\n");
+                goto out;
+            }
+
+            if (version < 11000) {
+                print_dbg("VMM with RDMA is not supported in this CUDA version.\n");
+                ret = CUDA_ERROR_NOT_SUPPORTED;
+                goto out;
+            }
 
             ret = cuCtxGetDevice(&gpu_dev);
             if (ret != CUDA_SUCCESS) {
@@ -115,10 +132,6 @@ namespace gdrcopy {
                 goto out;
             }
 
-            #if CUDA_VERSION >= 11000
-            // CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_CUDA_VMM_SUPPORTED is available from CUDA 11.0.
-            // For older CUDA versions, we will assume that VMM supports GDR.
-            // gdr_pin_buffer would return an error if it is not supported.
             ret = cuDeviceGetAttribute(&RDMASupported, CU_DEVICE_ATTRIBUTE_GPU_DIRECT_RDMA_WITH_CUDA_VMM_SUPPORTED, gpu_dev);
             if (ret != CUDA_SUCCESS) {
                 print_dbg("error in cuDeviceGetAttribute\n");
@@ -130,7 +143,6 @@ namespace gdrcopy {
                 ret = CUDA_ERROR_NOT_SUPPORTED;
                 goto out;
             }
-            #endif
 
             memset(&mprop, 0, sizeof(CUmemAllocationProp));
             mprop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
@@ -228,7 +240,7 @@ out:
             return CUDA_SUCCESS;
         }
 #else
-        /* VMM is not available before CUDA 10.2 */
+        /* VMM with RDMA is not available before CUDA 11.0 */
         CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops)
         {
             return CUDA_ERROR_NOT_SUPPORTED;
