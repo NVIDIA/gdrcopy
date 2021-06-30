@@ -1,7 +1,6 @@
 libgdrapi (@FULL_VERSION@) stable; urgency=low
 
   * Initial version of libgdrapi package -- was a part of gdrcopy package.
-  * TBD
 
- -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Feb 2021 11:59:59 -0700
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 23 Jul 2021 11:59:59 -0700
 

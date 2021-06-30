@@ -9,6 +9,7 @@
 - Added apiperf test.
 - Added an option to build kmod package.
 - Split the gdrcopy deb package into meta, libgdrapi, and tests packages.
+- Update the package maintainer.
 - Various updates in README.
 
 

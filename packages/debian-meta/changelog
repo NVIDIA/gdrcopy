@@ -1,5 +1,13 @@
 gdrcopy (@FULL_VERSION@) stable; urgency=low
 
+  * Convert to meta package.
+  * Declare dependency with gdrdrv-dkms, libgdrapi, and gdrcopy-tests.
+  * Update the package maintainer.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 23 Jul 2021 11:59:59 -0700
+
+gdrcopy (2.2) stable; urgency=low
+
   * Add support for ARM64.
   * Update various information on README.
   * Improve Makefile.
