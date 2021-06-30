@@ -346,7 +346,9 @@ out:
         void print_histogram(double *lat_arr, int count, int *bin_arr, int num_bins, double min, double max)
         {
             int den = (max - min) / num_bins;
-            for (int j = 0; j < num_bins; j++) bin_arr[j] = 0;
+            den = den > 0 ? den : 1;
+            for (int j = 0; j < num_bins; j++) 
+                bin_arr[j] = 0;
             for (int i = 0; i < count; i++) {
                 bin_arr[(int) ((lat_arr[i] - min) / den)]++;
             }
