@@ -2,6 +2,7 @@ gdrdrv-dkms (@FULL_VERSION@) unstable; urgency=low
 
   * Change the package maintainer to GPUDirect Team.
   * Add Davide Rossetti and Pak Makthub as Uploaders.
+  * Revamp gdrdrv to fix race-condition bugs.
 
  -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 23 Jul 2021 11:59:59 -0700
 

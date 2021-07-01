@@ -7,9 +7,10 @@
 - Removed gdrdrv-dkms dependency enforcement from the gdrcopy deb package.
 - Added libsubunit0 to the dependency list of the gdrcopy deb package.
 - Added apiperf test.
+- Revamped gdrdrv to remove race-condition bugs.
 - Added an option to build kmod package.
 - Split the gdrcopy deb package into meta, libgdrapi, and tests packages.
-- Update the package maintainer.
+- Updated the package maintainer.
 - Various updates in README.
 
 
