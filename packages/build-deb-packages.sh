@@ -194,19 +194,20 @@ fi
 
 echo
 echo "Building gdrcopy package ..."
-metadir=${tmpdir}/gdrcopy-meta-${VERSION}
+metadir=${tmpdir}/gdrcopy-${VERSION}
 ex mkdir -p ${metadir}
 ex cd ${TOP_DIR_PATH}
-ex cp packages/gdrcopy.cfg ${metadir}
-ex cp LICENSE ${metadir}/MIT
-ex cp README.md ${metadir}/
-ex cp packages/debian-meta/changelog ${metadir}/
+ex cp -r packages/debian-meta ${metadir}/debian
+ex cp README.md ${metadir}/debian/README.Debian
+ex cp README.md ${metadir}/debian/README.source
 ex cd ${metadir}
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
-ex equivs-build gdrcopy.cfg
-ex cp *.deb ../
+ex cd ${tmpdir}
+ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
+cd ${metadir}
+ex debuild -us -uc
 
 echo
 echo "Copying *.deb and supplementary files to the current working directory ..."
