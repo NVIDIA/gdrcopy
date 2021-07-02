@@ -1,0 +1,17 @@
+Source: gdrcopy
+Priority: optional
+Maintainer: GPUDirect Team <gpudirect@nvidia.com>
+Uploaders: Davide Rossetti <drossetti@nvidia.com>, Pak Markthub <pmarkthub@nvidia.com>
+Build-Depends: debhelper (>= 9)
+Standards-Version: @FULL_VERSION@
+Section: misc
+Homepage: https://github.com/NVIDIA/gdrcopy
+
+Package: gdrcopy
+Architecture: any
+Multi-Arch: same
+Depends: gdrdrv-dkms (= @FULL_VERSION@), libgdrapi (= @FULL_VERSION@), gdrcopy-tests (= @FULL_VERSION@)
+Maintainer: GPUDirect Team <gpudirect@nvidia.com>
+Uploaders: Davide Rossetti <drossetti@nvidia.com>, Pak Markthub <pmarkthub@nvidia.com>
+Description: GDRCopy meta-package
+ Meta-package for GDRCopy, a low-latency GPU memory copy library based on NVIDIA GPUDirect RDMA technology.

@@ -3,7 +3,7 @@ Section: misc
 Priority: optional
 Maintainer: GPUDirect Team <gpudirect@nvidia.com>
 Uploaders: Davide Rossetti <drossetti@nvidia.com>, Pak Markthub <pmarkthub@nvidia.com>
-Build-Depends: debhelper (>= 10), dkms
+Build-Depends: debhelper (>= 9), dkms
 Standards-Version: @FULL_VERSION@
 
 Package: gdrdrv-dkms
