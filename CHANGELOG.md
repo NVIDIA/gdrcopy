@@ -1,17 +1,30 @@
 # Changelog
 
+## [2.3] - 2021-07-23
+- NOTE: This is a beta version; not released yet.
+- Remove automatically-generated build id links in rpm packages.
+- Remove gdrcopy-kmod from the Requires field of the gdrcopy rpm package.
+- Remove gdrdrv-dkms dependency enforcement from the gdrcopy deb package.
+- Add libsubunit0 to the dependency list of the gdrcopy deb package.
+- Add apiperf test.
+- Revamp gdrdrv to fix race-condition bugs.
+- Add an option to build kmod package.
+- Split the gdrcopy deb package into meta, libgdrapi, and tests packages.
+- Update the package maintainer.
+- Various updates in README.
+
 ## [2.2] - 2021-02-01
- - Add support for ARM64.
- - Update various information on README.
- - Improve Makefile.
- - Add multi-arch support.
- - Handle removal of HAVE_UNLOCKED_IOCTL in Linux kernel v5.9 and later.
- - Prevent dpkg package creation to unnecessarily compile gdrdrv.
- - Improve gdr_open error message.
- - Fix bug that prevents sanity from correctly summarizing failure.
- - Add dkms support in kmod package.
- - Handle the removal of kzfree in Linux kernel v5.10 and later.
- - Improve small-size copy-to-mapping.
+- Add support for ARM64.
+- Update various information on README.
+- Improve Makefile.
+- Add multi-arch support.
+- Handle removal of HAVE_UNLOCKED_IOCTL in Linux kernel v5.9 and later.
+- Prevent dpkg package creation to unnecessarily compile gdrdrv.
+- Improve gdr_open error message.
+- Fix bug that prevents sanity from correctly summarizing failure.
+- Add dkms support in kmod package.
+- Handle the removal of kzfree in Linux kernel v5.10 and later.
+- Improve small-size copy-to-mapping.
 
 ## [2.1] - 2020-08-07
 - fix build problem on RHL8 kernels

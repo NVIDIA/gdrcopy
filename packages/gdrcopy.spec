@@ -256,6 +256,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %files
+%{_prefix}/bin/apiperf
 %{_prefix}/bin/copybw
 %{_prefix}/bin/copylat
 %{_prefix}/bin/sanity
@@ -288,7 +289,13 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Mon Feb 01 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
+* Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
+- Remove automatically-generated build id links.
+- Remove gdrcopy-kmod from the Requires field.
+- Add apiperf test.
+- Various updates in README.
+- Revamp gdrdrv to fix race-condition bugs.
+* Mon Feb 01 2021 Pak Markthub <pmarkthub@nvidia.com> 2.2-1
 - Add support for ARM64.
 - Update various information on README.
 - Improve Makefile.

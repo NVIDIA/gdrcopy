@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2020, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2014-2021, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -30,7 +30,7 @@
 #define MINOR_VERSION_MASK      (((uint32_t)1 << MAJOR_VERSION_SHIFT) - 1)
 
 #define GDR_API_MAJOR_VERSION    2
-#define GDR_API_MINOR_VERSION    2
+#define GDR_API_MINOR_VERSION    3
 #define GDR_API_VERSION          ((GDR_API_MAJOR_VERSION << MAJOR_VERSION_SHIFT) | GDR_API_MINOR_VERSION)
 
 #define MINIMUM_GDRDRV_MAJOR_VERSION    2
