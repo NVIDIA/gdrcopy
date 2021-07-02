@@ -2,17 +2,16 @@
 
 ## [2.3] - 2021-07-23
 - NOTE: This is a beta version; not released yet.
-- Removed automatically-generated build id links in rpm packages.
-- Removed gdrcopy-kmod from the Requires field of the gdrcopy rpm package.
-- Removed gdrdrv-dkms dependency enforcement from the gdrcopy deb package.
-- Added libsubunit0 to the dependency list of the gdrcopy deb package.
-- Added apiperf test.
-- Revamped gdrdrv to remove race-condition bugs.
-- Added an option to build kmod package.
+- Remove automatically-generated build id links in rpm packages.
+- Remove gdrcopy-kmod from the Requires field of the gdrcopy rpm package.
+- Remove gdrdrv-dkms dependency enforcement from the gdrcopy deb package.
+- Add libsubunit0 to the dependency list of the gdrcopy deb package.
+- Add apiperf test.
+- Revamp gdrdrv to fix race-condition bugs.
+- Add an option to build kmod package.
 - Split the gdrcopy deb package into meta, libgdrapi, and tests packages.
-- Updated the package maintainer.
+- Update the package maintainer.
 - Various updates in README.
-
 
 ## [2.2] - 2021-02-01
 - Add support for ARM64.
