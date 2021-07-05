@@ -85,7 +85,7 @@ void null_filter()
     // NO-OP.
 }
 
-#if CUDA_VERSION >= 10020
+#if CUDA_VERSION >= 11000
 /**
  * Waive the test if VMM is not supported.
  * Must be called after init_cuda.
@@ -94,7 +94,7 @@ void vmm_filter()
 {
     int version;
     ASSERTDRV(cuDriverGetVersion(&version));
-    if (version < 10020)
+    if (version < 11000)
         exit(EXIT_WAIVED);
 }
 #else
