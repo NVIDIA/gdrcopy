@@ -211,9 +211,22 @@ ex debuild -us -uc
 
 echo
 echo "Copying *.deb and supplementary files to the current working directory ..."
+if $(hash lsb_release 2>/dev/null); then
+    release=`lsb_release -rs | sed -e "s/\./_/g"`
+    id=`lsb_release -is | sed -e "s/ /_/g"`
+    release=".${id}${release}"
+else
+    release=""
+fi
 
 ex cd ${CWD}
-ex cp ${tmpdir}/*.deb .
+
+for item in `ls ${tmpdir}/*.deb`; do
+    item_name=`basename $item`
+    item_name=`echo $item_name | sed -e "s/\.deb//g"`
+    item_name="${item_name}${release}.deb"
+    ex cp $item ./${item_name}
+done
 ex cp ${tmpdir}/*.tar.* .
 ex cp ${tmpdir}/*.dsc .
 

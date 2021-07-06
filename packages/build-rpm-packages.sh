@@ -152,10 +152,21 @@ eval "rpmbuild ${rpmbuild_params}"
 
 rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
 srpm=`ls -1 $tmpdir/topdir/SRPMS/`
+if [ -f "/etc/redhat-release" ]; then
+    release_version=".el$(cat /etc/redhat-release | grep -o -E '[0-9]+' | head -1)"
+elif [ -f "/etc/centos-release" ]; then
+    release_version=".el$(cat /etc/centos-release | grep -o -E '[0-9]+' | head -1)"
+else
+    release_version="unknown_distro"
+fi
 echo $srpm $rpms
 ex cd ${CWD}
-ex cp $tmpdir/topdir/SRPMS/*.rpm .
-ex cp $tmpdir/topdir/RPMS/*/*.rpm .
+for item in `ls $tmpdir/topdir/SRPMS/*.rpm $tmpdir/topdir/RPMS/*/*.rpm`; do
+    item_name=`basename $item`
+    item_name=`echo $item_name | sed -e "s/\.rpm//g"`
+    item_name="${item_name}${release_version}.rpm"
+    ex cp $item ./${item_name}
+done
 
 echo
 echo "Cleaning up ..."
