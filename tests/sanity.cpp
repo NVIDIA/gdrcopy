@@ -547,6 +547,7 @@ void invalidation_access_after_gdr_close()
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     gdr_t g = gdr_open_safe();
 
@@ -638,6 +639,7 @@ void invalidation_access_after_free()
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     gdr_t g = gdr_open_safe();
 
@@ -732,6 +734,7 @@ void invalidation_two_mappings()
         d_A[i] = mhandle[i].ptr;
         ASSERTDRV(cuMemsetD8(d_A[i], 0x95, size));
     }
+    ASSERTDRV(cuCtxSynchronize());
 
     gdr_t g = gdr_open_safe();
 
@@ -893,6 +896,7 @@ void invalidation_fork_access_after_free()
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     gdr_t g = gdr_open_safe();
 
@@ -1017,6 +1021,7 @@ void invalidation_fork_after_gdr_map()
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     gdr_t g = gdr_open_safe();
 
@@ -1172,6 +1177,7 @@ void invalidation_fork_child_gdr_map_parent()
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     gdr_t g = gdr_open_safe();
 
@@ -1300,6 +1306,7 @@ void invalidation_fork_map_and_free()
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     gdr_t g = gdr_open_safe();
 
@@ -1420,6 +1427,7 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     CUdeviceptr d_ptr = d_A;
 
@@ -1550,6 +1558,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
+    ASSERTDRV(cuCtxSynchronize());
 
     CUdeviceptr d_ptr = d_A;
 
@@ -1801,6 +1810,7 @@ void basic_child_thread_pins_buffer()
     t.d_buf = t.mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(t.d_buf, 0xA5, t.size));
+    ASSERTDRV(cuCtxSynchronize());
 
     t.g = gdr_open_safe();
     {
