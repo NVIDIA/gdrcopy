@@ -1920,8 +1920,8 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_invalidation, invalidation_fork_child_gdr_pin_parent_with_tokens);
 
 
-    #if CUDA_VERSION >= 10020
-    // VMM is available since CUDA 10.2
+    #if CUDA_VERSION >= 11000
+    // VMM with GDR support is available from CUDA 11.0
     tcase_add_test(tc_basic, basic_vmmalloc);
     tcase_add_test(tc_basic, basic_child_thread_pins_buffer_vmmalloc);
 

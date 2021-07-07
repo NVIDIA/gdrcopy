@@ -121,8 +121,8 @@ namespace gdrcopy {
             CUdeviceptr ptr; // aligned ptr if requested; otherwise, the same as unaligned_ptr.
             union {
                 CUdeviceptr unaligned_ptr; // for tracking original ptr; may be unaligned.
-                #if CUDA_VERSION >= 10020
-                // Virtual Memory Management is available from CUDA 10.2
+                #if CUDA_VERSION >= 11000
+                // VMM with GDR support is available from CUDA 11.0
                 CUmemGenericAllocationHandle handle;
                 #endif
             };
