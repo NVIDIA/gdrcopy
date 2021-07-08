@@ -73,8 +73,8 @@ via package management, we suggest
 - On RHEL, `sudo dnf module install nvidia-driver:latest-dkms`.
 - On Debian, `sudo apt install nvidia-dkms-<your-nvidia-driver-version>`.
 
-Developed and tested on RH7.x and Ubuntu18_04. The supported architectures are
-Linux x86_64, ppc64le, and arm64.
+The supported architectures are Linux x86_64, ppc64le, and arm64. The supportted
+platforms are RHEL7, RHEL8, Ubuntu16_04, Ubuntu18_04, and Ubuntu20_04.
 
 Root privileges are necessary to load/install the kernel-mode device
 driver.
@@ -91,9 +91,9 @@ $ sudo yum groupinstall 'Development Tools'
 $ sudo yum install dkms rpm-build make check check-devel subunit subunit-devel
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
-$ sudo rpm -Uvh gdrcopy-kmod-<version>dkms.noarch.rpm
-$ sudo rpm -Uvh gdrcopy-<version>.<platform>.rpm
-$ sudo rpm -Uvh gdrcopy-devel-<version>.noarch.rpm
+$ sudo rpm -Uvh gdrcopy-kmod-<version>dkms.noarch.<platform>.rpm
+$ sudo rpm -Uvh gdrcopy-<version>.<arch>.<platform>.rpm
+$ sudo rpm -Uvh gdrcopy-devel-<version>.noarch.<platform>.rpm
 ```
 DKMS package is the default kernel module package that `build-rpm-packages.sh`
 generates. To create kmod package, `-m` option must be passed to the script.
@@ -108,8 +108,10 @@ version used to build it.
 $ sudo apt install build-essential devscripts debhelper check libsubunit-dev fakeroot pkg-config dkms
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-deb-packages.sh
-$ sudo dpkg -i gdrdrv-dkms_<version>_<platform>.deb
-$ sudo dpkg -i gdrcopy_<version>_<platform>.deb
+$ sudo dpkg -i gdrdrv-dkms_<version>_<arch>.<platform>.deb
+$ sudo dpkg -i libgdrapi_<version>_<arch>.<platform>.deb
+$ sudo dpkg -i gdrcopy-tests_<version>_<arch>.<platform>.deb
+$ sudo dpkg -i gdrcopy_<version>_<arch>.<platform>.deb
 ```
 
 ### from source
@@ -131,102 +133,154 @@ $ PKG_CONFIG_PATH=/check_install_path/lib/pkgconfig/ make <...>
 
 Execute provided tests:
 ```shell
-$ sanity
+$ sanity 
 Running suite(s): Sanity
-100%: Checks: 11, Failures: 0, Errors: 0
+100%: Checks: 27, Failures: 0, Errors: 0
 
 
 $ copybw
-testing size: 4096
-rounded size: 65536
-device ptr: 5046c0000
-bar_ptr: 0x7f8cff410000
-info.va: 5046c0000
-info.mapped_size: 65536
+GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
+GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
+GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
+GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
+GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
+GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
+GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
+GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
+selecting device 0
+testing size: 131072
+rounded size: 131072
+gpu alloc fn: cuMemAlloc
+device ptr: 7f1153a00000
+map_d_ptr: 0x7f1172257000
+info.va: 7f1153a00000
+info.mapped_size: 131072
 info.page_size: 65536
+info.mapped: 1
+info.wc_mapping: 1
 page offset: 0
-user-space pointer:0x7f8cff410000
-BAR writing test...
-BAR1 write BW: 9549.25MB/s
-BAR reading test...
-BAR1 read BW: 1.50172MB/s
+user-space pointer:0x7f1172257000
+writing test, size=131072 offset=0 num_iters=10000
+write BW: 9638.54MB/s
+reading test, size=131072 offset=0 num_iters=100
+read BW: 530.135MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
 
-$ copylat
-GPU id:0; name: Tesla P100-PCIE-16GB; Bus id: 0000:09:00
-selecting device 0
-device ptr: 0x7f6aca800000
-allocated size: 16777216
 
-map_d_ptr: 0x7f6ae5000000
-info.va: 7f6aca800000
+$ copylat
+GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
+GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
+GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
+GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
+GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
+GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
+GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
+GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
+selecting device 0
+device ptr: 0x7fa2c6000000
+allocated size: 16777216
+gpu alloc fn: cuMemAlloc
+
+map_d_ptr: 0x7fa2f9af9000
+info.va: 7fa2c6000000
 info.mapped_size: 16777216
 info.page_size: 65536
 info.mapped: 1
 info.wc_mapping: 1
 page offset: 0
-user-space pointer: 0x7f6ae5000000
+user-space pointer: 0x7fa2f9af9000
 
 gdr_copy_to_mapping num iters for each size: 10000
-WARNING: Measuring the issue overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility.
-Test                     Size(B)         Avg.Time(us)
-gdr_copy_to_mapping             1             0.0969
-gdr_copy_to_mapping             2             0.0988
-gdr_copy_to_mapping             4             0.0982
-gdr_copy_to_mapping             8             0.0983
-gdr_copy_to_mapping            16             0.1000
-gdr_copy_to_mapping            32             0.0997
-gdr_copy_to_mapping            64             0.1018
-gdr_copy_to_mapping           128             0.1011
-gdr_copy_to_mapping           256             0.1134
-gdr_copy_to_mapping           512             0.1342
-gdr_copy_to_mapping          1024             0.1751
-gdr_copy_to_mapping          2048             0.2606
-gdr_copy_to_mapping          4096             0.4336
-gdr_copy_to_mapping          8192             0.8141
-gdr_copy_to_mapping         16384             1.6070
-gdr_copy_to_mapping         32768             3.1999
-gdr_copy_to_mapping         65536             6.3869
-gdr_copy_to_mapping        131072            12.7635
-gdr_copy_to_mapping        262144            25.5032
-gdr_copy_to_mapping        524288            51.0073
-gdr_copy_to_mapping       1048576           102.0074
-gdr_copy_to_mapping       2097152           203.9973
-gdr_copy_to_mapping       4194304           408.1637
-gdr_copy_to_mapping       8388608           817.4134
-gdr_copy_to_mapping      16777216          1634.5638
+WARNING: Measuring the API invocation overhead as observed by the CPU. Data
+might not be ordered all the way to the GPU internal visibility.
+Test             Size(B)     Avg.Time(us)
+gdr_copy_to_mapping             1         0.0889
+gdr_copy_to_mapping             2         0.0884
+gdr_copy_to_mapping             4         0.0884
+gdr_copy_to_mapping             8         0.0884
+gdr_copy_to_mapping            16         0.0905
+gdr_copy_to_mapping            32         0.0902
+gdr_copy_to_mapping            64         0.0902
+gdr_copy_to_mapping           128         0.0952
+gdr_copy_to_mapping           256         0.0983
+gdr_copy_to_mapping           512         0.1176
+gdr_copy_to_mapping          1024         0.1825
+gdr_copy_to_mapping          2048         0.2549
+gdr_copy_to_mapping          4096         0.4366
+gdr_copy_to_mapping          8192         0.8141
+gdr_copy_to_mapping         16384         1.6155
+gdr_copy_to_mapping         32768         3.2284
+gdr_copy_to_mapping         65536         6.4906
+gdr_copy_to_mapping        131072        12.9761
+gdr_copy_to_mapping        262144        25.9459
+gdr_copy_to_mapping        524288        51.9100
+gdr_copy_to_mapping       1048576       103.8028
+gdr_copy_to_mapping       2097152       207.5990
+gdr_copy_to_mapping       4194304       415.2856
+gdr_copy_to_mapping       8388608       830.6355
+gdr_copy_to_mapping      16777216      1661.3285
 
 gdr_copy_from_mapping num iters for each size: 100
-Test                     Size(B)         Avg.Time(us)
-gdr_copy_from_mapping           1             1.0986
-gdr_copy_from_mapping           2             1.9074
-gdr_copy_from_mapping           4             1.7588
-gdr_copy_from_mapping           8             1.7593
-gdr_copy_from_mapping          16             0.8822
-gdr_copy_from_mapping          32             1.7350
-gdr_copy_from_mapping          64             3.0681
-gdr_copy_from_mapping         128             3.4641
-gdr_copy_from_mapping         256             2.9769
-gdr_copy_from_mapping         512             3.5207
-gdr_copy_from_mapping        1024             3.6279
-gdr_copy_from_mapping        2048             5.5507
-gdr_copy_from_mapping        4096            10.5047
-gdr_copy_from_mapping        8192            17.8014
-gdr_copy_from_mapping       16384            30.0232
-gdr_copy_from_mapping       32768            58.1767
-gdr_copy_from_mapping       65536           118.7792
-gdr_copy_from_mapping      131072           241.5278
-gdr_copy_from_mapping      262144           506.1804
-gdr_copy_from_mapping      524288          1014.1972
-gdr_copy_from_mapping     1048576          2026.6072
-gdr_copy_from_mapping     2097152          4048.9970
-gdr_copy_from_mapping     4194304          8103.9561
-gdr_copy_from_mapping     8388608         19230.3878
-gdr_copy_from_mapping    16777216         38474.8613
+Test             Size(B)     Avg.Time(us)
+gdr_copy_from_mapping           1         0.9069
+gdr_copy_from_mapping           2         1.7170
+gdr_copy_from_mapping           4         1.7169
+gdr_copy_from_mapping           8         1.7164
+gdr_copy_from_mapping          16         0.8601
+gdr_copy_from_mapping          32         1.7024
+gdr_copy_from_mapping          64         3.1016
+gdr_copy_from_mapping         128         3.4944
+gdr_copy_from_mapping         256         3.6400
+gdr_copy_from_mapping         512         2.4394
+gdr_copy_from_mapping        1024         2.8022
+gdr_copy_from_mapping        2048         4.6615
+gdr_copy_from_mapping        4096         7.9783
+gdr_copy_from_mapping        8192        14.9209
+gdr_copy_from_mapping       16384        28.9571
+gdr_copy_from_mapping       32768        56.9373
+gdr_copy_from_mapping       65536       114.1008
+gdr_copy_from_mapping      131072       234.9382
+gdr_copy_from_mapping      262144       496.4011
+gdr_copy_from_mapping      524288       985.5196
+gdr_copy_from_mapping     1048576      1970.7057
+gdr_copy_from_mapping     2097152      3942.5611
+gdr_copy_from_mapping     4194304      7888.9468
+gdr_copy_from_mapping     8388608     18361.5673
+gdr_copy_from_mapping    16777216     36758.8342
 unmapping buffer
 unpinning buffer
+closing gdrdrv
+
+
+$ apiperf -s 8
+GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
+GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
+GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
+GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
+GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
+GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
+GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
+GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
+selecting device 0
+device ptr: 0x7f1563a00000
+allocated size: 65536
+Size(B) pin.Time(us)    map.Time(us)    get_info.Time(us)   unmap.Time(us)
+unpin.Time(us)
+65536   1346.034060 3.603800    0.340270    4.700930    676.612800
+Histogram of gdr_pin_buffer latency for 65536 bytes
+[1303.852000    -   2607.704000]    93
+[2607.704000    -   3911.556000]    0
+[3911.556000    -   5215.408000]    0
+[5215.408000    -   6519.260000]    0
+[6519.260000    -   7823.112000]    0
+[7823.112000    -   9126.964000]    0
+[9126.964000    -   10430.816000]   0
+[10430.816000   -   11734.668000]   0
+[11734.668000   -   13038.520000]   0
+[13038.520000   -   14342.372000]   2
+
 closing gdrdrv
 ```
 
@@ -237,60 +291,70 @@ the PCIe topology, performance may suffer if the processor which is driving
 the copy is not the one which is hosting the GPU, for example in a
 multi-socket server.
 
-In the example below, the K40m and K80 GPU are respectively hosted by
-socket0 and socket1. By explicitly playing with the OS process and memory
+In the example below, GPU ID 0 is hosted by
+CPU socket 0. By explicitly playing with the OS process and memory
 affinity, it is possible to run the test onto the optimal processor:
 
 ```shell
-$ GDRCOPY_ENABLE_LOGGING=1 GDRCOPY_LOG_LEVEL=0 LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH numactl -N 0 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
-GPU id:0 name:Tesla K40m PCI domain: 0 bus: 2 device: 0
-GPU id:1 name:Tesla K80 PCI domain: 0 bus: 132 device: 0
-GPU id:2 name:Tesla K80 PCI domain: 0 bus: 133 device: 0
+$ numactl -N 0 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
+GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
+GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
+GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
+GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
+GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
+GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
+GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
+GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
 selecting device 0
 testing size: 65536
 rounded size: 65536
-device ptr: 2305ba0000
-bar_ptr: 0x7fe60956c000
-info.va: 2305ba0000
+gpu alloc fn: cuMemAlloc
+device ptr: 7f5817a00000
+map_d_ptr: 0x7f583b186000
+info.va: 7f5817a00000
 info.mapped_size: 65536
 info.page_size: 65536
+info.mapped: 1
+info.wc_mapping: 1
 page offset: 0
-user-space pointer:0x7fe60956c000
-BAR writing test, size=65536 offset=0 num_iters=10000
-DBG:  sse4_1=1 avx=1 sse=1 sse2=1
-DBG:  using AVX implementation of gdr_copy_to_bar
-BAR1 write BW: 9793.23MB/s
-BAR reading test, size=65536 offset=0 num_iters=100
-DBG:  using SSE4_1 implementation of gdr_copy_from_bar
-BAR1 read BW: 787.957MB/s
+user-space pointer:0x7f583b186000
+writing test, size=65536 offset=0 num_iters=1000
+write BW: 9768.3MB/s
+reading test, size=65536 offset=0 num_iters=1000
+read BW: 548.423MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
 ```
 
-or on the other one:
+or on the other socket:
 ```shell
-drossetti@drossetti-hsw0 16:52 (1181) gdrcopy>GDRCOPY_ENABLE_LOGGING=1 GDRCOPY_LOG_LEVEL=0 LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH numactl -N 1 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
-GPU id:0 name:Tesla K40m PCI domain: 0 bus: 2 device: 0
-GPU id:1 name:Tesla K80 PCI domain: 0 bus: 132 device: 0
-GPU id:2 name:Tesla K80 PCI domain: 0 bus: 133 device: 0
+$ numactl -N 1 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
+GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
+GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
+GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
+GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
+GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
+GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
+GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
+GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
 selecting device 0
 testing size: 65536
 rounded size: 65536
-device ptr: 2305ba0000
-bar_ptr: 0x7f2299166000
-info.va: 2305ba0000
+gpu alloc fn: cuMemAlloc
+device ptr: 7fbb63a00000
+map_d_ptr: 0x7fbb82ab0000
+info.va: 7fbb63a00000
 info.mapped_size: 65536
 info.page_size: 65536
+info.mapped: 1
+info.wc_mapping: 1
 page offset: 0
-user-space pointer:0x7f2299166000
-BAR writing test, size=65536 offset=0 num_iters=10000
-DBG:  sse4_1=1 avx=1 sse=1 sse2=1
-DBG:  using AVX implementation of gdr_copy_to_bar
-BAR1 write BW: 6812.08MB/s
-BAR reading test, size=65536 offset=0 num_iters=100
-DBG:  using SSE4_1 implementation of gdr_copy_from_bar
-BAR1 read BW: 669.825MB/s
+user-space pointer:0x7fbb82ab0000
+writing test, size=65536 offset=0 num_iters=1000
+write BW: 9224.36MB/s
+reading test, size=65536 offset=0 num_iters=1000
+read BW: 521.262MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
