@@ -73,7 +73,7 @@ via package management, we suggest
 - On RHEL, `sudo dnf module install nvidia-driver:latest-dkms`.
 - On Debian, `sudo apt install nvidia-dkms-<your-nvidia-driver-version>`.
 
-The supported architectures are Linux x86_64, ppc64le, and arm64. The supportted
+The supported architectures are Linux x86_64, ppc64le, and arm64. The supported
 platforms are RHEL7, RHEL8, Ubuntu16_04, Ubuntu18_04, and Ubuntu20_04.
 
 Root privileges are necessary to load/install the kernel-mode device
