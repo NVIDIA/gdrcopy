@@ -63,7 +63,7 @@ void print_usage(const char *path)
 void run_test(CUdeviceptr d_A, size_t size)
 {
     uint32_t *init_buf = NULL;
-    init_buf = (uint32_t *)malloc(size);
+    ASSERTDRV(cuMemAllocHost((void **)&init_buf, size));
     ASSERT_NEQ(init_buf, (void*)0);
     init_hbuf_walking_bit(init_buf, size);
 
