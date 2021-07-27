@@ -1,7 +1,6 @@
 # Changelog
 
-## [2.3] - 2021-07-23
-- NOTE: This is a beta version; not released yet.
+## [2.3] - 2021-07-27
 - Remove automatically-generated build id links in rpm packages.
 - Remove gdrcopy-kmod from the Requires field of the gdrcopy rpm package.
 - Remove gdrdrv-dkms dependency enforcement from the gdrcopy deb package.
@@ -58,6 +57,7 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 
+[2.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.3
 [2.2]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.2
 [2.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.1
 [2.0]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.0
