@@ -74,6 +74,10 @@ done
 
 shift $((OPTIND-1))
 
+NVCC=${CUDA}/bin/nvcc
+CUDA_VERSION=`$NVCC --version | grep release | sed 's/^.*release \([0-9]\+\.[0-9]\+\).*/\1/'`
+CUDA_MAJOR=`echo ${CUDA_VERSION} | cut -d "." -f 1`
+CUDA_MINOR=`echo ${CUDA_VERSION} | cut -d "." -f 2`
 
 if [ "X$CUDA" == "X" ]; then
     echo "CUDA environment variable is not defined"
@@ -164,7 +168,11 @@ ex cd ${CWD}
 for item in `ls $tmpdir/topdir/SRPMS/*.rpm $tmpdir/topdir/RPMS/*/*.rpm`; do
     item_name=`basename $item`
     item_name=`echo $item_name | sed -e "s/\.rpm//g"`
-    item_name="${item_name}${release_version}.rpm"
+    if [ "$item_name" == "gdrcopy-${FULL_VERSION}-${RPM_VERSION}.`uname -m`" ]; then
+        item_name="${item_name}${release_version}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.rpm"
+    else
+        item_name="${item_name}${release_version}.rpm"
+    fi
     ex cp $item ./${item_name}
 done
 
