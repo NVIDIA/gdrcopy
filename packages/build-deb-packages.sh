@@ -83,6 +83,11 @@ if [[ ${build_test_package} == 1 ]] && [ "X$CUDA" == "X" ]; then
     echo "CUDA environment variable is not defined"; exit 1
 fi
 
+NVCC=${CUDA}/bin/nvcc
+CUDA_VERSION=`$NVCC --version | grep release | sed 's/^.*release \([0-9]\+\.[0-9]\+\).*/\1/'`
+CUDA_MAJOR=`echo ${CUDA_VERSION} | cut -d "." -f 1`
+CUDA_MINOR=`echo ${CUDA_VERSION} | cut -d "." -f 2`
+
 echo "Building debian package for the gdrcopy library ..."
 
 ex cd ${SCRIPT_DIR_PATH}
@@ -224,7 +229,11 @@ ex cd ${CWD}
 for item in `ls ${tmpdir}/*.deb`; do
     item_name=`basename $item`
     item_name=`echo $item_name | sed -e "s/\.deb//g"`
-    item_name="${item_name}${release}.deb"
+    if echo "$item_name" | grep -q "tests"; then
+        item_name="${item_name}${release}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.deb"
+    else
+        item_name="${item_name}${release}.deb"
+    fi
     ex cp $item ./${item_name}
 done
 ex cp ${tmpdir}/*.tar.* .
