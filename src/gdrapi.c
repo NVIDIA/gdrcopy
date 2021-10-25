@@ -77,6 +77,7 @@ static void gdr_msg(enum gdrcopy_msg_level lvl, const char* fmt, ...)
             va_list ap;
             va_start(ap, fmt);
             vfprintf(stderr, fmt, ap);
+            va_end(ap);
         }
     }
 }
