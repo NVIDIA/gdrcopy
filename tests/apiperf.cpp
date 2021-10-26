@@ -94,7 +94,7 @@ void run_test(CUdeviceptr d_A, size_t size)
             unpin_lat_us = 0;
             unmap_lat_us = 0;
             inf_lat_us = 0;
-            actual_pin_size = (pin_request_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+            actual_pin_size = PAGE_ROUND_UP(pin_request_size, GPU_PAGE_SIZE);
 
             for (iter = 0; iter < num_warmup_iters; ++iter) {
 
@@ -222,7 +222,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     ASSERTDRV(cuInit(0));
 
