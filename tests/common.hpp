@@ -114,6 +114,8 @@ START_TEST(__testname) {                                                \
 #define BEGIN_CHECK do
 #define END_CHECK while(0)
 
+#define PAGE_ROUND_UP(x, n)     (((x) + ((n) - 1)) & ~((n) - 1))
+
 namespace gdrcopy {
     namespace test {
         typedef struct gpuMemHandle 

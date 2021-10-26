@@ -204,7 +204,7 @@ void basic()
     filter_fn();
 
     const size_t _size = 256*1024+16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
@@ -249,7 +249,7 @@ BEGIN_GDRCOPY_TEST(basic_with_tokens)
     init_cuda(0);
 
     const size_t _size = 256*1024+16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     print_dbg("buffer size: %zu\n", size);
 
@@ -351,7 +351,7 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
     print_dbg("Align d_A and try mapping it again.\n");
     // In order to align d_A, we move to the next GPU page. The reason is that
     // the first GPU page may belong to another allocation.
-    CUdeviceptr d_aligned_A = (d_A + GPU_PAGE_SIZE) & GPU_PAGE_MASK;
+    CUdeviceptr d_aligned_A = PAGE_ROUND_UP(d_A, GPU_PAGE_SIZE);
     off_t aligned_A_offset = d_aligned_A - d_A;
     size_t aligned_A_size = A_size - aligned_A_offset;
 
@@ -403,7 +403,7 @@ void data_validation()
     filter_fn();
 
     const size_t _size = 256*1024+16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
@@ -534,7 +534,7 @@ void invalidation_access_after_gdr_close()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     int mydata = (rand() % 1000) + 1;
 
@@ -626,7 +626,7 @@ void invalidation_access_after_free()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     int mydata = (rand() % 1000) + 1;
 
@@ -719,7 +719,7 @@ void invalidation_two_mappings()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     int mydata = (rand() % 1000) + 1;
 
@@ -838,7 +838,7 @@ void invalidation_fork_access_after_free()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     fflush(stdout);
@@ -1009,7 +1009,7 @@ void invalidation_fork_after_gdr_map()
     ASSERT_NEQ(pipe(filedes_1), -1);
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     init_cuda(0);
@@ -1165,7 +1165,7 @@ void invalidation_fork_child_gdr_map_parent()
     MB();
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     init_cuda(0);
@@ -1265,7 +1265,7 @@ void invalidation_fork_map_and_free()
     srand(time(NULL));
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     fflush(stdout);
@@ -1405,7 +1405,7 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
     int fd = -1;
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     ASSERT_EQ(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
 
@@ -1520,7 +1520,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
     int fd = -1;
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     ASSERT_EQ(socketpair(PF_UNIX, SOCK_DGRAM, 0, pair), 0);
 
@@ -1663,7 +1663,7 @@ BEGIN_GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
     ASSERT_NEQ(pipe(filedes_1), -1);
 
     const size_t _size = sizeof(int) * 16;
-    const size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
     fflush(stdout);
@@ -1799,7 +1799,7 @@ void basic_child_thread_pins_buffer()
     const size_t _size = GPU_PAGE_SIZE * 16;
     mt_test_info t;
     memset(&t, 0, sizeof(mt_test_info));
-    t.size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
+    t.size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     init_cuda(0);
     filter_fn();
