@@ -14,7 +14,19 @@
 ### END INIT INFO
 
 # Source function library.
-. /etc/rc.d/init.d/functions
+if [ -f "/etc/rc.d/init.d/functions" ]; then
+    . /etc/rc.d/init.d/functions
+else
+    # On SLES, the functions file does not exist.
+    # We fall back to use our definitions.
+    function success() {
+        return 0
+    }
+
+    function failure() {
+        return $?
+    }
+fi
 
 
 DRIVER=gdrdrv
