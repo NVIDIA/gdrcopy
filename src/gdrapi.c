@@ -98,9 +98,9 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
     return mh;
 }
 
-static void gdr_init_cpu_flags();
+static void gdr_init_cpu_flags(void);
 
-gdr_t gdr_open()
+gdr_t gdr_open(void)
 {
     gdr_t g = NULL;
     const char *gdrinode = "/dev/gdrdrv";
@@ -427,7 +427,7 @@ static int has_sse4_1 = 0;
 static int has_avx = 0;
 static int has_avx2 = 0;
 
-static void gdr_init_cpu_flags()
+static void gdr_init_cpu_flags(void)
 {
 #ifdef GDRAPI_X86
     unsigned int info_type = 0x00000001;

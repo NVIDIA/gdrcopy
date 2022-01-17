@@ -65,7 +65,7 @@ typedef struct gdr *gdr_t;
 
 // Initialize the library, e.g. by opening a connection to the kernel-mode
 // driver. Returns an handle to the library state object.
-gdr_t gdr_open();
+gdr_t gdr_open(void);
 
 // Destroy library state object, e.g. it closes the connection to kernel-mode
 // driver.
