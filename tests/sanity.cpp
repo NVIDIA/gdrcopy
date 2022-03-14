@@ -33,7 +33,6 @@
 #include <unistd.h>
 #include <iostream>
 #include <cuda.h>
-#include <cuda_runtime_api.h>
 #include <check.h>
 #include <errno.h>
 #include <sys/queue.h>
