@@ -1010,6 +1010,25 @@ static const struct vm_operations_struct gdrdrv_vm_ops = {
 
 /*----------------------------------------------------------------------------*/
 
+/**
+ * Starting from kernel version 5.18-rc1, io_remap_pfn_range may use a GPL
+ * function. This happens on x86 platforms that have
+ * CONFIG_ARCH_HAS_CC_PLATFORM defined. The root cause is from
+ * pgprot_decrypted implementation that has been changed to use cc_mkdec. To
+ * avoid the GPL-incompatibility issue with our module, which is MIT, we
+ * emulate how io_remap_pfn_range originally works here.
+ */
+static inline int gdrdrv_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
+{
+#if (defined(CONFIG_X86_64) || defined(CONFIG_X86_32)) && defined(CONFIG_ARCH_HAS_CC_PLATFORM)
+    return remap_pfn_range(vma, vaddr, pfn, size, __pgprot(__sme_clr(pgprot_val(prot))));
+#else
+    return io_remap_pfn_range(vma, vaddr, pfn, size, prot);
+#endif
+}
+
+/*----------------------------------------------------------------------------*/
+
 static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr, unsigned long paddr, size_t size, int is_wcomb)
 {
     int ret = 0;
@@ -1044,8 +1063,8 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
     } else {
         // by default, vm_page_prot should be set to create cached mappings
     }
-    if (io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
-        gdr_err("error in remap_pfn_range()\n");
+    if (gdrdrv_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
+        gdr_err("error in gdrdrv_remap_pfn_range()\n");
         ret = -EAGAIN;
         goto out;
     }
