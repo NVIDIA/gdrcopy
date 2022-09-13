@@ -1020,7 +1020,7 @@ static const struct vm_operations_struct gdrdrv_vm_ops = {
  */
 static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
 {
-#if (defined(CONFIG_X86_64) || defined(CONFIG_X86_32)) && defined(CONFIG_ARCH_HAS_CC_PLATFORM)
+#if (defined(CONFIG_X86_64) || defined(CONFIG_X86_32)) && IS_ENABLED(CONFIG_ARCH_HAS_CC_PLATFORM)
     return remap_pfn_range(vma, vaddr, pfn, size, __pgprot(__sme_clr(pgprot_val(prot))));
 #else
     return io_remap_pfn_range(vma, vaddr, pfn, size, prot);
