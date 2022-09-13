@@ -1018,7 +1018,7 @@ static const struct vm_operations_struct gdrdrv_vm_ops = {
  * avoid the GPL-incompatibility issue with our module, which is MIT, we
  * emulate how io_remap_pfn_range originally works here.
  */
-static inline int gdrdrv_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
+static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
 {
 #if (defined(CONFIG_X86_64) || defined(CONFIG_X86_32)) && defined(CONFIG_ARCH_HAS_CC_PLATFORM)
     return remap_pfn_range(vma, vaddr, pfn, size, __pgprot(__sme_clr(pgprot_val(prot))));
@@ -1063,8 +1063,8 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
     } else {
         // by default, vm_page_prot should be set to create cached mappings
     }
-    if (gdrdrv_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
-        gdr_err("error in gdrdrv_remap_pfn_range()\n");
+    if (gdrdrv_io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
+        gdr_err("error in gdrdrv_io_remap_pfn_range()\n");
         ret = -EAGAIN;
         goto out;
     }
