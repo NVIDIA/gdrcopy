@@ -1031,8 +1031,9 @@ static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned
 
 static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr, unsigned long paddr, size_t size, int is_wcomb)
 {
-    int ret = 0;
+    int status = 0;
     unsigned long pfn;
+    pgprot_t original_prot;
 
     gdr_dbg("mmaping phys mem addr=0x%lx size=%zu at user virt addr=0x%lx\n", 
              paddr, size, vaddr);
@@ -1044,14 +1045,17 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
     // in case the original user address was not properly host page-aligned
     if (0 != (paddr & (PAGE_SIZE-1))) {
         gdr_err("paddr=%lx, original mr address was not host page-aligned\n", paddr);
-        ret = -EINVAL;
+        status = -EINVAL;
         goto out;
     }
     if (0 != (vaddr & (PAGE_SIZE-1))) {
         gdr_err("vaddr=%lx, trying to map to non page-aligned vaddr\n", vaddr);
-        ret = -EINVAL;
+        status = -EINVAL;
         goto out;
     }
+
+    original_prot = vma->vm_page_prot;
+
     pfn = paddr >> PAGE_SHIFT;
 
     // Disallow mmapped VMA to propagate to children processes
@@ -1063,14 +1067,21 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
     } else {
         // by default, vm_page_prot should be set to create cached mappings
     }
-    if (gdrdrv_io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot)) {
+
+    status = gdrdrv_io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot);
+    if (status) {
+        gdr_dbg("revert to the original vm_page_prot and retry gdrdrv_io_remap_pfn_range()\n");
+        vma->vm_page_prot = original_prot;
+        status = gdrdrv_io_remap_pfn_range(vma, vaddr, pfn, size, vma->vm_page_prot);
+    }
+    if (status) {
         gdr_err("error in gdrdrv_io_remap_pfn_range()\n");
-        ret = -EAGAIN;
+        status = -EAGAIN;
         goto out;
     }
 
 out:
-    return ret;
+    return status;
 }
 
 //-----------------------------------------------------------------------------
