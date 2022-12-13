@@ -560,13 +560,13 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
         // pick the most performing implementation compatible with the platform we are running on
         // NOTE: write fences are included in functions below
         if (has_avx) {
-            assert(wc_mapping);
+            //assert(wc_mapping);
             gdr_dbgc(1, "using AVX implementation of gdr_copy_to_bar\n");
             memcpy_uncached_store_avx(map_d_ptr, h_ptr, size);
             goto out;
         }
         if (has_sse) {
-            assert(wc_mapping);
+            //assert(wc_mapping);
             gdr_dbgc(1, "using SSE implementation of gdr_copy_to_bar\n");
             memcpy_uncached_store_sse(map_d_ptr, h_ptr, size);
             goto out;
@@ -606,19 +606,19 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
     do {
         // pick the most performing implementation compatible with the platform we are running on
         if (has_sse4_1) {
-            assert(wc_mapping);
+            //assert(wc_mapping);
             gdr_dbgc(1, "using SSE4_1 implementation of gdr_copy_from_bar\n");
             memcpy_uncached_load_sse41(h_ptr, map_d_ptr, size);
             break;
         }
         if (has_avx) {
-            assert(wc_mapping);
+            //assert(wc_mapping);
             gdr_dbgc(1, "using AVX implementation of gdr_copy_from_bar\n");
             memcpy_cached_store_avx(h_ptr, map_d_ptr, size);
             break;
         }
         if (has_sse) {
-            assert(wc_mapping);
+            //assert(wc_mapping);
             gdr_dbgc(1, "using SSE implementation of gdr_copy_from_bar\n");
             memcpy_cached_store_sse(h_ptr, map_d_ptr, size);
             break;

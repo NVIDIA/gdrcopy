@@ -1198,6 +1198,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         // phys range is [paddr, paddr+len-1]
         gdr_dbg("mapping p=%u entries=%d offset=%llx len=%zu vaddr=%lx paddr=%lx\n", 
                 p, nentries, offset, len, vaddr, paddr);
+        #if 0
         if (gdr_pfn_is_ram(paddr >> PAGE_SHIFT)) {
             WARN_ON_ONCE(!gdrdrv_cpu_can_cache_gpu_mappings);
             is_wcomb = 0;
@@ -1206,6 +1207,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
             // flagging the whole mr as a WC mapping if at least one chunk is WC
             mr->cpu_mapping_type = GDR_MR_WC;
         }
+        #endif
         ret = gdrdrv_remap_gpu_mem(vma, vaddr, paddr, len, is_wcomb);
         if (ret) {
             gdr_err("error %d in gdrdrv_remap_gpu_mem\n", ret);
