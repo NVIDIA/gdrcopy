@@ -52,20 +52,21 @@ ex()
 
 function show_help
 {
-    echo "Usage: [CUDA=<path>] $0 [-d] [-t] [-k] -O [-h]"
+    echo "Usage: [CUDA=<path>] $0 [-d] [-t] [-k] [-O] [-R <release>]  [-h]"
     echo ""
     echo "  CUDA=<path>     Set your installed CUDA path (ex. /usr/local/cuda)."
     echo "  -d              Don't check build dependencies. Use my environment variables such as C_INCLUDE_PATH instead."
     echo "  -t              Skip building gdrcopy-tests package."
     echo "  -k              Skip building gdrdrv-dkms package."
     echo "  -O              Keep original package filenames."
+    echo "  -R <release>    Set debian release in changelog, dsc and changes files. (Default: unstable)"
     echo "  -h              Show this help text."
     echo ""
 }
 
 OPTIND=1	# Reset in case getopts has been used previously in the shell.
 
-while getopts "hdtk" opt; do
+while getopts "hdtkOR:" opt; do
     case "${opt}" in
     h)
         show_help
@@ -78,6 +79,8 @@ while getopts "hdtk" opt; do
     k)  build_driver_package=0
         ;;
     O)  keep_deb_filenames=1
+        ;;
+    R)  DEBIAN_RELEASE=$OPTARG
         ;;
     esac
 done
