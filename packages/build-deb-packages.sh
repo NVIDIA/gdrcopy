@@ -32,6 +32,7 @@ CWD=$(pwd)
 skip_dep_check=0
 build_test_package=1
 build_driver_package=1
+keep_deb_filenames=0
 
 ex()
 {
@@ -48,12 +49,13 @@ ex()
 
 function show_help
 {
-    echo "Usage: [CUDA=<path>] $0 [-d] [-t] [-k] [-h]"
+    echo "Usage: [CUDA=<path>] $0 [-d] [-t] [-k] -O [-h]"
     echo ""
     echo "  CUDA=<path>     Set your installed CUDA path (ex. /usr/local/cuda)."
     echo "  -d              Don't check build dependencies. Use my environment variables such as C_INCLUDE_PATH instead."
     echo "  -t              Skip building gdrcopy-tests package."
     echo "  -k              Skip building gdrdrv-dkms package."
+    echo "  -O              Keep original package filenames."
     echo "  -h              Show this help text."
     echo ""
 }
@@ -71,6 +73,8 @@ while getopts "hdtk" opt; do
     t)  build_test_package=0
         ;;
     k)  build_driver_package=0
+        ;;
+    O)  keep_deb_filenames=1
         ;;
     esac
 done
@@ -228,11 +232,13 @@ ex cd ${CWD}
 
 for item in `ls ${tmpdir}/*.deb`; do
     item_name=`basename $item`
-    item_name=`echo $item_name | sed -e "s/\.deb//g"`
-    if echo "$item_name" | grep -q "tests"; then
-        item_name="${item_name}${release}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.deb"
-    else
-        item_name="${item_name}${release}.deb"
+    if [ $keep_deb_filenames != 0 ] ; then
+        item_name=`echo $item_name | sed -e "s/\.deb//g"`
+        if echo "$item_name" | grep -q "tests"; then
+            item_name="${item_name}${release}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.deb"
+        else
+            item_name="${item_name}${release}.deb"
+        fi
     fi
     ex cp $item ./${item_name}
 done
