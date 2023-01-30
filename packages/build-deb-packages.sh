@@ -23,6 +23,7 @@
 # Restart this number at 1 if MAJOR_VERSION or MINOR_VERSION changes
 # See https://www.debian.org/doc/debian-policy/ch-controlfields.html#version
 DEBIAN_VERSION=1
+DEBIAN_RELEASE=unstable
 
 SCRIPT_DIR_PATH="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."
@@ -134,6 +135,7 @@ ex cp README.md ${tmpdir}/gdrcopy/debian-tests/README.source
 ex cd ${tmpdir}/gdrcopy
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@DEBIAN_RELEASE@/${DEBIAN_RELEASE}/g" {} +
 
 ex rm -f ${tmpdir}/libgdrapi_${VERSION}.orig.tar.gz
 ex rm -f ${tmpdir}/gdrcopy-tests_${VERSION}.orig.tar.gz
@@ -195,6 +197,7 @@ if [[ ${build_driver_package} == 1 ]]; then
     ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
     ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
     ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
+    ex find . -type f -exec sed -i "s/@DEBIAN_RELEASE@/${DEBIAN_RELEASE}/g" {} +
 
     ex cd ${tmpdir}
     ex tar czvf gdrdrv-dkms_${VERSION}.orig.tar.gz gdrdrv-dkms-${VERSION}
@@ -215,6 +218,7 @@ ex cd ${metadir}
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
+ex find . -type f -exec sed -i "s/@DEBIAN_RELEASE@/${DEBIAN_RELEASE}/g" {} +
 ex cd ${tmpdir}
 ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
 cd ${metadir}
