@@ -34,6 +34,8 @@ build_test_package=1
 build_driver_package=1
 keep_deb_filenames=0
 
+git_commit_date=$(git show -s --format='%cd' --date='format:%Y%m%d%H%M%S' 2>/dev/null)
+
 ex()
 {
     local rc
@@ -100,7 +102,7 @@ MODULE_SUBDIR=$(awk '/MODULE_SUBDIR \?=/ { print $3 }' ${TOP_DIR_PATH}/src/gdrdr
 
 MAJOR_VERSION=$(awk '/#define GDR_API_MAJOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
 MINOR_VERSION=$(awk '/#define GDR_API_MINOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
-VERSION="${MAJOR_VERSION}.${MINOR_VERSION}"
+VERSION="${MAJOR_VERSION}.${MINOR_VERSION}${git_commit_date:++git$git_commit_date}"
 if [ "X$VERSION" == "X" ]; then
     echo "Failed to get version numbers!" >&2
     exit 1
