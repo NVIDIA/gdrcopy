@@ -238,6 +238,8 @@ for item in `ls ${tmpdir}/*.deb`; do
 done
 ex cp ${tmpdir}/*.tar.* .
 ex cp ${tmpdir}/*.dsc .
+ex cp ${tmpdir}/*.changes .
+ex cp ${tmpdir}/*.buildinfo .
 
 echo
 echo "Cleaning up ..."
