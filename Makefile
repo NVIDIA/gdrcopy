@@ -89,6 +89,12 @@ clean:
 	$(MAKE) clean
 	cd src/gdrdrv && \
 	$(MAKE) clean
+	rm -f packages/*.deb
+	rm -f packages/*.debian.tar.xz
+	rm -f packages/*.dsc
+	rm -f packages/*.orig.tar.gz
+	rm -f packages/*.changes
+	rm -f packages/*.buildinfo
 
 .PHONY: driver clean all lib exes lib_install drv_install exes_install install
 
