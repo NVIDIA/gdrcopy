@@ -244,7 +244,7 @@ ex cd ${CWD}
 
 for item in `ls ${tmpdir}/*.deb`; do
     item_name=`basename $item`
-    if [ $keep_deb_filenames != 0 ] ; then
+    if [ $keep_deb_filenames = 0 ] ; then
         item_name=`echo $item_name | sed -e "s/\.deb//g"`
         if echo "$item_name" | grep -q "tests"; then
             item_name="${item_name}${release}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.deb"
