@@ -35,7 +35,7 @@ build_test_package=1
 build_driver_package=1
 keep_deb_filenames=0
 
-git_commit_date=$(git show -s --format='%cd' --date='format:%Y%m%d%H%M%S' 2>/dev/null)
+git_commit_date=""
 
 ex()
 {
@@ -52,13 +52,14 @@ ex()
 
 function show_help
 {
-    echo "Usage: [CUDA=<path>] $0 [-d] [-t] [-k] [-O] [-R <release>]  [-h]"
+    echo "Usage: [CUDA=<path>] $0 [-d] [-t] [-k] [-O] [-g] [-R <release>]  [-h]"
     echo ""
     echo "  CUDA=<path>     Set your installed CUDA path (ex. /usr/local/cuda)."
     echo "  -d              Don't check build dependencies. Use my environment variables such as C_INCLUDE_PATH instead."
     echo "  -t              Skip building gdrcopy-tests package."
     echo "  -k              Skip building gdrdrv-dkms package."
     echo "  -O              Keep original package filenames."
+    echo "  -g              Include date of latest git commit in version number."
     echo "  -R <release>    Set debian release in changelog, dsc and changes files. (Default: unstable)"
     echo "  -h              Show this help text."
     echo ""
@@ -66,7 +67,7 @@ function show_help
 
 OPTIND=1	# Reset in case getopts has been used previously in the shell.
 
-while getopts "hdtkOR:" opt; do
+while getopts "hdtkOgR:" opt; do
     case "${opt}" in
     h)
         show_help
@@ -79,6 +80,8 @@ while getopts "hdtkOR:" opt; do
     k)  build_driver_package=0
         ;;
     O)  keep_deb_filenames=1
+        ;;
+    g)  git_commit_date=$(git show -s --format='%cd' --date='format:%Y%m%d%H%M%S' 2>/dev/null)
         ;;
     R)  DEBIAN_RELEASE=$OPTARG
         ;;
