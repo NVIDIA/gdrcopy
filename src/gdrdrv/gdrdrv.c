@@ -222,11 +222,11 @@ MODULE_PARM_DESC(info_enabled, "enable info tracing");
 #define GPU_PAGE_MASK    (~GPU_PAGE_OFFSET)
 
 #ifndef MAX
-#define MAX(a,b) ((a) > (b) ? a : b)
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
 #endif
 
 #ifndef MIN
-#define MIN(a,b) ((a) < (b) ? a : b)
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
 
@@ -596,7 +596,7 @@ static inline int gdr_generate_mr_handle(gdr_info_t *info, gdr_mr_t *mr)
     if (unlikely(info->next_handle_overflow))
         return -1;
     
-    next_handle = info->next_handle + (mr->mapped_size >> PAGE_SHIFT);
+    next_handle = info->next_handle + MAX(1, mr->mapped_size >> PAGE_SHIFT);
 
     // The next handle will be overflowed, so we mark it.
     if (unlikely((next_handle & ((gdr_hnd_t)(-1) >> PAGE_SHIFT)) < info->next_handle))
