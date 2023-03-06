@@ -393,6 +393,74 @@ BEGIN_GDRCOPY_TEST(basic_unaligned_mapping)
 }
 END_GDRCOPY_TEST
 
+/**
+ * This unit test is for catching issue-244
+ * (https://github.com/NVIDIA/gdrcopy/issues/244).  The bug occurs when the
+ * first buffer is smaller than the GPU page size and the second buffer is
+ * within the same page.  We expect to be able to map the first buffer. The
+ * second buffer cannot be mapped because it is not aligned.
+ *
+ * cuMemCreate + cuMemMap always return an aligned address. So, this test is
+ * for cuMemAlloc only.
+ *
+ */
+BEGIN_GDRCOPY_TEST(basic_small_buffers_mapping)
+{
+    expecting_exception_signal = false;
+    MB();
+
+    init_cuda(0);
+
+    const size_t fa_size = GPU_PAGE_SIZE;
+    CUdeviceptr d_fa;
+    gpu_mem_handle_t fa_mhandle;
+    ASSERTDRV(gpu_mem_alloc(&fa_mhandle, fa_size, true, true));
+    d_fa = fa_mhandle.ptr;
+    print_dbg("Allocated d_fa=%#llx, size=%zu\n", d_fa, fa_size);
+
+    const size_t buffer_size = sizeof(uint64_t);
+    CUdeviceptr d_A[2];
+    d_A[0] = d_fa;
+    d_A[1] = d_fa + buffer_size;
+
+    gdr_t g = gdr_open_safe();
+
+    // Pin both buffers.
+    print_dbg("Try pinning d_A[0] and d_A[1].\n");
+    gdr_mh_t A_mh[2];
+    A_mh[0] = null_mh;
+    A_mh[1] = null_mh;
+
+    ASSERT_EQ(gdr_pin_buffer(g, d_A[0], buffer_size, 0, 0, &A_mh[0]), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_A[1], buffer_size, 0, 0, &A_mh[1]), 0);
+    ASSERT_NEQ(A_mh[0], null_mh);
+    ASSERT_NEQ(A_mh[1], null_mh);
+
+    void *A_bar_ptr[2];
+    A_bar_ptr[0] = NULL;
+    A_bar_ptr[1] = NULL;
+
+    // Expect gdr_map to pass
+    ASSERT_EQ(gdr_map(g, A_mh[0], &A_bar_ptr[0], buffer_size), 0);
+    print_dbg("Mapping d_A[0] passed as expected.\n");
+
+    // Expect gdr_map to fail due to unaligned mapping
+    ASSERT_NEQ(gdr_map(g, A_mh[1], &A_bar_ptr[1], buffer_size), 0);
+    print_dbg("Mapping d_A[1] failed as expected.\n");
+
+    ASSERT_EQ(gdr_unmap(g, A_mh[0], A_bar_ptr[0], buffer_size), 0);
+
+    ASSERT_EQ(gdr_unpin_buffer(g, A_mh[0]), 0);
+    ASSERT_EQ(gdr_unpin_buffer(g, A_mh[1]), 0);
+
+    ASSERT_EQ(gdr_close(g), 0);
+
+    ASSERTDRV(gpu_mem_free(&fa_mhandle));
+
+    finalize_cuda(0);
+}
+END_GDRCOPY_TEST
+
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
 void data_validation()
 {
@@ -1904,6 +1972,7 @@ int main(int argc, char *argv[])
     tcase_add_test(tc_basic, basic_cumemalloc);
     tcase_add_test(tc_basic, basic_with_tokens);
     tcase_add_test(tc_basic, basic_unaligned_mapping);
+    tcase_add_test(tc_basic, basic_small_buffers_mapping);
     tcase_add_test(tc_basic, basic_child_thread_pins_buffer_cumemalloc);
 
     tcase_add_test(tc_data_validation, data_validation_cumemalloc);
