@@ -20,7 +20,7 @@ CXXFLAGS += $(COMMONCFLAGS)
 LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
 SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
-EXES := $(SRCS:.cpp=)
+EXES := $(patsubst %.cpp,gdrcopy_%,$(SRCS))
 
 all: exes
 
@@ -32,16 +32,16 @@ sanity.o: sanity.cpp $(GDRAPI_INC)/gdrapi.h $(GDRAPI_SRC)/gdrapi_internal.h comm
 copylat.o: copylat.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 apiperf.o: apiperf.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 
-copybw: copybw.o common.o
+gdrcopy_copybw: copybw.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
-sanity: sanity.o common.o
+gdrcopy_sanity: sanity.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) $(CHECK_LIBS)
 
-copylat: copylat.o common.o
+gdrcopy_copylat: copylat.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
-apiperf: apiperf.o common.o
+gdrcopy_apiperf: apiperf.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
 clean:
@@ -50,9 +50,14 @@ clean:
 install: exes
 	@ echo "installing exes in $(DESTBIN)..." && \
 	mkdir -p $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx copybw -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx copylat -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx apiperf -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx sanity -t $(DESTBIN)
+	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_copybw -t $(DESTBIN) && \
+	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_copylat -t $(DESTBIN) && \
+	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_apiperf -t $(DESTBIN) && \
+	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_sanity -t $(DESTBIN)
+	cd $(DESTBIN) && \
+	ln -s gdrcopy_copybw copybw && \
+	ln -s gdrcopy_copylat copylat && \
+	ln -s gdrcopy_apiperf apiperf && \
+	ln -s gdrcopy_sanity sanity
 
 .PHONY: clean all exes install
