@@ -260,6 +260,10 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{_prefix}/bin/copybw
 %{_prefix}/bin/copylat
 %{_prefix}/bin/sanity
+%{_prefix}/bin/gdrcopy_apiperf
+%{_prefix}/bin/gdrcopy_copybw
+%{_prefix}/bin/gdrcopy_copylat
+%{_prefix}/bin/gdrcopy_sanity
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so
