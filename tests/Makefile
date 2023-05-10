@@ -55,9 +55,9 @@ install: exes
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_apiperf -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_sanity -t $(DESTBIN)
 	cd $(DESTBIN) && \
-	ln -s gdrcopy_copybw copybw && \
-	ln -s gdrcopy_copylat copylat && \
-	ln -s gdrcopy_apiperf apiperf && \
-	ln -s gdrcopy_sanity sanity
+	ln -sf gdrcopy_copybw copybw && \
+	ln -sf gdrcopy_copylat copylat && \
+	ln -sf gdrcopy_apiperf apiperf && \
+	ln -sf gdrcopy_sanity sanity
 
 .PHONY: clean all exes install
