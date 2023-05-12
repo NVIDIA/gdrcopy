@@ -289,7 +289,9 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
+* Fri May 12 2023 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
+- Add a workaround for the GPL-compatibility issue when compile with CONFIG_ARCH_HAS_CC_PLATFORM on Linux kernel 5.18+.
+* Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> 2.3-1
 - Remove automatically-generated build id links.
 - Remove gdrcopy-kmod from the Requires field.
 - Add apiperf test.

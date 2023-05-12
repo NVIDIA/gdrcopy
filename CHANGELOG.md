@@ -1,5 +1,8 @@
 # Changelog
 
+## [2.3.1] - 2023-05-12
+- Add a workaround for the GPL-compatibility issue when compile with CONFIG_ARCH_HAS_CC_PLATFORM on Linux kernel 5.18+.
+
 ## [2.3] - 2021-07-27
 - Remove automatically-generated build id links in rpm packages.
 - Remove gdrcopy-kmod from the Requires field of the gdrcopy rpm package.
@@ -57,6 +60,7 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 
+[2.3.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.3.1
 [2.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.3
 [2.2]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.2
 [2.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.1

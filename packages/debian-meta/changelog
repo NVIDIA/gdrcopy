@@ -1,4 +1,10 @@
-gdrcopy (@FULL_VERSION@) stable; urgency=low
+gdrcopy (2.3.1) stable; urgency=low
+
+  * Add a workaround for the GPL-compatibility issue when compile with CONFIG_ARCH_HAS_CC_PLATFORM on Linux kernel 5.18+.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 12 May 2023 11:59:59 -0700
+
+gdrcopy (2.3) stable; urgency=low
 
   * Convert to meta package.
   * Declare dependency with gdrdrv-dkms, libgdrapi, and gdrcopy-tests.
