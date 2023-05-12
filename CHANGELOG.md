@@ -2,6 +2,7 @@
 
 ## [2.3.1] - 2023-05-12
 - Add a workaround for the GPL-compatibility issue when compile with CONFIG_ARCH_HAS_CC_PLATFORM on Linux kernel 5.18+.
+- Fix error in init.d/gdrcopy due to missing /etc/rc.d/init.d/functions.
 
 ## [2.3] - 2021-07-27
 - Remove automatically-generated build id links in rpm packages.
