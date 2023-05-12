@@ -388,6 +388,10 @@ v396.37 are the minimum requirements in order to achieve the full performance.
 GDRCopy works with ealier CUDA and GPU driver versions but the achievable
 bandwidth is substantially lower.
 
+GDRCopy does not fully support Linux with the confidential computing (CC) configuration with Intel CPU. In particular,
+it does not functional if `CONFIG_ARCH_HAS_CC_PLATFORM=y` and CC is enabled at runtime. However, it works if CC is
+disabled or `CONFIG_ARCH_HAS_CC_PLATFORM=n`. This issue is not applied to AMD CPU.
+
 
 ## Bug filing
 
