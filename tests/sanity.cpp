@@ -559,6 +559,14 @@ void data_validation()
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
 
     ASSERT_EQ(gdr_close(g), 0);
+    if (copy_buf) {
+        delete [] copy_buf;
+        copy_buf = NULL;
+    }
+    if (init_buf) {
+        delete [] init_buf;
+        init_buf = NULL;
+    }
 
     ASSERTDRV(gfree_fn(&mhandle));
 
