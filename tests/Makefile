@@ -9,7 +9,7 @@ CHECK_LIBS := $(shell pkg-config --libs check)
 GDRAPI_INC := ../include
 GDRAPI_SRC := ../src
 
-CUDA_LIB := -L $(CUDA)/lib64 -L $(CUDA)/lib -L /usr/lib64/nvidia -L /usr/lib/nvidia
+CUDA_LIB := -L $(CUDA)/lib64 -L $(CUDA)/lib -L /usr/lib64/nvidia -L /usr/lib/nvidia -L $(CUDA)/lib64/stubs
 CUDA_INC += -I $(CUDA)/include
 
 CPPFLAGS := $(CUDA_INC) -I $(GDRAPI_INC) -I $(GDRAPI_SRC) -I $(CUDA)/include $(CHECK_INC)
