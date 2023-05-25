@@ -43,13 +43,13 @@ REL_MAJOR  := $(word 1,$(REL))
 REL_MEDIUM := $(word 2,$(REL))
 REL_MINOR  := $(word 3,$(REL))
 
-all: gdrdrv.ko
+all: build
 
-gdrdrv.ko:
+build:
 	@ echo "Picking NVIDIA driver sources from NVIDIA_SRC_DIR=$(NVIDIA_SRC_DIR). If that does not meet your expectation, you might have a stale driver still around and that might cause problems."
 	@ $(MAKE) -C $(KDIR) $(MAKE_PARAMS) M=$(PWD) modules
 
-install: gdrdrv.ko
+install: build
 	[ -d $(DESTDIR)/$(MODULE_DESTDIR) ] || mkdir -p $(DESTDIR)/$(MODULE_DESTDIR)
 	cp gdrdrv.ko $(DESTDIR)/$(MODULE_DESTDIR)
 	if [ ! -n "$(DESTDIR)" ]; then $(DEPMOD) -r -ae $(KVER); fi
@@ -63,6 +63,6 @@ clean:
 TAGS:
 	find $(KERNELDIR) -follow -name \*.h -o -name \*.c  |xargs etags
 
-.PHONY: clean all help install default linksyms nvidia_src_dir
+.PHONY: clean all help install default linksyms nvidia_src_dir build
 
 endif
