@@ -91,12 +91,19 @@ int gdr_unpin_buffer(gdr_t g, gdr_mh_t handle);
 // gdr_unpin_buffer.
 int gdr_get_callback_flag(gdr_t g, gdr_mh_t handle, int *flag);
 
+typedef enum gdr_mapping_type {
+    GDR_MAPPING_TYPE_NONE = 0,
+    GDR_MAPPING_TYPE_WC = 1,
+    GDR_MAPPING_TYPE_CACHING = 2,
+    GDR_MAPPING_TYPE_DEVICE = 3
+} gdr_mapping_type_t;
+
 // After pinning, info struct contains details of the mapped area.  
 //
 // Note that both info->va and info->mapped_size might be different from
 // the original address passed to gdr_pin_buffer due to aligning happening
 // in the kernel-mode driver
-struct gdr_info {
+typedef struct gdr_info_v2 {
     uint64_t va;
     uint64_t mapped_size;
     uint32_t page_size;
@@ -105,9 +112,12 @@ struct gdr_info {
     uint32_t cycles_per_ms;
     unsigned mapped:1;
     unsigned wc_mapping:1;
-};
-typedef struct gdr_info gdr_info_t;
-int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_t *info);
+    gdr_mapping_type_t mapping_type;
+} gdr_info_v2_t;
+typedef gdr_info_v2_t gdr_info_t;
+int gdr_get_info_v2(gdr_t g, gdr_mh_t handle, gdr_info_v2_t *info);
+
+#define gdr_get_info gdr_get_info_v2
 
 // Create a user-space mapping of the memory handle.
 //
