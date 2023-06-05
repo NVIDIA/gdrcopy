@@ -86,6 +86,19 @@ void address_space_init_once(struct address_space *mapping)
 }
 #endif
 
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
+/**
+ * This API requires Linux kernel 6.3.
+ * See https://github.com/torvalds/linux/commit/bc292ab00f6c7a661a8a605c714e8a148f629ef6
+ */
+static inline void vm_flags_set(struct vm_area_struct *vma, vm_flags_t flags)
+{
+    vma->vm_flags |= flags;
+}
+#endif
+
+
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_32)
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 {
@@ -1055,7 +1068,7 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
     pfn = paddr >> PAGE_SHIFT;
 
     // Disallow mmapped VMA to propagate to children processes
-    vma->vm_flags |= VM_DONTCOPY;
+    vm_flags_set(vma, VM_DONTCOPY);
 
     if (is_wcomb) {
         // override prot to create non-coherent WC mappings
