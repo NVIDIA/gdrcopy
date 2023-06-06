@@ -1,5 +1,6 @@
 DESTBIN ?= 
 CUDA ?= /usr/local/cuda
+NVCC ?= $(CUDA)/bin/nvcc
 
 # note that pkg-config respects PKG_CONFIG_PATH, which can be used
 # to pick libcheck from a user-defined path
@@ -19,8 +20,9 @@ CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
 LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
-SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
-EXES := $(patsubst %.cpp,gdrcopy_%,$(SRCS))
+CPP_SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
+CU_SRCS  := pplat.cu
+EXES := $(patsubst %.cpp,gdrcopy_%,$(CPP_SRCS)) $(patsubst %.cu,gdrcopy_%,$(CU_SRCS))
 
 all: exes
 
@@ -43,6 +45,12 @@ gdrcopy_copylat: copylat.o common.o
 
 gdrcopy_apiperf: apiperf.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
+
+pplat: pplat.o common.o
+	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt -lcudart
+
+%.o: %.cu
+	$(NVCC) -o $@ -c $^ $(LIBS)
 
 clean:
 	rm -f *.o $(EXES) *~ core.*

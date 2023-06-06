@@ -30,6 +30,18 @@
 #include <map>
 #include <gdrapi.h>
 
+#ifndef ACCESS_ONCE
+#define ACCESS_ONCE(x)      (*(volatile typeof((x)) *)&(x))
+#endif
+
+#ifndef READ_ONCE
+#define READ_ONCE(x)        ACCESS_ONCE(x)
+#endif
+
+#ifndef WRITE_ONCE
+#define WRITE_ONCE(x, v)    (ACCESS_ONCE(x) = (v))
+#endif
+
 /**
  * Memory barrier
  */
@@ -105,6 +117,17 @@ START_TEST(__testname) {                                                \
                 fprintf(stderr, "CUDA error: %s\n", _err_name);   \
             }                                   \
             ASSERT(CUDA_SUCCESS == result);     \
+        } while (0)
+
+#define ASSERTRT(stmt)				            \
+    do                                          \
+        {                                       \
+            cudaError_t result = (stmt);        \
+            if (result != cudaSuccess) {        \
+                const char *_err_name = cudaGetErrorName(result); \
+                fprintf(stderr, "CUDA error: %s\n", _err_name);   \
+            }                                   \
+            ASSERT(cudaSuccess == result);      \
         } while (0)
 
 #define ASSERT_EQ(P, V) ASSERT((P) == (V))
