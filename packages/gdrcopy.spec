@@ -264,6 +264,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{_prefix}/bin/gdrcopy_copybw
 %{_prefix}/bin/gdrcopy_copylat
 %{_prefix}/bin/gdrcopy_sanity
+%{_prefix}/bin/gdrcopy_pplat
 %{_libdir}/libgdrapi.so.?.?
 %{_libdir}/libgdrapi.so.?
 %{_libdir}/libgdrapi.so

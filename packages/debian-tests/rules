@@ -24,7 +24,7 @@ override_dh_auto_build:
 	dh_auto_build -- CUDA=$(CUDA) lib exes
 
 override_dh_shlibdeps:
-	dh_shlibdeps -Xgdrcopy_apiperf -Xgdrcopy_copybw -Xgdrcopy_copylat -Xgdrcopy_sanity
+	dh_shlibdeps -Xgdrcopy_apiperf -Xgdrcopy_copybw -Xgdrcopy_copylat -Xgdrcopy_sanity -Xgdrcopy_pplat
 
 override_dh_auto_install:
 	$(MAKE) DESTDIR=$(CURDIR)/debian/gdrcopy-tests prefix=/usr exes_install
