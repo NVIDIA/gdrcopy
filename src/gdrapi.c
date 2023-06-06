@@ -100,6 +100,11 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
 
 static void gdr_init_cpu_flags(void);
 
+static inline int gdr_is_mapped(const gdr_mapping_type_t mapping_type)
+{
+    return mapping_type != GDR_MAPPING_TYPE_NONE;
+}
+
 gdr_t gdr_open(void)
 {
     gdr_t g = NULL;
@@ -164,6 +169,8 @@ gdr_t gdr_open(void)
             break;
         ps_tmp >>= 1;
     }
+
+    g->gdrdrv_version = params.gdrdrv_version;
 
     return g;
 
@@ -276,38 +283,65 @@ int gdr_get_callback_flag(gdr_t g, gdr_mh_t handle, int *flag)
     return ret;
 }
 
-int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_t *info)
+int gdr_get_info_v2(gdr_t g, gdr_mh_t handle, gdr_info_v2_t *info)
 {
     int ret = 0;
     int retcode;
     gdr_memh_t *mh = to_memh(handle);
 
-    struct GDRDRV_IOC_GET_INFO_PARAMS params;
-    params.handle = mh->handle;
+    if (g->gdrdrv_version >= GDRDRV_MINIMUM_VERSION_WITH_GET_INFO_V2) {
+        struct GDRDRV_IOC_GET_INFO_V2_PARAMS params;
+        params.handle = mh->handle;
 
-    retcode = ioctl(g->fd, GDRDRV_IOC_GET_INFO, &params);
-    if (0 != retcode) {
-        ret = errno;
-        gdr_err("ioctl error (errno=%d)\n", ret);
-    } else {
-        info->va          = params.va;
-        info->mapped_size = params.mapped_size;
-        info->page_size   = params.page_size;
-        info->tm_cycles   = params.tm_cycles;
-        info->cycles_per_ms = params.tsc_khz;
-        info->mapped      = params.mapped;
-        info->wc_mapping  = params.wc_mapping;
+        retcode = ioctl(g->fd, GDRDRV_IOC_GET_INFO_V2, &params);
+        if (0 != retcode) {
+            ret = errno;
+            gdr_err("ioctl error (errno=%d)\n", ret);
+            goto out;
+        } else {
+            info->va            = params.va;
+            info->mapped_size   = params.mapped_size;
+            info->page_size     = params.page_size;
+            info->tm_cycles     = params.tm_cycles;
+            info->cycles_per_ms = params.tsc_khz;
+            info->mapped        = gdr_is_mapped(params.mapping_type);
+            info->wc_mapping    = (params.mapping_type == GDR_MAPPING_TYPE_WC);
+            info->mapping_type  = params.mapping_type;
+        }
     }
+    else
+    {
+        struct GDRDRV_IOC_GET_INFO_PARAMS params;
+        params.handle = mh->handle;
+
+        retcode = ioctl(g->fd, GDRDRV_IOC_GET_INFO, &params);
+        if (0 != retcode) {
+            ret = errno;
+            gdr_err("ioctl error (errno=%d)\n", ret);
+            goto out;
+        } else {
+            info->va            = params.va;
+            info->mapped_size   = params.mapped_size;
+            info->page_size     = params.page_size;
+            info->tm_cycles     = params.tm_cycles;
+            info->cycles_per_ms = params.tsc_khz;
+            info->mapped        = params.mapped;
+            info->wc_mapping    = params.wc_mapping;
+            info->mapping_type  = params.mapped ? (params.wc_mapping ? GDR_MAPPING_TYPE_WC : GDR_MAPPING_TYPE_CACHING) : GDR_MAPPING_TYPE_NONE;
+        }
+    }
+
+out:
     return ret;
 }
 
 int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
 {
     int ret = 0;
-    gdr_info_t info = {0,};
+    gdr_info_v2_t info = {0,};
     gdr_memh_t *mh = to_memh(handle);
 
-    if (mh->mapped) {
+    if (gdr_is_mapped(mh->mapping_type)) {
         gdr_err("mh is mapped already\n");
         return EAGAIN;
     }
@@ -323,22 +357,21 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
         goto err;
     }
     *ptr_va = mmio;
-    ret = gdr_get_info(g, handle, &info);
+    ret = gdr_get_info_v2(g, handle, &info);
     if (ret) {
         gdr_err("error %d from get_info, munmapping before exiting\n", ret);
         munmap(mmio, rounded_size);
         goto err;
     }
-    mh->mapped = info.mapped;
-    if (!mh->mapped) {
+    if (!gdr_is_mapped(info.mapping_type)) {
         // Race could cause this issue.
         // E.g., gdr_map and cuMemFree are triggered concurrently.
         // The above mmap is successful but cuMemFree causes unmapping immediately.
         gdr_err("mh is not mapped\n");
         ret = EAGAIN;
     }
-    mh->wc_mapping = info.wc_mapping;
-    gdr_dbg("wc_mapping=%d\n", mh->wc_mapping);
+    mh->mapping_type = info.mapping_type;
+    gdr_dbg("mapping_type=%d\n", mh->mapping_type);
  err:
     return ret;
 }
@@ -352,7 +385,7 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
 
     rounded_size = (size + g->page_size - 1) & g->page_mask;
 
-    if (!mh->mapped) {
+    if (!gdr_is_mapped(mh->mapping_type)) {
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
@@ -364,8 +397,7 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
         ret = __errno;
         goto err;
     }
-    mh->mapped = 0;
-    mh->wc_mapping = 0;
+    mh->mapping_type = GDR_MAPPING_TYPE_NONE;
  err:
     return ret;
 }
@@ -539,8 +571,90 @@ static inline int ptr_is_aligned(const void *ptr, unsigned powof2)
     return is_aligned(addr, powof2);
 }
 
-static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size_t size, int wc_mapping)
+static inline void memcpy_to_device_mapping(void *dst, const void *src, size_t size)
 {
+    size_t remaining_size = size;
+    void *curr_map_d_ptr = dst;
+    const void *curr_h_ptr = src;
+    size_t copy_size = 0;
+    while (remaining_size > 0) {
+        if (is_aligned(remaining_size, sizeof(uint64_t)) && ptr_is_aligned(curr_map_d_ptr, sizeof(uint64_t)) && ptr_is_aligned(curr_h_ptr, sizeof(uint64_t))) {
+            // We have proper alignment. memcpy can be used here. Although
+            // unlikely, this might break in the future if the implementation
+            // of memcpy changes to generate unaligned access. Still, we choose
+            // memcpy because it provides better performance than our simple
+            // aligned-access workaround.
+            memcpy(curr_map_d_ptr, curr_h_ptr, remaining_size);
+            copy_size = remaining_size;
+        }
+        else if (remaining_size >= sizeof(uint64_t) && ptr_is_aligned(curr_map_d_ptr, sizeof(uint64_t))) {
+            // memcpy cannot be used here because its internal
+            // implementation may end up in an unaligned access.
+            WRITE_ONCE(*(uint64_t *)curr_map_d_ptr, *(uint64_t *)curr_h_ptr);
+            copy_size = sizeof(uint64_t);
+        }
+        else if (remaining_size >= sizeof(uint32_t) && ptr_is_aligned(curr_map_d_ptr, sizeof(uint32_t))) {
+            WRITE_ONCE(*(uint32_t *)curr_map_d_ptr, *(uint32_t *)curr_h_ptr);
+            copy_size = sizeof(uint32_t);
+        }
+        else if (remaining_size >= sizeof(uint16_t) && ptr_is_aligned(curr_map_d_ptr, sizeof(uint16_t))) {
+            WRITE_ONCE(*(uint16_t *)curr_map_d_ptr, *(uint16_t *)curr_h_ptr);
+            copy_size = sizeof(uint16_t);
+        }
+        else {
+            WRITE_ONCE(*(uint8_t *)curr_map_d_ptr, *(uint8_t *)curr_h_ptr);
+            copy_size = sizeof(uint8_t);
+        }
+        remaining_size -= copy_size;
+        curr_map_d_ptr = (void *)((uintptr_t)curr_map_d_ptr + copy_size);
+        curr_h_ptr = (const void *)((uintptr_t)curr_h_ptr + copy_size);
+    }
+}
+
+static inline void memcpy_from_device_mapping(void *dst, const void *src, size_t size)
+{
+    size_t remaining_size = size;
+    const void *curr_map_d_ptr = src;
+    void *curr_h_ptr = dst;
+    size_t copy_size = 0;
+    while (remaining_size > 0) {
+        if (is_aligned(remaining_size, sizeof(uint64_t)) && ptr_is_aligned(curr_map_d_ptr, sizeof(uint64_t)) && ptr_is_aligned(curr_h_ptr, sizeof(uint64_t))) {
+            // We have proper alignment. memcpy can be used here. Although
+            // unlikely, this might break in the future if the implementation
+            // of memcpy changes to generate unaligned access. Still, we choose
+            // memcpy because it provides better performance than our simple
+            // aligned-access workaround.
+            memcpy(curr_h_ptr, curr_map_d_ptr, remaining_size);
+            copy_size = remaining_size;
+        }
+        else if (remaining_size >= sizeof(uint64_t) && ptr_is_aligned(curr_map_d_ptr, sizeof(uint64_t))) {
+            // memcpy cannot be used here because its internal
+            // implementation may end up in an unaligned access.
+            *(uint64_t *)curr_h_ptr = READ_ONCE(*(uint64_t *)curr_map_d_ptr);
+            copy_size = sizeof(uint64_t);
+        }
+        else if (remaining_size >= sizeof(uint32_t) && ptr_is_aligned(curr_map_d_ptr, sizeof(uint32_t))) {
+            *(uint32_t *)curr_h_ptr = READ_ONCE(*(uint32_t *)curr_map_d_ptr);
+            copy_size = sizeof(uint32_t);
+        }
+        else if (remaining_size >= sizeof(uint16_t) && ptr_is_aligned(curr_map_d_ptr, sizeof(uint16_t))) {
+            *(uint16_t *)curr_h_ptr = READ_ONCE(*(uint16_t *)curr_map_d_ptr);
+            copy_size = sizeof(uint16_t);
+        }
+        else {
+            *(uint8_t *)curr_h_ptr = READ_ONCE(*(uint8_t *)curr_map_d_ptr);
+            copy_size = sizeof(uint8_t);
+        }
+        remaining_size -= copy_size;
+        curr_map_d_ptr = (const void *)((uintptr_t)curr_map_d_ptr + copy_size);
+        curr_h_ptr = (void *)((uintptr_t)curr_h_ptr + copy_size);
+    }
+}
+
+static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size_t size, gdr_mapping_type_t mapping_type)
+{
+    const int wc_mapping = (mapping_type == GDR_MAPPING_TYPE_WC);
+    const int device_mapping = (mapping_type == GDR_MAPPING_TYPE_DEVICE);
     do {
         // For very small sizes and aligned pointers, we use simple store.
         if (size == sizeof(uint8_t)) {
@@ -561,13 +675,13 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
         // NOTE: write fences are included in functions below
         if (has_avx) {
             assert(wc_mapping);
-            gdr_dbgc(1, "using AVX implementation of gdr_copy_to_bar\n");
+            gdr_dbgc(1, "using AVX implementation of gdr_copy_to_mapping\n");
             memcpy_uncached_store_avx(map_d_ptr, h_ptr, size);
             goto out;
         }
         if (has_sse) {
             assert(wc_mapping);
-            gdr_dbgc(1, "using SSE implementation of gdr_copy_to_bar\n");
+            gdr_dbgc(1, "using SSE implementation of gdr_copy_to_mapping\n");
             memcpy_uncached_store_sse(map_d_ptr, h_ptr, size);
             goto out;
         }
@@ -578,16 +692,18 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
         // use byte sized stores to align map_d_ptr and h_ptr to next word.
         // NOTE2: unroll*_memcpy and memcpy do not include fencing.
         if (wc_mapping && PREFERS_STORE_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
-            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_bar\n");
+            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_mapping\n");
             unroll8_memcpy(map_d_ptr, h_ptr, size);
         } else if (wc_mapping && PREFERS_STORE_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
-            gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_to_bar\n");
+            gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_to_mapping\n");
             unroll4_memcpy(map_d_ptr, h_ptr, size);
+        } else if (device_mapping) {
+            gdr_dbgc(1, "using device-mapping copy for gdr_copy_to_mapping with device mapping\n");
+            memcpy_to_device_mapping(map_d_ptr, h_ptr, size);
         } else {
-            gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_to_bar\n");
+            gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_to_mapping\n");
             memcpy(map_d_ptr, h_ptr, size);
         }
-
     } while (0);
 
 do_fence:
@@ -601,25 +717,28 @@ out:
     return 0;
 }
 
-static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, size_t size, int wc_mapping)
+static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, size_t size, gdr_mapping_type_t mapping_type)
 {
+    const int wc_mapping = (mapping_type == GDR_MAPPING_TYPE_WC);
+    const int device_mapping = (mapping_type == GDR_MAPPING_TYPE_DEVICE);
+
     do {
         // pick the most performing implementation compatible with the platform we are running on
         if (has_sse4_1) {
             assert(wc_mapping);
-            gdr_dbgc(1, "using SSE4_1 implementation of gdr_copy_from_bar\n");
+            gdr_dbgc(1, "using SSE4_1 implementation of gdr_copy_from_mapping\n");
             memcpy_uncached_load_sse41(h_ptr, map_d_ptr, size);
             break;
         }
         if (has_avx) {
             assert(wc_mapping);
-            gdr_dbgc(1, "using AVX implementation of gdr_copy_from_bar\n");
+            gdr_dbgc(1, "using AVX implementation of gdr_copy_from_mapping\n");
             memcpy_cached_store_avx(h_ptr, map_d_ptr, size);
             break;
         }
         if (has_sse) {
             assert(wc_mapping);
-            gdr_dbgc(1, "using SSE implementation of gdr_copy_from_bar\n");
+            gdr_dbgc(1, "using SSE implementation of gdr_copy_from_mapping\n");
             memcpy_cached_store_sse(h_ptr, map_d_ptr, size);
             break;
         }
@@ -627,13 +746,16 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
         // on POWER, compiler memcpy is not optimal for MMIO
         // 64bit loads have 2x the BW of 32bit ones
         if (wc_mapping && PREFERS_LOAD_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
-            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_from_bar\n");
+            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_from_mapping\n");
             unroll8_memcpy(h_ptr, map_d_ptr, size);
         } else if (wc_mapping && PREFERS_LOAD_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
-            gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_from_bar\n");
+            gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_from_mapping\n");
             unroll4_memcpy(h_ptr, map_d_ptr, size);
+        } else if (device_mapping) {
+            gdr_dbgc(1, "using device-mapping copy for gdr_copy_from_mapping\n");
+            memcpy_from_device_mapping(h_ptr, map_d_ptr, size);
         } else {
-            gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_from_bar\n");
+            gdr_dbgc(1, "fallback to compiler/libc memcpy implementation of gdr_copy_from_mapping\n");
             memcpy(h_ptr, map_d_ptr, size);
         }
 
@@ -649,25 +771,25 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
 int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size)
 {
     gdr_memh_t *mh = to_memh(handle);
-    if (unlikely(!mh->mapped)) {
+    if (unlikely(!gdr_is_mapped(mh->mapping_type))) {
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
     if (unlikely(size == 0))
         return 0;
-    return gdr_copy_to_mapping_internal(map_d_ptr, h_ptr, size, mh->wc_mapping);
+    return gdr_copy_to_mapping_internal(map_d_ptr, h_ptr, size, mh->mapping_type);
 }
 
 int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size)
 {
     gdr_memh_t *mh = to_memh(handle);
-    if (unlikely(!mh->mapped)) {
+    if (unlikely(!gdr_is_mapped(mh->mapping_type))) {
         gdr_err("mh is not mapped yet\n");
         return EINVAL;
     }
     if (unlikely(size == 0))
         return 0;
-    return gdr_copy_from_mapping_internal(h_ptr, map_d_ptr, size, mh->wc_mapping);
+    return gdr_copy_from_mapping_internal(h_ptr, map_d_ptr, size, mh->mapping_type);
 }
 
 
@@ -695,6 +817,54 @@ int gdr_driver_get_version(gdr_t g, int *major, int *minor)
 
     return 0;
 }
+
+// ==============================================================================
+// Obsoleted API. Provided for compatibility only.
+// ==============================================================================
+
+#ifdef gdr_get_info
+#undef gdr_get_info
+#endif
+
+typedef struct gdr_info_v1 {
+    uint64_t va;
+    uint64_t mapped_size;
+    uint32_t page_size;
+    // tm_cycles and cycles_per_ms are deprecated and will be removed in future.
+    uint64_t tm_cycles;
+    uint32_t cycles_per_ms;
+    unsigned mapped:1;
+    unsigned wc_mapping:1;
+} gdr_info_v1_t;
+
+int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_v1_t *info)
+{
+    int ret = 0;
+    int retcode;
+    gdr_memh_t *mh = to_memh(handle);
+
+    struct GDRDRV_IOC_GET_INFO_PARAMS params;
+    params.handle = mh->handle;
+
+    retcode = ioctl(g->fd, GDRDRV_IOC_GET_INFO, &params);
+    if (0 != retcode) {
+        ret = errno;
+        gdr_err("ioctl error (errno=%d)\n", ret);
+        goto out;
+    } else {
+        info->va            = params.va;
+        info->mapped_size   = params.mapped_size;
+        info->page_size     = params.page_size;
+        info->tm_cycles     = params.tm_cycles;
+        info->cycles_per_ms = params.tsc_khz;
+        info->mapped        = params.mapped;
+        info->wc_mapping    = params.wc_mapping;
+    }
+
+out:
+    return ret;
+}
+
 
 /*
  * Local variables:

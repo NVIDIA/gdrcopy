@@ -36,6 +36,7 @@
 #include <linux/sched.h>
 #include <linux/timex.h>
 #include <linux/timer.h>
+#include <linux/pci.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
 #include <linux/sched/signal.h>
@@ -53,8 +54,14 @@
 
 //-----------------------------------------------------------------------------
 
+static const unsigned int GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID = 0x15b3;
+static const unsigned int GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID = 0xa2db;
+
+//-----------------------------------------------------------------------------
+
 static int gdrdrv_major = 0;
 static int gdrdrv_cpu_can_cache_gpu_mappings = 0;
+static int gdrdrv_cpu_must_use_device_mapping = 0;
 
 //-----------------------------------------------------------------------------
 
@@ -107,6 +114,12 @@ static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
     new_prot = __pgprot(pgprot_val(new_prot) | _PAGE_PWT);
     return new_prot;
 }
+static inline pgprot_t pgprot_modify_device(pgprot_t old_prot)
+{
+    // Device mapping should never be called on x86
+    BUG_ON(1);
+    return old_prot;
+}
 #define get_tsc_khz() cpu_khz // tsc_khz
 static inline int gdr_pfn_is_ram(unsigned long pfn)
 {
@@ -121,6 +134,12 @@ static inline int gdr_pfn_is_ram(unsigned long pfn)
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 {
     return pgprot_writecombine(old_prot);
+}
+static inline pgprot_t pgprot_modify_device(pgprot_t old_prot)
+{
+    // Device mapping should never be called on PPC64
+    BUG_ON(1);
+    return old_prot;
 }
 #define get_tsc_khz() (get_cycles()/1000) // dirty hack
 static inline int gdr_pfn_is_ram(unsigned long pfn)
@@ -141,6 +160,10 @@ static inline int gdr_pfn_is_ram(unsigned long pfn)
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 {
     return pgprot_writecombine(old_prot);
+}
+static inline pgprot_t pgprot_modify_device(pgprot_t old_prot)
+{
+    return pgprot_device(old_prot);
 }
 static inline int gdr_pfn_is_ram(unsigned long pfn)
 {
@@ -265,7 +288,7 @@ struct gdr_mr {
     u32 page_size;
     u64 va;
     u64 mapped_size;
-    enum { GDR_MR_NONE, GDR_MR_WC, GDR_MR_CACHING } cpu_mapping_type;
+    gdr_mr_type_t cpu_mapping_type;
     nvidia_p2p_page_table_t *page_table;
     int cb_flag;
     cycles_t tm_cycles;
@@ -283,15 +306,6 @@ typedef struct gdr_mr gdr_mr_t;
 static int gdr_mr_is_mapped(gdr_mr_t *mr)
 {
     return mr->cpu_mapping_type != GDR_MR_NONE;
-}
-
-/**
- * Prerequisite:
- * - mr must be protected by down_read(mr->sem) or stronger.
- */
-static int gdr_mr_is_wc_mapping(gdr_mr_t *mr)
-{
-    return (mr->cpu_mapping_type == GDR_MR_WC) ? 1 : 0;
 }
 
 static inline void gdrdrv_zap_vma(struct address_space *mapping, struct vm_area_struct *vma)
@@ -906,13 +920,51 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
         goto out;
     }
 
-    params.va          = mr->va;
-    params.mapped_size = mr->mapped_size;
-    params.page_size   = mr->page_size;
-    params.tm_cycles   = mr->tm_cycles;
-    params.tsc_khz     = mr->tsc_khz;
-    params.mapped      = gdr_mr_is_mapped(mr);
-    params.wc_mapping  = gdr_mr_is_wc_mapping(mr);
+    params.va           = mr->va;
+    params.mapped_size  = mr->mapped_size;
+    params.page_size    = mr->page_size;
+    params.tm_cycles    = mr->tm_cycles;
+    params.tsc_khz      = mr->tsc_khz;
+    params.mapped       = gdr_mr_is_mapped(mr);
+    params.wc_mapping   = (mr->cpu_mapping_type == GDR_MR_WC);
+
+    gdr_put_mr_read(mr);
+
+    if (copy_to_user(_params, &params, sizeof(params))) {
+        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+    }
+ out:
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+
+static int gdrdrv_get_info_v2(gdr_info_t *info, void __user *_params)
+{
+    struct GDRDRV_IOC_GET_INFO_V2_PARAMS params = {0};
+    int ret = 0;
+    gdr_mr_t *mr = NULL;
+
+    if (copy_from_user(&params, _params, sizeof(params))) {
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    mr = gdr_get_mr_from_handle_read(info, params.handle);
+    if (NULL == mr) {
+        gdr_err("unexpected handle %llx in get_cb_flag\n", params.handle);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    params.va           = mr->va;
+    params.mapped_size  = mr->mapped_size;
+    params.page_size    = mr->page_size;
+    params.tm_cycles    = mr->tm_cycles;
+    params.tsc_khz      = mr->tsc_khz;
+    params.mapping_type = mr->cpu_mapping_type;
 
     gdr_put_mr_read(mr);
 
@@ -984,6 +1036,10 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
         ret = gdrdrv_get_info(info, argp);
         break;
 
+    case GDRDRV_IOC_GET_INFO_V2:
+        ret = gdrdrv_get_info_v2(info, argp);
+        break;
+
     case GDRDRV_IOC_GET_VERSION:
         ret = gdrdrv_get_version(info, argp);
         break;
@@ -1042,7 +1098,7 @@ static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned
 
 /*----------------------------------------------------------------------------*/
 
-static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr, unsigned long paddr, size_t size, int is_wcomb)
+static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr, unsigned long paddr, size_t size, gdr_mr_type_t mapping_type)
 {
     int ret = 0;
     unsigned long pfn;
@@ -1070,9 +1126,12 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
     // Disallow mmapped VMA to propagate to children processes
     vm_flags_set(vma, VM_DONTCOPY);
 
-    if (is_wcomb) {
+    if (mapping_type == GDR_MR_WC) {
         // override prot to create non-coherent WC mappings
         vma->vm_page_prot = pgprot_modify_writecombine(vma->vm_page_prot);
+    } else if (mapping_type == GDR_MR_DEVICE) {
+        // override prot to create non-coherent device mappings
+        vma->vm_page_prot = pgprot_modify_device(vma->vm_page_prot);
     } else {
         // by default, vm_page_prot should be set to create cached mappings
     }
@@ -1099,6 +1158,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     u64 offset;
     int p = 0;
     unsigned long vaddr;
+    gdr_mr_type_t cpu_mapping_type = GDR_MR_NONE;
 
     gdr_info("mmap filp=0x%px vma=0x%px vm_file=0x%px start=0x%lx size=%zu off=0x%lx\n", filp, vma, vma->vm_file, vma->vm_start, size, vma->vm_pgoff);
 
@@ -1158,9 +1218,9 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     if (size % PAGE_SIZE != 0) {
         gdr_dbg("size is not multiple of PAGE_SIZE\n");
     }
-    // let's assume this mapping is not WC
-    // this also works as the mapped flag for this mr
-    mr->cpu_mapping_type = GDR_MR_CACHING;
+
+    // Set to None first
+    mr->cpu_mapping_type = GDR_MR_NONE;
     vma->vm_ops = &gdrdrv_vm_ops;
     gdr_dbg("overwriting vma->vm_private_data=%px with mr=%px\n", vma->vm_private_data, mr);
     vma->vm_private_data = mr;
@@ -1173,7 +1233,7 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         unsigned long paddr = mr->page_table->pages[p]->physical_address;
         unsigned nentries = 1;
         size_t len;
-        int is_wcomb;
+        gdr_mr_type_t chunk_mapping_type = GDR_MR_NONE;
 
         gdr_dbg("range start with p=%d vaddr=%lx page_paddr=%lx\n", p, vaddr, paddr);
 
@@ -1202,13 +1262,22 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
                 p, nentries, offset, len, vaddr, paddr);
         if (gdr_pfn_is_ram(paddr >> PAGE_SHIFT)) {
             WARN_ON_ONCE(!gdrdrv_cpu_can_cache_gpu_mappings);
-            is_wcomb = 0;
+            chunk_mapping_type = GDR_MR_CACHING;
+        } else if (gdrdrv_cpu_must_use_device_mapping) {
+            chunk_mapping_type = GDR_MR_DEVICE;
         } else {
-            is_wcomb = 1;
             // flagging the whole mr as a WC mapping if at least one chunk is WC
-            mr->cpu_mapping_type = GDR_MR_WC;
+            chunk_mapping_type = GDR_MR_WC;
         }
-        ret = gdrdrv_remap_gpu_mem(vma, vaddr, paddr, len, is_wcomb);
+
+        if (cpu_mapping_type == GDR_MR_NONE)
+            cpu_mapping_type = chunk_mapping_type;
+
+        // We don't handle when different chunks have different mapping types.
+        // This scenario should never happen.
+        BUG_ON(cpu_mapping_type != chunk_mapping_type);
+
+        ret = gdrdrv_remap_gpu_mem(vma, vaddr, paddr, len, cpu_mapping_type);
         if (ret) {
             gdr_err("error %d in gdrdrv_remap_gpu_mem\n", ret);
             goto out;
@@ -1233,6 +1302,10 @@ out:
     } else {
         mr->vma = vma;
         mr->mapping = filp->f_mapping;
+
+        BUG_ON(cpu_mapping_type == GDR_MR_NONE);
+        mr->cpu_mapping_type = cpu_mapping_type;
+
         gdr_dbg("mr vma=0x%px mapping=0x%px\n", mr->vma, mr->mapping);
     }
 
@@ -1285,6 +1358,19 @@ static int __init gdrdrv_init(void)
 
     if (gdrdrv_cpu_can_cache_gpu_mappings)
         gdr_msg(KERN_INFO, "enabling use of CPU cached mappings\n");
+
+#if defined(CONFIG_ARM64)
+    {
+        struct pci_dev *pdev = pci_get_device(GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID, GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID, NULL);
+        if (pdev) {
+            pci_dev_put(pdev);
+            gdrdrv_cpu_must_use_device_mapping = 1;
+        }
+    }
+#endif
+
+    if (gdrdrv_cpu_must_use_device_mapping)
+        gdr_msg(KERN_INFO, "enabling use of CPU device mappings\n");
 
     return 0;
 }

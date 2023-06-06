@@ -26,6 +26,7 @@
 #include <stdint.h> // for standard [u]intX_t types
 #include <stddef.h>
 #include <sys/queue.h>
+#include "gdrapi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,19 +41,21 @@ extern "C" {
 #endif
 
 #ifndef ACCESS_ONCE
-#define ACCESS_ONCE(x)      (*(volatile typeof(x) *)&x)
+#define ACCESS_ONCE(x)      (*(volatile typeof((x)) *)&(x))
+#endif
+
+#ifndef READ_ONCE
+#define READ_ONCE(x)        ACCESS_ONCE(x)
 #endif
 
 #ifndef WRITE_ONCE
 #define WRITE_ONCE(x, v)    (ACCESS_ONCE(x) = (v))
 #endif
 
-
 typedef struct gdr_memh_t { 
     uint32_t handle;
     LIST_ENTRY(gdr_memh_t) entries;
-    unsigned mapped:1;
-    unsigned wc_mapping:1;
+    gdr_mapping_type_t mapping_type;
 } gdr_memh_t;
 
 struct gdr {
@@ -61,6 +64,7 @@ struct gdr {
     size_t page_size;
     size_t page_mask;
     uint8_t page_shift;
+    uint32_t gdrdrv_version;
 };
 
 #ifdef __cplusplus
