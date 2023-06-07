@@ -130,17 +130,6 @@ START_TEST(__testname) {                                                \
             ASSERT(CUDA_SUCCESS == result);     \
         } while (0)
 
-#define ASSERTRT(stmt)				            \
-    do                                          \
-        {                                       \
-            cudaError_t result = (stmt);        \
-            if (result != cudaSuccess) {        \
-                const char *_err_name = cudaGetErrorName(result); \
-                fprintf(stderr, "CUDA error: %s\n", _err_name);   \
-            }                                   \
-            ASSERT(cudaSuccess == result);      \
-        } while (0)
-
 #define ASSERT_EQ(P, V) ASSERT((P) == (V))
 #define CHECK_EQ(P, V) ASSERT((P) == (V))
 #define ASSERT_NEQ(P, V) ASSERT(!((P) == (V)))
