@@ -53,19 +53,44 @@ __global__ void pp_kernel(uint32_t *d_buf, uint32_t *h_buf, uint32_t num_iters)
     }
 }
 
-int dev_id = 0;
-uint32_t num_iters = 1000;
+static int dev_id = 0;
+static uint32_t num_iters = 1000;
+static unsigned int timeout = 0;  // in s
 
-void print_usage(const char *path)
+static void print_usage(const char *path)
 {
-    cout << "Usage: " << path << " [-h][-d <gpu>][-t <iters>][-a <fn>]" << endl;
+    cout << "Usage: " << path << " [-h][-d <gpu>][-t <iters>][-u <timeout>][-a <fn>]" << endl;
     cout << endl;
     cout << "Options:" << endl;
     cout << "   -h              Print this help text" << endl;
     cout << "   -d <gpu>        GPU ID (default: " << dev_id << ")" << endl;
     cout << "   -t <iters>      Number of iterations (default: " << num_iters << ")" << endl;
+    cout << "   -u <timeout>    Timeout in second. 0 to disable. (default: " << timeout << ")" << endl;
     cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
     cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
+}
+
+/**
+ * Return time difference in us.
+ */
+static inline double time_diff(struct timespec start, struct timespec end)
+{
+    return (double)((end.tv_nsec - start.tv_nsec) / 1000.0 + (end.tv_sec - start.tv_sec) * 1000000.0);
+}
+
+static inline void check_timeout(struct timespec start, double timeout_us)
+{
+    struct timespec now;
+    double time_used_us;
+    if (timeout_us > 0) {
+        clock_gettime(MYCLOCK, &now);
+        time_used_us = time_diff(start, now);
+        if (time_used_us > timeout_us) {
+            cerr << "ERROR: TIMEOUT!!!" << endl;
+            ASSERTDRV(cuStreamQuery(0));
+            abort();
+        }
+    }
 }
 
 int main(int argc, char *argv[])
@@ -80,13 +105,14 @@ int main(int argc, char *argv[])
 
     struct timespec beg, end;
     double lat_us;
+    double timeout_us;
 
     gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
     gpu_memfree_fn_t gfree_fn = gpu_mem_free;
 
     while(1) {        
         int c;
-        c = getopt(argc, argv, "d:t:a:h");
+        c = getopt(argc, argv, "d:t:u:a:h");
         if (c == -1)
             break;
 
@@ -96,6 +122,9 @@ int main(int argc, char *argv[])
                 break;
             case 't':
                 num_iters = strtol(optarg, NULL, 0);
+                break;
+            case 'u':
+                timeout = strtol(optarg, NULL, 0);
                 break;
             case 'a':
                 if (strcmp(optarg, "cuMemAlloc") == 0) {
@@ -119,6 +148,8 @@ int main(int argc, char *argv[])
                 exit(EXIT_FAILURE);
         }
     }
+
+    timeout_us = timeout * 1000000.0;
 
     ASSERTDRV(cuInit(0));
 
@@ -209,9 +240,14 @@ int main(int argc, char *argv[])
         pp_kernel<<< 1, 1 >>>((uint32_t *)d_buf_cuptr, (uint32_t *)h_buf_cuptr, num_iters);
 
         uint32_t i = 1;
-        while (READ_ONCE(*h_buf) != i) ;
+        // Wait for pp_kernel to be ready before starting the time measurement.
+        clock_gettime(MYCLOCK, &beg);
+        while (READ_ONCE(*h_buf) != i) {
+            check_timeout(beg, timeout_us);
+        }
         LB();
 
+        // Restart the timer for measurement.
         clock_gettime(MYCLOCK, &beg);
         while (i < num_iters) {
             gdr_copy_to_mapping(mh, d_buf, &i, sizeof(d_buf));
@@ -219,15 +255,17 @@ int main(int argc, char *argv[])
 
             ++i;
 
-            while (READ_ONCE(*h_buf) != i) ;
+            while (READ_ONCE(*h_buf) != i) {
+                check_timeout(beg, timeout_us);
+            }
             LB();
         }
         clock_gettime(MYCLOCK, &end);
 
-        ASSERTRT(cudaDeviceSynchronize());
+        ASSERTDRV(cuStreamSynchronize(0));
 
         clock_gettime(MYCLOCK, &end);
-        lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)num_iters;
+        lat_us = time_diff(beg, end) / (double)num_iters;
 
         cout << "Round-trip latency per iteration is " << lat_us << " us" << endl;
 
