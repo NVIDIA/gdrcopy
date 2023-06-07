@@ -241,6 +241,7 @@ int main(int argc, char *argv[])
     cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
 
+    ASSERTDRV(cuMemFreeHost(h_buf));
     ASSERTDRV(gfree_fn(&mhandle));
 
     return 0;
