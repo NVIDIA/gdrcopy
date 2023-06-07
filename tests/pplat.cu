@@ -210,17 +210,17 @@ int main(int argc, char *argv[])
 
         uint32_t i = 1;
         while (READ_ONCE(*h_buf) != i) ;
-        MB();
+        LB();
 
         clock_gettime(MYCLOCK, &beg);
         while (i < num_iters) {
             gdr_copy_to_mapping(mh, d_buf, &i, sizeof(d_buf));
-            MB();
+            SB();
 
             ++i;
 
             while (READ_ONCE(*h_buf) != i) ;
-            MB();
+            LB();
         }
         clock_gettime(MYCLOCK, &end);
 
