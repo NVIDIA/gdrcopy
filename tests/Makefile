@@ -50,7 +50,7 @@ pplat: pplat.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt -lcudart
 
 %.o: %.cu
-	$(NVCC) -o $@ -c $^ $(LIBS)
+	$(NVCC) -o $@ -c $^ $(LIBS) $(CPPFLAGS) $(CXXFLAGS)
 
 clean:
 	rm -f *.o $(EXES) *~ core.*
