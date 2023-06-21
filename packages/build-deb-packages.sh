@@ -22,7 +22,7 @@
 
 # Restart this number at 1 if MAJOR_VERSION or MINOR_VERSION changes
 # See https://www.debian.org/doc/debian-policy/ch-controlfields.html#version
-DEBIAN_VERSION=1
+DEBIAN_VERSION=2
 
 SCRIPT_DIR_PATH="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."
