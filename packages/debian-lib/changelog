@@ -1,4 +1,4 @@
-libgdrapi (@FULL_VERSION@) stable; urgency=low
+libgdrapi (@FULL_VERSION@) @DEBIAN_RELEASE@; urgency=low
 
   * Initial version of libgdrapi package -- was a part of gdrcopy package.
 

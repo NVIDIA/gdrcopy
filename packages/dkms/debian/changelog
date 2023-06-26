@@ -1,4 +1,4 @@
-gdrdrv-dkms (@FULL_VERSION@) unstable; urgency=low
+gdrdrv-dkms (@FULL_VERSION@) @DEBIAN_RELEASE@; urgency=low
 
   * Change the package maintainer to GPUDirect Team.
   * Add Davide Rossetti and Pak Makthub as Uploaders.

@@ -1,4 +1,4 @@
-gdrcopy-tests (@FULL_VERSION@) stable; urgency=low
+gdrcopy-tests (@FULL_VERSION@) @DEBIAN_RELEASE@; urgency=low
 
   * Initial version of gdrcopy-tests package -- was a part of gdrcopy package.
   * Add apiperf test.

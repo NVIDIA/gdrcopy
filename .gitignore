@@ -23,3 +23,11 @@
 # Editor files
 *~
 *.swp
+
+# Debian packages
+packages/*.deb
+packages/*.debian.tar.xz
+packages/*.dsc
+packages/*.orig.tar.gz
+packages/*.changes
+packages/*.buildinfo

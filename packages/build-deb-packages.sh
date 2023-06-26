@@ -23,6 +23,7 @@
 # Restart this number at 1 if MAJOR_VERSION or MINOR_VERSION changes
 # See https://www.debian.org/doc/debian-policy/ch-controlfields.html#version
 DEBIAN_VERSION=1
+DEBIAN_RELEASE=unstable
 
 SCRIPT_DIR_PATH="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."
@@ -32,6 +33,9 @@ CWD=$(pwd)
 skip_dep_check=0
 build_test_package=1
 build_driver_package=1
+keep_deb_filenames=0
+
+git_commit_date=""
 
 ex()
 {
@@ -48,19 +52,22 @@ ex()
 
 function show_help
 {
-    echo "Usage: [CUDA=<path>] $0 [-d] [-t] [-k] [-h]"
+    echo "Usage: [CUDA=<path>] $0 [-d] [-t] [-k] [-O] [-g] [-R <release>]  [-h]"
     echo ""
     echo "  CUDA=<path>     Set your installed CUDA path (ex. /usr/local/cuda)."
     echo "  -d              Don't check build dependencies. Use my environment variables such as C_INCLUDE_PATH instead."
     echo "  -t              Skip building gdrcopy-tests package."
     echo "  -k              Skip building gdrdrv-dkms package."
+    echo "  -O              Keep original package filenames."
+    echo "  -g              Include date of latest git commit in version number."
+    echo "  -R <release>    Set debian release in changelog, dsc and changes files. (Default: unstable)"
     echo "  -h              Show this help text."
     echo ""
 }
 
 OPTIND=1	# Reset in case getopts has been used previously in the shell.
 
-while getopts "hdtk" opt; do
+while getopts "hdtkOgR:" opt; do
     case "${opt}" in
     h)
         show_help
@@ -71,6 +78,12 @@ while getopts "hdtk" opt; do
     t)  build_test_package=0
         ;;
     k)  build_driver_package=0
+        ;;
+    O)  keep_deb_filenames=1
+        ;;
+    g)  git_commit_date=$(git show -s --format='%cd' --date='format:%Y%m%d%H%M%S' 2>/dev/null)
+        ;;
+    R)  DEBIAN_RELEASE=$OPTARG
         ;;
     esac
 done
@@ -96,7 +109,7 @@ MODULE_SUBDIR=$(awk '/MODULE_SUBDIR \?=/ { print $3 }' ${TOP_DIR_PATH}/src/gdrdr
 
 MAJOR_VERSION=$(awk '/#define GDR_API_MAJOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
 MINOR_VERSION=$(awk '/#define GDR_API_MINOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
-VERSION="${MAJOR_VERSION}.${MINOR_VERSION}"
+VERSION="${MAJOR_VERSION}.${MINOR_VERSION}${git_commit_date:++git$git_commit_date}"
 if [ "X$VERSION" == "X" ]; then
     echo "Failed to get version numbers!" >&2
     exit 1
@@ -128,6 +141,7 @@ ex cp README.md ${tmpdir}/gdrcopy/debian-tests/README.source
 ex cd ${tmpdir}/gdrcopy
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
+ex find . -type f -exec sed -i "s/@DEBIAN_RELEASE@/${DEBIAN_RELEASE}/g" {} +
 
 ex rm -f ${tmpdir}/libgdrapi_${VERSION}.orig.tar.gz
 ex rm -f ${tmpdir}/gdrcopy-tests_${VERSION}.orig.tar.gz
@@ -189,6 +203,7 @@ if [[ ${build_driver_package} == 1 ]]; then
     ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
     ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
     ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
+    ex find . -type f -exec sed -i "s/@DEBIAN_RELEASE@/${DEBIAN_RELEASE}/g" {} +
 
     ex cd ${tmpdir}
     ex tar czvf gdrdrv-dkms_${VERSION}.orig.tar.gz gdrdrv-dkms-${VERSION}
@@ -209,6 +224,7 @@ ex cd ${metadir}
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
+ex find . -type f -exec sed -i "s/@DEBIAN_RELEASE@/${DEBIAN_RELEASE}/g" {} +
 ex cd ${tmpdir}
 ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
 cd ${metadir}
@@ -228,16 +244,20 @@ ex cd ${CWD}
 
 for item in `ls ${tmpdir}/*.deb`; do
     item_name=`basename $item`
-    item_name=`echo $item_name | sed -e "s/\.deb//g"`
-    if echo "$item_name" | grep -q "tests"; then
-        item_name="${item_name}${release}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.deb"
-    else
-        item_name="${item_name}${release}.deb"
+    if [ $keep_deb_filenames = 0 ] ; then
+        item_name=`echo $item_name | sed -e "s/\.deb//g"`
+        if echo "$item_name" | grep -q "tests"; then
+            item_name="${item_name}${release}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.deb"
+        else
+            item_name="${item_name}${release}.deb"
+        fi
     fi
     ex cp $item ./${item_name}
 done
 ex cp ${tmpdir}/*.tar.* .
 ex cp ${tmpdir}/*.dsc .
+ex cp ${tmpdir}/*.changes .
+ex cp ${tmpdir}/*.buildinfo .
 
 echo
 echo "Cleaning up ..."

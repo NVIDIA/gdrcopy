@@ -1,4 +1,4 @@
-gdrcopy (@FULL_VERSION@) stable; urgency=low
+gdrcopy (@FULL_VERSION@) @DEBIAN_RELEASE@; urgency=low
 
   * Convert to meta package.
   * Declare dependency with gdrdrv-dkms, libgdrapi, and gdrcopy-tests.

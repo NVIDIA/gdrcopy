@@ -57,7 +57,7 @@ lib: $(LIB)
 $(LIBOBJS): CFLAGS+=-fPIC
 $(LIB): $(LIBOBJS)
 	$(CC) -shared -Wl,-soname,$(LIB_SONAME) -o $@ $^
-	ldconfig -n $(PWD)
+	# ldconfig -n $(PWD)
 	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME)
 	ln -sf $(LIB_SONAME) $(LIB_BASENAME)
 
