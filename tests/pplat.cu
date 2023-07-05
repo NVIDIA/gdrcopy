@@ -55,7 +55,10 @@ __global__ void pp_kernel(uint32_t *d_buf, uint32_t *h_buf, uint32_t num_iters)
 
 static int dev_id = 0;
 static uint32_t num_iters = 1000;
-static unsigned int timeout = 0;  // in s
+static unsigned int timeout = 10;  // in s
+// Counter value before checking timeout.
+static unsigned long int timeout_check_threshold = 1000000UL;
+static unsigned long int timeout_counter = 0;
 
 static void print_usage(const char *path)
 {
@@ -85,14 +88,18 @@ static inline void check_timeout(struct timespec start, double timeout_us)
     struct timespec now;
     double time_used_us;
     if (timeout_us > 0) {
-        clock_gettime(MYCLOCK, &now);
-        time_used_us = time_diff(start, now);
-        if (time_used_us > timeout_us) {
-            cerr << "ERROR: TIMEOUT!!!" << endl;
-            status = cuStreamQuery(0);
-            cuGetErrorName(status, &cu_status_name);
-            cerr << "cuStreamQuery(0) returned " << cu_status_name << endl;
-            abort();
+        ++timeout_counter;
+        if (timeout_counter >= timeout_check_threshold) {
+            clock_gettime(MYCLOCK, &now);
+            time_used_us = time_diff(start, now);
+            if (time_used_us > timeout_us) {
+                cerr << "ERROR: TIMEOUT!!!" << endl;
+                status = cuStreamQuery(0);
+                cuGetErrorName(status, &cu_status_name);
+                cerr << "cuStreamQuery(0) returned " << cu_status_name << endl;
+                abort();
+            }
+            timeout_counter = 0;
         }
     }
 }
