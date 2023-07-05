@@ -80,6 +80,8 @@ static inline double time_diff(struct timespec start, struct timespec end)
 
 static inline void check_timeout(struct timespec start, double timeout_us)
 {
+    CUresult status;
+    const char *cu_status_name;
     struct timespec now;
     double time_used_us;
     if (timeout_us > 0) {
@@ -87,7 +89,9 @@ static inline void check_timeout(struct timespec start, double timeout_us)
         time_used_us = time_diff(start, now);
         if (time_used_us > timeout_us) {
             cerr << "ERROR: TIMEOUT!!!" << endl;
-            ASSERTDRV(cuStreamQuery(0));
+            status = cuStreamQuery(0);
+            cuGetErrorName(status, &cu_status_name);
+            cerr << "cuStreamQuery(0) returned " << cu_status_name << endl;
             abort();
         }
     }
@@ -238,6 +242,12 @@ int main(int argc, char *argv[])
         cout << "Running " << num_iters << " iterations with data size " << sizeof(*d_buf) << " bytes." << endl;
 
         pp_kernel<<< 1, 1 >>>((uint32_t *)d_buf_cuptr, (uint32_t *)h_buf_cuptr, num_iters);
+
+        // Catching any potential errors. CUDA_ERROR_NOT_READY means pp_kernel
+        // is running. We expect to see this status than CUDA_SUCCESS because
+        // pp_kernel must wait for signal from CPU, which occurs after this
+        // line.
+        ASSERT_EQ(cuStreamQuery(0), CUDA_ERROR_NOT_READY);
 
         uint32_t i = 1;
         // Wait for pp_kernel to be ready before starting the time measurement.
