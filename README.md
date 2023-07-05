@@ -39,6 +39,7 @@ The library comes with a few tests like:
 - gdrcopy_copybw, a minimal application which calculates the R/W bandwidth for a specific buffer size.
 - gdrcopy_copylat, a benchmark application which calculates the R/W copy latency for a range of buffer sizes.
 - gdrcopy_apiperf, an application for benchmarking the latency of each GDRCopy API call.
+- gdrcopy_pplat, a benchmark application which calculates the round-trip ping-pong latency between GPU and CPU.
 
 ## Requirements
 
@@ -282,6 +283,28 @@ Histogram of gdr_pin_buffer latency for 65536 bytes
 [11734.668000   -   13038.520000]   0
 [13038.520000   -   14342.372000]   2
 
+closing gdrdrv
+
+
+
+$ numactl -N 1 -l pplat
+GPU id:0; name: NVIDIA A40; Bus id: 0000:09:00
+selecting device 0
+device ptr: 0x7f99d2600000
+gpu alloc fn: cuMemAlloc
+map_d_ptr: 0x7f9a054fb000
+info.va: 7f99d2600000
+info.mapped_size: 4
+info.page_size: 65536
+info.mapped: 1
+info.wc_mapping: 1
+page offset: 0
+user-space pointer: 0x7f9a054fb000
+CPU does gdr_copy_to_mapping and GPU writes back via cuMemHostAlloc'd buffer.
+Running 1000 iterations with data size 4 bytes.
+Round-trip latency per iteration is 1.08762 us
+unmapping buffer
+unpinning buffer
 closing gdrdrv
 ```
 
