@@ -160,6 +160,8 @@ if [ -f "/etc/redhat-release" ]; then
     release_version=".el$(cat /etc/redhat-release | grep -o -E '[0-9]+' | head -1)"
 elif [ -f "/etc/centos-release" ]; then
     release_version=".el$(cat /etc/centos-release | grep -o -E '[0-9]+' | head -1)"
+elif [ -f "/etc/os-release" ]; then
+    release_version=$(source /etc/os-release && echo ".$ID-$VERSION_ID")
 else
     release_version="unknown_distro"
 fi
