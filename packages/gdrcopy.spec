@@ -150,9 +150,20 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/Makefile $RPM_BUILD_ROOT%{usr
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/nv-p2p-dummy.c $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
 
+%if 0%{!?suse_version:1}
 # Install gdrdrv service script
 install -d $RPM_BUILD_ROOT/etc/init.d
 install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
+%else
+mkdir -p $RPM_BUILD_ROOT/etc/modprobe.d
+cat <<"EOF" > $RPM_BUILD_ROOT/etc/modprobe.d/50-gdrdrv.conf
+#options gdrdrv dbg_enabled=1
+#options info_enabled=1
+install gdrdrv PATH=$PATH:/bin:/usr/bin; /sbin/modprobe --ignore-install gdrdrv $CMDLINE_OPTS && rm -f /dev/gdrdrv && mknod -m 660 /dev/gdrdrv c $(gawk '/gdrdrv/{printf"%%s",$1}' /proc/devices) 0 && chgrp video /dev/gdrdrv
+remove gdrdrv PATH=$PATH:/bin:/usr/bin; /sbin/modprobe --remove --ignore-remove gdrdrv && rm -f /dev/gdrdrv
+EOF
+chmod 0644 $RPM_BUILD_ROOT/etc/modprobe.d/50-gdrdrv.conf
+%endif
 
 %post %{dkms}
 if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
@@ -272,7 +283,11 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %files %{dkms}
 %defattr(-,root,root,-)
+%if 0%{!?suse_version:1}
 /etc/init.d/gdrcopy
+%else
+/etc/modprobe.d/50-gdrdrv.conf
+%endif
 %{usr_src_dir}/gdrdrv-%{version}/gdrdrv.c
 %{usr_src_dir}/gdrdrv-%{version}/gdrdrv.h
 %{usr_src_dir}/gdrdrv-%{version}/Makefile
@@ -283,7 +298,11 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %if %{BUILD_KMOD} > 0
 %files %{kmod_fullname}
 %defattr(-,root,root,-)
+%if 0%{!?suse_version:1}
 /etc/init.d/gdrcopy
+%else
+/etc/modprobe.d/50-gdrdrv.conf
+%endif
 %{old_driver_install_dir}/gdrdrv.ko
 %endif
 
