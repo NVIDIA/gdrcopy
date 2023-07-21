@@ -18,7 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-NVIDIA_SRC_DIR ?= $(shell find /usr/src/nvidia-* -name "nv-p2p.h"|head -1|xargs dirname || echo "NVIDIA_DRIVER_MISSING")
+NVIDIA_SRC_DIR ?= $(shell { find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.h" -print -quit | xargs dirname || echo "NVIDIA_DRIVER_MISSING"; } 2>/dev/null)
 
 ifneq ($(KERNELRELEASE),)
 
