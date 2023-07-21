@@ -168,12 +168,13 @@ fi
 echo $srpm $rpms
 ex cd ${CWD}
 for item in `ls $tmpdir/topdir/SRPMS/*.rpm $tmpdir/topdir/RPMS/*/*.rpm`; do
-    item_name=`basename $item`
-    item_name=`echo $item_name | sed -e "s/\.rpm//g"`
+    item_name=`basename $item .rpm`
+    arch=$(sed -ne 's/.*\(\.[^\.]\+\)$/\1/p' <<< $item_name)
+    item_name=`basename $item_name $arch`
     if [ "$item_name" == "gdrcopy-${FULL_VERSION}-${RPM_VERSION}.`uname -m`" ]; then
-        item_name="${item_name}${release_version}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.rpm"
+        item_name="${item_name}${release_version}+cuda${CUDA_MAJOR}.${CUDA_MINOR}.${arch}.rpm"
     else
-        item_name="${item_name}${release_version}.rpm"
+        item_name="${item_name}${release_version}${arch}.rpm"
     fi
     ex cp $item ./${item_name}
 done
