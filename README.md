@@ -51,7 +51,8 @@ The device driver requires GPU display driver >= 418.40 on ppc64le and >= 331.14
 require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
 subunit.
 
-DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL,
+DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL
+or SLE,
 however, users have an option to build kmod and install it instead of the DKMS
 package. See [Build and installation](#build-and-installation) section for more details.
 
@@ -62,6 +63,10 @@ $ sudo yum install dkms check check-devel subunit subunit-devel
 
 # On Debian
 $ sudo apt install check libsubunit0 libsubunit-dev
+
+# On SLE / Leap
+# On SLE dkms can be installed from PackageHub.
+$ sudo zypper install dkms check-devel rpmbuild
 ```
 
 CUDA and GPU display driver must be installed before building and/or installing GDRCopy.
@@ -72,9 +77,11 @@ of the driver (or CUDA) installation with  *runfile*. If you install the driver
 via package management, we suggest
 - On RHEL, `sudo dnf module install nvidia-driver:latest-dkms`.
 - On Debian, `sudo apt install nvidia-dkms-<your-nvidia-driver-version>`.
+- On SLE, `sudo zypper install nvidia-gfx<your-nvidia-driver-version>-kmp`.
 
 The supported architectures are Linux x86_64, ppc64le, and arm64. The supported
-platforms are RHEL7, RHEL8, Ubuntu16_04, Ubuntu18_04, and Ubuntu20_04.
+platforms are RHEL7, RHEL8, Ubuntu16_04, Ubuntu18_04, Ubuntu20_04,
+SLE-15 (any SP) and Leap 15.x.
 
 Root privileges are necessary to load/install the kernel-mode device
 driver.
@@ -87,8 +94,13 @@ We provide three ways for building and installing GDRCopy.
 ### rpm package
 
 ```shell
+# For RHEL:
 $ sudo yum groupinstall 'Development Tools'
 $ sudo yum install dkms rpm-build make check check-devel subunit subunit-devel
+
+# For SLE:
+$ sudo zypper in dkms rpmbuild check-devel
+
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
 $ sudo rpm -Uvh gdrcopy-kmod-<version>dkms.noarch.<platform>.rpm
