@@ -35,9 +35,10 @@ A simple by-product of it is a copy library with the following characteristics:
   PCIE
 
 The library comes with a few tests like:
-- sanity, which contains unit tests for the library and the driver.
-- copybw, a minimal application which calculates the R/W bandwidth for a specific buffer size.
-- copylat, a benchmark application which calculates the R/W copy latency for a range of buffer sizes.
+- gdrcopy_sanity, which contains unit tests for the library and the driver.
+- gdrcopy_copybw, a minimal application which calculates the R/W bandwidth for a specific buffer size.
+- gdrcopy_copylat, a benchmark application which calculates the R/W copy latency for a range of buffer sizes.
+- gdrcopy_apiperf, an application for benchmarking the latency of each GDRCopy API call.
 
 ## Requirements
 
@@ -48,7 +49,7 @@ please refer to the official GPUDirect RDMA [design
 document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 
 The device driver requires GPU display driver >= 418.40 on ppc64le and >= 331.14 on other platforms. The library and tests
-require CUDA >= 6.0. Additionally, the _sanity_ test requires check >= 0.9.8 and
+require CUDA >= 6.0. Additionally, the `gdrcopy_sanity` test requires check >= 0.9.8 and
 subunit.
 
 DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL,
@@ -133,12 +134,12 @@ $ PKG_CONFIG_PATH=/check_install_path/lib/pkgconfig/ make <...>
 
 Execute provided tests:
 ```shell
-$ sanity 
+$ gdrcopy_sanity
 Running suite(s): Sanity
 100%: Checks: 27, Failures: 0, Errors: 0
 
 
-$ copybw
+$ gdrcopy_copybw
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
@@ -169,7 +170,7 @@ unpinning buffer
 closing gdrdrv
 
 
-$ copylat
+$ gdrcopy_copylat
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
@@ -254,7 +255,7 @@ unpinning buffer
 closing gdrdrv
 
 
-$ apiperf -s 8
+$ gdrcopy_apiperf -s 8
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
@@ -296,7 +297,7 @@ CPU socket 0. By explicitly playing with the OS process and memory
 affinity, it is possible to run the test onto the optimal processor:
 
 ```shell
-$ numactl -N 0 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
+$ numactl -N 0 -l gdrcopy_copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
@@ -329,7 +330,7 @@ closing gdrdrv
 
 or on the other socket:
 ```shell
-$ numactl -N 1 -l copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
+$ numactl -N 1 -l gdrcopy_copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
 GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
 GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
 GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
