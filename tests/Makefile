@@ -46,7 +46,7 @@ gdrcopy_copylat: copylat.o common.o
 gdrcopy_apiperf: apiperf.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
-pplat: pplat.o common.o
+gdrcopy_pplat: pplat.o common.o
 	$(LINK.cc)  -o $@ $^ -lcudart_static $(LIBS) -lrt
 
 %.o: %.cu
