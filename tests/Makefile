@@ -1,5 +1,6 @@
 DESTBIN ?= 
 CUDA ?= /usr/local/cuda
+NVCC ?= $(CUDA)/bin/nvcc
 
 # note that pkg-config respects PKG_CONFIG_PATH, which can be used
 # to pick libcheck from a user-defined path
@@ -19,8 +20,9 @@ CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
 LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
-SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
-EXES := $(patsubst %.cpp,gdrcopy_%,$(SRCS))
+CPP_SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
+CU_SRCS  := pplat.cu
+EXES := $(patsubst %.cpp,gdrcopy_%,$(CPP_SRCS)) $(patsubst %.cu,gdrcopy_%,$(CU_SRCS))
 
 all: exes
 
@@ -44,6 +46,12 @@ gdrcopy_copylat: copylat.o common.o
 gdrcopy_apiperf: apiperf.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
+gdrcopy_pplat: pplat.o common.o
+	$(LINK.cc)  -o $@ $^ -lcudart_static $(LIBS) -lrt
+
+%.o: %.cu
+	$(NVCC) -o $@ -c $^ $(LIBS) $(CPPFLAGS) $(CXXFLAGS)
+
 clean:
 	rm -f *.o $(EXES) *~ core.*
 
@@ -53,7 +61,8 @@ install: exes
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_copybw -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_copylat -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_apiperf -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_sanity -t $(DESTBIN)
+	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_sanity -t $(DESTBIN) && \
+	install -D -v -m u=rwx,g=rx,o=rx pplat -T $(DESTBIN)/gdrcopy_pplat
 	cd $(DESTBIN) && \
 	ln -sf gdrcopy_copybw copybw && \
 	ln -sf gdrcopy_copylat copylat && \

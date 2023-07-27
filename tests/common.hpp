@@ -29,16 +29,37 @@
 #include <check.h>
 #include <map>
 #include <gdrapi.h>
+#include <gdrconfig.h>
+
+#ifndef ACCESS_ONCE
+#define ACCESS_ONCE(x)      (*(volatile typeof((x)) *)&(x))
+#endif
+
+#ifndef READ_ONCE
+#define READ_ONCE(x)        ACCESS_ONCE(x)
+#endif
+
+#ifndef WRITE_ONCE
+#define WRITE_ONCE(x, v)    (ACCESS_ONCE(x) = (v))
+#endif
 
 /**
  * Memory barrier
  */
 #if defined(GDRAPI_X86)
 #define MB() asm volatile("mfence":::"memory")
+#define SB() asm volatile("sfence":::"memory")
+#define LB() asm volatile("lfence":::"memory")
 #elif defined(GDRAPI_POWER)
 #define MB() asm volatile("sync":::"memory")
+#define SB() MB()
+#define LB() MB()
+#elif defined(GDRAPI_ARM64)
+#define MB() asm volatile("dmb sy":::"memory")
+#define SB() asm volatile("dmb st":::"memory")
+#define LB() MB()
 #else
-#define MB() asm volatile("":::"memory")
+#error "Compiling on an unsupported architecture."
 #endif
 
 /**
