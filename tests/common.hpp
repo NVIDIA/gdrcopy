@@ -59,9 +59,7 @@
 #define SB() asm volatile("dmb st":::"memory")
 #define LB() MB()
 #else
-#define MB() asm volatile("":::"memory")
-#define SB() MB()
-#define LB() MB()
+#error "Compiling on an unsupported architecture."
 #endif
 
 /**
