@@ -251,9 +251,9 @@ int main(int argc, char *argv[])
         pp_kernel<<< 1, 1 >>>((uint32_t *)d_buf_cuptr, (uint32_t *)h_buf_cuptr, num_iters);
 
         // Catching any potential errors. CUDA_ERROR_NOT_READY means pp_kernel
-        // is running. We expect to see this status than CUDA_SUCCESS because
-        // pp_kernel must wait for signal from CPU, which occurs after this
-        // line.
+        // is running. We expect to see this status instead of CUDA_SUCCESS
+        // because pp_kernel must wait for signal from CPU, which occurs after
+        // this line.
         ASSERT_EQ(cuStreamQuery(0), CUDA_ERROR_NOT_READY);
 
         uint32_t i = 1;
