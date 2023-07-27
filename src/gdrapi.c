@@ -165,7 +165,7 @@ gdr_t gdr_open(void)
     g->page_shift = -1;
     while (ps_tmp > 0) {
         ++g->page_shift;
-        if (ps_tmp & 0x1 == 1)
+        if ((ps_tmp & 0x1) == 1)
             break;
         ps_tmp >>= 1;
     }
