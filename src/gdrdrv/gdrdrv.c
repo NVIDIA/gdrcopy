@@ -146,10 +146,11 @@ static inline int gdr_pfn_is_ram(unsigned long pfn)
 {
     // catch platforms, e.g. POWER8, POWER9 with GPUs not attached via NVLink,
     // where GPU memory is non-coherent
-#if 0
-    // unfortunately this module is MIT, and page_is_ram is GPL-only.
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+    // page_is_ram is a GPL symbol. We can use it with the open flavor of NVIDIA driver.
     return page_is_ram(pfn);
 #else
+    // For the proprietary flavor, we approximate using the following algorithm.
     unsigned long start = pfn << PAGE_SHIFT;
     unsigned long mask_47bits = (1UL<<47)-1;
     return gdrdrv_cpu_can_cache_gpu_mappings && (0 == (start & ~mask_47bits));
@@ -167,10 +168,13 @@ static inline pgprot_t pgprot_modify_device(pgprot_t old_prot)
 }
 static inline int gdr_pfn_is_ram(unsigned long pfn)
 {
-    // page_is_ram is GPL-only. Regardless there are no ARM64
-    // platforms supporting coherent GPU mappings, so we would not use
-    // this function anyway.
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+    // page_is_ram is a GPL symbol. We can use it with the open flavor.
+    return page_is_ram(pfn);
+#else
+    // For the proprietary flavor of NVIDIA driver, we use WC mapping.
     return 0;
+#endif
 }
 
 #else
@@ -215,6 +219,12 @@ static inline int gdr_pfn_is_ram(unsigned long pfn)
     NVIDIA_P2P_VERSION_COMPATIBLE(p, NVIDIA_P2P_PAGE_TABLE_VERSION)
 #endif
 
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+#define GDRDRV_BUILT_FOR_NVIDIA_FLAVOR_STRING "opensource"
+#else
+#define GDRDRV_BUILT_FOR_NVIDIA_FLAVOR_STRING "proprietary"
+#endif
+
 //-----------------------------------------------------------------------------
 
 #define DEVNAME "gdrdrv"
@@ -242,8 +252,8 @@ static int info_enabled = 0;
 //-----------------------------------------------------------------------------
 
 MODULE_AUTHOR("drossetti@nvidia.com");
-MODULE_LICENSE("MIT");
-MODULE_DESCRIPTION("GDRCopy kernel-mode driver");
+MODULE_LICENSE("Dual MIT/GPL");
+MODULE_DESCRIPTION("GDRCopy kernel-mode driver built for " GDRDRV_BUILT_FOR_NVIDIA_FLAVOR_STRING " NVIDIA driver");
 MODULE_VERSION(GDRDRV_VERSION_STRING);
 module_param(dbg_enabled, int, 0000);
 MODULE_PARM_DESC(dbg_enabled, "enable debug tracing");
@@ -657,7 +667,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
     }
     memset(mr, 0, sizeof(*mr));
 
-    // do proper alignment, as required by RM
+    // do proper alignment, as required by NVIDIA driver.
     page_virt_start  = addr & GPU_PAGE_MASK;
     page_virt_end    = addr + size - 1;
     rounded_size     = page_virt_end - page_virt_start + 1;
@@ -1082,17 +1092,23 @@ static const struct vm_operations_struct gdrdrv_vm_ops = {
 /**
  * Starting from kernel version 5.18-rc1, io_remap_pfn_range may use a GPL
  * function. This happens on x86 platforms that have
- * CONFIG_ARCH_HAS_CC_PLATFORM defined. The root cause is from
- * pgprot_decrypted implementation that has been changed to use cc_mkdec. To
- * avoid the GPL-incompatibility issue with our module, which is MIT, we
- * emulate how io_remap_pfn_range originally works here.
+ * CONFIG_ARCH_HAS_CC_PLATFORM defined. The root cause is from pgprot_decrypted
+ * implementation that has been changed to use cc_mkdec. To avoid the
+ * GPL-incompatibility issue with the proprietary flavor of NVIDIA driver, we
+ * reimplement io_remap_pfn_range according to the Linux kernel 5.17.15, which
+ * predates support for Intel CC.
  */
 static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
 {
-#if (defined(CONFIG_X86_64) || defined(CONFIG_X86_32)) && IS_ENABLED(CONFIG_ARCH_HAS_CC_PLATFORM)
-    return remap_pfn_range(vma, vaddr, pfn, size, __pgprot(__sme_clr(pgprot_val(prot))));
-#else
+#if defined(GDRDRV_OPENSOURCE_NVIDIA) || !((defined(CONFIG_X86_64) || defined(CONFIG_X86_32)) && IS_ENABLED(CONFIG_ARCH_HAS_CC_PLATFORM))
     return io_remap_pfn_range(vma, vaddr, pfn, size, prot);
+#else
+
+#ifndef CONFIG_AMD_MEM_ENCRYPT
+#warning "CC is not fully functional in gdrdrv with the proprietary flavor of NVIDIA driver on Intel CPU. Use the open-source flavor if you want full support."
+#endif
+
+    return remap_pfn_range(vma, vaddr, pfn, size, __pgprot(__sme_clr(pgprot_val(prot))));
 #endif
 }
 
@@ -1343,6 +1359,7 @@ static int __init gdrdrv_init(void)
     }
     if (gdrdrv_major == 0) gdrdrv_major = result; /* dynamic */
 
+    gdr_msg(KERN_INFO, "loading gdrdrv version %s built for %s NVIDIA driver\n", GDRDRV_VERSION_STRING, GDRDRV_BUILT_FOR_NVIDIA_FLAVOR_STRING);
     gdr_msg(KERN_INFO, "device registered with major number %d\n", gdrdrv_major);
     gdr_msg(KERN_INFO, "dbg traces %s, info traces %s", dbg_enabled ? "enabled" : "disabled", info_enabled ? "enabled" : "disabled");
 
@@ -1354,10 +1371,14 @@ static int __init gdrdrv_init(void)
         // verify that all GPUs are connected through those
         gdrdrv_cpu_can_cache_gpu_mappings = 1;
     }
+#elif defined(CONFIG_ARM64)
+    // Grace-Hopper supports CPU cached mapping. But this feature might be disabled at runtime.
+    // gdrdrv_pin_buffer will do the right thing.
+    gdrdrv_cpu_can_cache_gpu_mappings = 1;
 #endif
 
     if (gdrdrv_cpu_can_cache_gpu_mappings)
-        gdr_msg(KERN_INFO, "enabling use of CPU cached mappings\n");
+        gdr_msg(KERN_INFO, "The platform may support CPU cached mappings. Decision to use cached mappings is left to the pinning function.\n");
 
 #if defined(CONFIG_ARM64)
     {

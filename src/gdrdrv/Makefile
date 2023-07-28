@@ -19,6 +19,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 NVIDIA_SRC_DIR ?= $(shell find /usr/src/nvidia-* -name "nv-p2p.h"|head -1|xargs dirname || echo "NVIDIA_DRIVER_MISSING")
+NVIDIA_IS_OPENSOURCE ?= $(shell grep -q "MODULE_LICENSE(\"Dual MIT/GPL\")" $(NVIDIA_SRC_DIR)/nv-frontend.c && echo "y")
 
 ifneq ($(KERNELRELEASE),)
 
@@ -28,6 +29,10 @@ obj-m := nv-p2p-dummy.o
 obj-m += gdrdrv.o
 
 ccflags-y += -I$(NVIDIA_SRC_DIR)
+
+ifeq ($(NVIDIA_IS_OPENSOURCE),y)
+ccflags-y += -DGDRDRV_OPENSOURCE_NVIDIA
+endif
 
 else
 
@@ -47,6 +52,7 @@ all: build
 
 build:
 	@ echo "Picking NVIDIA driver sources from NVIDIA_SRC_DIR=$(NVIDIA_SRC_DIR). If that does not meet your expectation, you might have a stale driver still around and that might cause problems."
+	@ echo "Setting NVIDIA_IS_OPENSOURCE=$(NVIDIA_IS_OPENSOURCE)"
 	@ $(MAKE) -C $(KDIR) $(MAKE_PARAMS) M=$(PWD) modules
 
 install: build

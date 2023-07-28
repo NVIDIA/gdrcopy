@@ -131,6 +131,25 @@ down to make:
 $ PKG_CONFIG_PATH=/check_install_path/lib/pkgconfig/ make <...>
 ```
 
+### Notes
+
+Compiling the gdrdrv driver requires the NVIDIA driver source code, which is typically installed at
+`/usr/src/nvidia-<version>`. Our make file automatically detects and picks that source code. In case there are multiple
+versions installed, it is possible to pass the correct path by defining the NVIDIA_SRC_DIR variable, e.g. `export
+NVIDIA_SRC_DIR=/usr/src/nvidia-520.61.05/nvidia` before building the gdrdrv module.
+
+There are two major flavors of NVIDIA driver: 1) proprietary, and 2)
+[opensource](https://developer.nvidia.com/blog/nvidia-releases-open-source-gpu-kernel-modules/). We detect the flavor
+when compiling gdrdrv based on the source code of the NVIDIA driver. Different flavors come with different features and
+restrictions:
+- gdrdrv compiled with the opensource flavor will provide functionality and high performance on all platforms. However,
+  you will not be able to load this gdrdrv driver when the proprietary NVIDIA driver is loaded.
+- gdrdrv compiled with the proprietary flavor can always be loaded regardless of the flavor of NVIDIA driver you have
+  loaded. However, it may have suboptimal performance on coherent platforms such as Grace-Hopper. Functionally, it will not
+  work correctly on Intel CPUs with Linux kernel built with confidential compute (CC) support, i.e.
+  `CONFIG_ARCH_HAS_CC_PLATFORM=y`, *WHEN* CC is enabled at runtime.
+
+
 ## Tests
 
 Execute provided tests:
