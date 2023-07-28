@@ -62,7 +62,7 @@ install: exes
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_copylat -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_apiperf -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_sanity -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx pplat -T $(DESTBIN)/gdrcopy_pplat
+	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_pplat -t $(DESTBIN)
 	cd $(DESTBIN) && \
 	ln -sf gdrcopy_copybw copybw && \
 	ln -sf gdrcopy_copylat copylat && \
