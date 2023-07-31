@@ -18,6 +18,7 @@ LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64 -L $(GDRAPI_SRC)
 COMMONCFLAGS := -O2
 CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
+CUFLAGS  ?=
 LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
 CPP_SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
@@ -50,7 +51,7 @@ gdrcopy_pplat: pplat.o common.o
 	$(LINK.cc)  -o $@ $^ -lcudart_static $(LIBS) -lrt
 
 %.o: %.cu
-	$(NVCC) -o $@ -c $^ $(LIBS) $(CPPFLAGS) $(CXXFLAGS)
+	$(NVCC) -o $@ -c $^ $(LIBS) $(CPPFLAGS) $(CUFLAGS)
 
 clean:
 	rm -f *.o $(EXES) *~ core.*
