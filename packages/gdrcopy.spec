@@ -272,6 +272,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %files devel
 %{_prefix}/include/gdrapi.h
+%{_prefix}/include/gdrconfig.h
 %doc README.md
 
 
