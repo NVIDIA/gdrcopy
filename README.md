@@ -287,7 +287,7 @@ closing gdrdrv
 
 
 
-$ numactl -N 1 -l pplat
+$ numactl -N 1 -l gdrcopy_pplat
 GPU id:0; name: NVIDIA A40; Bus id: 0000:09:00
 selecting device 0
 device ptr: 0x7f99d2600000
