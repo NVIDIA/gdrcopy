@@ -18,6 +18,7 @@ LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64 -L $(GDRAPI_SRC)
 COMMONCFLAGS := -O2
 CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
+NVCCFLAGS ?=
 LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
 CPP_SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
@@ -47,10 +48,10 @@ gdrcopy_apiperf: apiperf.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
 gdrcopy_pplat: pplat.o common.o
-	$(LINK.cc)  -o $@ $^ -lcudart_static $(LIBS) -lrt
+	$(NVCC)  -o $@ $^ $(LDFLAGS) -lgdrapi -lcuda
 
 %.o: %.cu
-	$(NVCC) -o $@ -c $^ $(LIBS) $(CPPFLAGS) $(CXXFLAGS)
+	$(NVCC) -o $@ -c $^ $(LIBS) $(CPPFLAGS) $(NVCCFLAGS)
 
 clean:
 	rm -f *.o $(EXES) *~ core.*
@@ -62,7 +63,7 @@ install: exes
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_copylat -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_apiperf -t $(DESTBIN) && \
 	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_sanity -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx pplat -T $(DESTBIN)/gdrcopy_pplat
+	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_pplat -t $(DESTBIN)
 	cd $(DESTBIN) && \
 	ln -sf gdrcopy_copybw copybw && \
 	ln -sf gdrcopy_copylat copylat && \
