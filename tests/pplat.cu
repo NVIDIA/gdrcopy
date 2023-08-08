@@ -41,15 +41,18 @@ __global__ void pp_kernel(uint32_t *d_buf, uint32_t *h_buf, uint32_t num_iters)
 {
     uint32_t i = 1;
     WRITE_ONCE(*h_buf, i);
-    __threadfence_block();
+    __threadfence_system();
     while (i < num_iters) {
-        while (READ_ONCE(*d_buf) != i) ;
-        __threadfence_block();
+        uint32_t val;
+        do {
+            val = READ_ONCE(*d_buf);
+        }
+        while (val != i);
 
-        ++i;
+        ++val;
+        WRITE_ONCE(*h_buf, val);
 
-        WRITE_ONCE(*h_buf, i);
-        __threadfence_block();
+        i = val;
     }
 }
 
@@ -257,6 +260,7 @@ int main(int argc, char *argv[])
         ASSERT_EQ(cuStreamQuery(0), CUDA_ERROR_NOT_READY);
 
         uint32_t i = 1;
+        uint32_t val = i;
         // Wait for pp_kernel to be ready before starting the time measurement.
         clock_gettime(MYCLOCK, &beg);
         while (READ_ONCE(*h_buf) != i) {
@@ -267,15 +271,16 @@ int main(int argc, char *argv[])
         // Restart the timer for measurement.
         clock_gettime(MYCLOCK, &beg);
         while (i < num_iters) {
-            gdr_copy_to_mapping(mh, d_buf, &i, sizeof(d_buf));
+            gdr_copy_to_mapping(mh, d_buf, &val, sizeof(d_buf));
             SB();
 
-            ++i;
-
-            while (READ_ONCE(*h_buf) != i) {
+            do {
+                val = READ_ONCE(*h_buf);
                 check_timeout(beg, timeout_us);
             }
+            while (val != i + 1);
             LB();
+            i = val;
         }
         clock_gettime(MYCLOCK, &end);
 
