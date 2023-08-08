@@ -58,10 +58,13 @@ __global__ void pp_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32
 }
 
 // This kernel emulates data + flag model. We consume the data by copying it to another GPU buffer.
-__global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32_t num_iters, uint8_t *A, uint8_t *B, size_t data_size)
+__global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32_t num_iters, uint32_t *A, uint32_t *B, size_t data_size)
 {
     uint64_t my_tid = blockIdx.x * blockDim.x + threadIdx.x;
     uint64_t num_threads = gridDim.x * blockDim.x;
+    uint64_t num_elements = data_size / sizeof(*A);
+    uint32_t data_val;
+    uint32_t flag_val;
     uint32_t i = 1;
 
     if (threadIdx.x == 0) {
@@ -71,8 +74,6 @@ __global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, u
     __syncthreads();
 
     for (; i < num_iters; ++i) {
-        uint8_t data_val;
-        uint32_t flag_val;
         if (threadIdx.x == 0) {
             do {
                 flag_val = READ_ONCE(*gpu_flag_buf);
@@ -81,7 +82,7 @@ __global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, u
         }
         __syncthreads();
 
-        for (uint64_t idx = my_tid; idx < data_size; idx += num_threads) {
+        for (uint64_t idx = my_tid; idx < num_elements; idx += num_threads) {
             data_val = READ_ONCE(A[idx]);
             WRITE_ONCE(B[idx], data_val);
         }
@@ -165,7 +166,7 @@ int main(int argc, char *argv[])
 
     gpu_mem_handle_t gpu_flag_mhandle;
 
-    uint8_t *g_A;
+    uint32_t *g_A;
 
     CUdeviceptr d_A = 0;
     CUdeviceptr d_B = 0;
@@ -175,7 +176,7 @@ int main(int argc, char *argv[])
 
     size_t data_buffer_size = 0;
 
-    uint8_t *init_buf = NULL;
+    uint32_t *init_buf = NULL;
 
     struct timespec beg, end;
     double lat_us;
@@ -233,6 +234,11 @@ int main(int argc, char *argv[])
     }
 
     const bool do_consume_data = (data_size > 0);
+
+    if (data_size % sizeof(*g_A) != 0) {
+        cerr << "ERROR: data_size must be divisible by " << sizeof(*g_A) << "." << endl;
+        exit(EXIT_FAILURE);
+    }
 
     if (num_blocks <= 0) {
         cerr << "ERROR: nblocks must be at least 1." << endl;
@@ -390,7 +396,7 @@ int main(int argc, char *argv[])
             A_off = A_info.va - d_A;
             cout << "A page offset: " << A_off << endl;
 
-            g_A = (uint8_t *)((uintptr_t)map_A_ptr + A_off);
+            g_A = (uint32_t *)((uintptr_t)map_A_ptr + A_off);
             cout << "A user-space pointer: " << (void *)g_A << endl;
 
             cout << "Measuring the latency of data + flag model." << endl
@@ -400,11 +406,11 @@ int main(int argc, char *argv[])
                  << "We report the round-trip time from when CPU starts writing the data until it observes the notification from GPU." << endl
                  << endl;
 
-            cout << "Running " << num_iters << " iterations with data size "
+            cout << "Running " << num_iters << " iterations with data size " 
                  << data_size << " bytes and flag size " << sizeof(*g_gpu_flag_buf) << " bytes."
                  << endl;
 
-            pp_data_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)d_gpu_flag_buf, (uint32_t *)d_cpu_flag_buf, num_iters, (uint8_t *)d_A, (uint8_t *)d_B, data_size);
+            pp_data_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)d_gpu_flag_buf, (uint32_t *)d_cpu_flag_buf, num_iters, (uint32_t *)d_A, (uint32_t *)d_B, data_size);
         }
         else {
             cout << "Measuring the visibility latency of the flag value." << endl
