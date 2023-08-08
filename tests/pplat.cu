@@ -8,7 +8,7 @@
  * and/or sell copies of the Software, and to permit persons to whom the
  * Software is furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in 
+ * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
     gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
     gpu_memfree_fn_t gfree_fn = gpu_mem_free;
 
-    while(1) {        
+    while(1) {
         int c;
         c = getopt(argc, argv, "d:t:u:a:s:B:T:h");
         if (c == -1)
@@ -259,7 +259,7 @@ int main(int argc, char *argv[])
 
     CUdevice dev;
     for (int n = 0; n < n_devices; ++n) {
-        
+
         char dev_name[256];
         int dev_pci_domain_id;
         int dev_pci_bus_id;
@@ -271,9 +271,9 @@ int main(int argc, char *argv[])
         ASSERTDRV(cuDeviceGetAttribute(&dev_pci_bus_id, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID, dev));
         ASSERTDRV(cuDeviceGetAttribute(&dev_pci_device_id, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, dev));
 
-        cout  << "GPU id:" << n << "; name: " << dev_name 
+        cout  << "GPU id:" << n << "; name: " << dev_name
               << "; Bus id: "
-              << std::hex 
+              << std::hex
               << std::setfill('0') << std::setw(4) << dev_pci_domain_id
               << ":" << std::setfill('0') << std::setw(2) << dev_pci_bus_id
               << ":" << std::setfill('0') << std::setw(2) << dev_pci_device_id
@@ -406,7 +406,7 @@ int main(int argc, char *argv[])
                  << "We report the round-trip time from when CPU starts writing the data until it observes the notification from GPU." << endl
                  << endl;
 
-            cout << "Running " << num_iters << " iterations with data size " 
+            cout << "Running " << num_iters << " iterations with data size "
                  << data_size << " bytes and flag size " << sizeof(*g_gpu_flag_buf) << " bytes."
                  << endl;
 
