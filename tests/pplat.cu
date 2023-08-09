@@ -79,20 +79,19 @@ __global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, u
                 flag_val = READ_ONCE(*gpu_flag_buf);
             }
             while (flag_val != i);
+            __threadfence_system();
         }
         __syncthreads();
 
-        for (uint64_t idx = my_tid; idx < num_elements; idx += num_threads) {
-            data_val = READ_ONCE(A[idx]);
-            WRITE_ONCE(B[idx], data_val);
-        }
+        for (uint64_t idx = my_tid; idx < num_elements; idx += num_threads)
+            B[idx] = A[idx];
         __syncthreads();
 
         if (threadIdx.x == 0) {
             ++flag_val;
             WRITE_ONCE(cpu_flag_buf[blockIdx.x], flag_val);
+            __threadfence_system();
         }
-        __syncthreads();
     }
 }
 
