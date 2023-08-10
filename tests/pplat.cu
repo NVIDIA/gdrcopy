@@ -63,7 +63,6 @@ __global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, u
     uint64_t my_tid = blockIdx.x * blockDim.x + threadIdx.x;
     uint64_t num_threads = gridDim.x * blockDim.x;
     uint64_t num_elements = data_size / sizeof(*A);
-    uint32_t data_val;
     uint32_t flag_val;
     uint32_t i = 1;
 
@@ -95,6 +94,24 @@ __global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, u
     }
 }
 
+typedef enum {
+    MEM_LOC_GPU = 0,
+    MEM_LOC_HOST
+} mem_loc_t;
+
+typedef struct {
+    CUdeviceptr gpu_ptr;
+    void *host_ptr;
+    size_t size;
+    mem_loc_t mem_loc;
+
+    // GDRCopy-related objects
+    gpu_mem_handle_t gmhandle;
+    gdr_t g;
+    gdr_mh_t mh;
+    void *map_ptr;
+} gh_mem_handle_t;
+
 static int dev_id = 0;
 static uint32_t num_iters = 1000;
 static size_t data_size = 0;
@@ -102,26 +119,126 @@ static size_t data_size = 0;
 static unsigned int num_blocks = 8;
 static unsigned int num_threads_per_block = 1024;
 
+static mem_loc_t gpu_flag_loc = MEM_LOC_GPU;
+static mem_loc_t cpu_flag_loc = MEM_LOC_HOST;
+
+static gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
+static gpu_memfree_fn_t gfree_fn = gpu_mem_free;
+
 static unsigned int timeout = 10;  // in s
 // Counter value before checking timeout.
 static unsigned long int timeout_check_threshold = 1000000UL;
 static unsigned long int timeout_counter = 0;
+
+static inline string mem_loc_to_str(mem_loc_t loc)
+{
+    switch (loc) {
+        case MEM_LOC_GPU:
+            return string("gpumem");
+        case MEM_LOC_HOST:
+            return string("hostmem");
+        default:
+            cerr << "Unrecognized loc" << endl;
+            exit(EXIT_FAILURE);
+    }
+}
+
+static inline int str_to_mem_loc(mem_loc_t *loc, string s)
+{
+    int status = 0;
+    if (s == "gpumem")
+        *loc = MEM_LOC_GPU;
+    else if (s == "hostmem")
+        *loc = MEM_LOC_HOST;
+    else
+        status = EINVAL;
+    return status;
+}
+
+static void gh_mem_alloc(gh_mem_handle_t *mhandle, size_t size, mem_loc_t loc, gdr_t g)
+{
+    gpu_mem_handle_t gmhandle;
+    CUdeviceptr gpu_ptr;
+    void *host_ptr = NULL;
+    gdr_mh_t mh;
+    void *map_ptr = NULL;
+
+    if (loc == MEM_LOC_GPU) {
+        gdr_info_t info;
+        off_t off;
+
+        ASSERTDRV(galloc_fn(&gmhandle, size, true, true));
+        gpu_ptr = gmhandle.ptr;
+
+        ASSERTDRV(cuMemsetD8(gpu_ptr, 0, size));
+
+        // tokens are optional in CUDA 6.0
+        ASSERT_EQ(gdr_pin_buffer(g, gpu_ptr, size, 0, 0, &mh), 0);
+        ASSERT_NEQ(mh, null_mh);
+
+        ASSERT_EQ(gdr_map(g, mh, &map_ptr, size), 0);
+
+        ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+        off = info.va - gpu_ptr;
+
+        host_ptr = (void *)((uintptr_t)map_ptr + off);
+    }
+    else if (loc == MEM_LOC_HOST) {
+        ASSERTDRV(cuMemHostAlloc(&host_ptr, size, CU_MEMHOSTALLOC_PORTABLE | CU_MEMHOSTALLOC_DEVICEMAP));
+        ASSERT_NEQ(host_ptr, (void*)0);
+        ASSERTDRV(cuMemHostGetDevicePointer(&gpu_ptr, host_ptr, 0));
+        memset(host_ptr, 0, size);
+    }
+    else {
+        cerr << "Unrecognized loc" << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    mhandle->gpu_ptr = gpu_ptr;
+    mhandle->host_ptr = host_ptr;
+    mhandle->size = size;
+    mhandle->mem_loc = loc;
+    mhandle->gmhandle = gmhandle;
+    mhandle->g = g;
+    mhandle->mh = mh;
+    mhandle->map_ptr = map_ptr;
+}
+
+static void gh_mem_free(gh_mem_handle_t *mhandle)
+{
+    if (mhandle->mem_loc == MEM_LOC_GPU) {
+        ASSERT_EQ(gdr_unmap(mhandle->g, mhandle->mh, mhandle->map_ptr, mhandle->size), 0);
+        ASSERT_EQ(gdr_unpin_buffer(mhandle->g, mhandle->mh), 0);
+        ASSERTDRV(gfree_fn(&mhandle->gmhandle));
+    }
+    else if (mhandle->mem_loc == MEM_LOC_HOST) {
+        ASSERTDRV(cuMemFreeHost(mhandle->host_ptr));
+    }
+    else {
+        cerr << "Unrecognized loc" << endl;
+        exit(EXIT_FAILURE);
+    }
+}
 
 static void print_usage(const char *path)
 {
     cout << "Usage: " << path << " [options]" << endl;
     cout << endl;
     cout << "Options:" << endl;
-    cout << "   -h              Print this help text" << endl;
-    cout << "   -d <gpu>        GPU ID (default: " << dev_id << ")" << endl;
-    cout << "   -t <iters>      Number of iterations (default: " << num_iters << ")" << endl;
-    cout << "   -u <timeout>    Timeout in second. 0 to disable. (default: " << timeout << ")" << endl;
-    cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
-    cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
-    cout << "   -s <size>       Data size (default: " << data_size << ")" << endl;
-    cout << "                       0 means measuring the visibility latency of the flag" << endl;
-    cout << "   -B <nblocks>    Number of CUDA blocks (default: " << num_blocks << ")" << endl;
-    cout << "   -T <nthreads>   Number of threads per CUDA blocks (default: " << num_threads_per_block << ")" << endl;
+    cout << "   -h                  Print this help text" << endl;
+    cout << "   -d <gpu>            GPU ID (default: " << dev_id << ")" << endl;
+    cout << "   -t <iters>          Number of iterations (default: " << num_iters << ")" << endl;
+    cout << "   -u <timeout>        Timeout in second. 0 to disable. (default: " << timeout << ")" << endl;
+    cout << "   -a <fn>             GPU buffer allocation function (default: cuMemAlloc)" << endl;
+    cout << "                           Choices: cuMemAlloc, cuMemCreate" << endl;
+    cout << "   -s <size>           Data size (default: " << data_size << ")" << endl;
+    cout << "                           0 means measuring the visibility latency of the flag" << endl;
+    cout << "   -B <nblocks>        Number of CUDA blocks (default: " << num_blocks << ")" << endl;
+    cout << "   -T <nthreads>       Number of threads per CUDA blocks (default: " << num_threads_per_block << ")" << endl;
+    cout << "   -G <gpu-flag-loc>   The location of GPU flag (default: " << mem_loc_to_str(gpu_flag_loc) << ")" << endl;
+    cout << "                           Choices: gpumem, hostmem" << endl;
+    cout << "   -C <cpu-flag-loc>   The location of CPU flag (default: " << mem_loc_to_str(cpu_flag_loc) << ")" << endl;
+    cout << "                           Choices: gpumem, hostmem" << endl;
 }
 
 /**
@@ -157,14 +274,6 @@ static inline void check_timeout(struct timespec start, double timeout_us)
 
 int main(int argc, char *argv[])
 {
-    uint32_t *g_gpu_flag_buf = NULL;
-    uint32_t *h_cpu_flag_buf = NULL;
-
-    CUdeviceptr d_gpu_flag_buf;
-    CUdeviceptr d_cpu_flag_buf;
-
-    gpu_mem_handle_t gpu_flag_mhandle;
-
     uint32_t *g_A;
 
     CUdeviceptr d_A = 0;
@@ -181,12 +290,9 @@ int main(int argc, char *argv[])
     double lat_us;
     double timeout_us;
 
-    gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
-    gpu_memfree_fn_t gfree_fn = gpu_mem_free;
-
-    while(1) {
+    while (1) {
         int c;
-        c = getopt(argc, argv, "d:t:u:a:s:B:T:h");
+        c = getopt(argc, argv, "d:t:u:a:s:B:T:G:C:h");
         if (c == -1)
             break;
 
@@ -200,12 +306,13 @@ int main(int argc, char *argv[])
             case 'u':
                 timeout = strtol(optarg, NULL, 0);
                 break;
-            case 'a':
-                if (strcmp(optarg, "cuMemAlloc") == 0) {
+            case 'a': {
+                string optarg_str = string(optarg);
+                if (optarg_str == "cuMemAlloc") {
                     galloc_fn = gpu_mem_alloc;
                     gfree_fn = gpu_mem_free;
                 }
-                else if (strcmp(optarg, "cuMemCreate") == 0) {
+                else if (optarg_str == "cuMemCreate") {
                     galloc_fn = gpu_vmm_alloc;
                     gfree_fn = gpu_vmm_free;
                 }
@@ -214,6 +321,7 @@ int main(int argc, char *argv[])
                     exit(EXIT_FAILURE);
                 }
                 break;
+            }
             case 's':
                 data_size = strtol(optarg, NULL, 0);
                 break;
@@ -223,6 +331,24 @@ int main(int argc, char *argv[])
             case 'T':
                 num_threads_per_block = strtol(optarg, NULL, 0);
                 break;
+            case 'G': {
+                string optarg_str = string(optarg);
+                int status = str_to_mem_loc(&gpu_flag_loc, optarg_str);
+                if (status) {
+                    cerr << "Unrecognized gpu-flag-loc argument" << endl;
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            }
+            case 'C': {
+                string optarg_str = string(optarg);
+                int status = str_to_mem_loc(&cpu_flag_loc, optarg_str);
+                if (status) {
+                    cerr << "Unrecognized cpu-flag-loc argument" << endl;
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            }
             case 'h':
                 print_usage(argv[0]);
                 exit(EXIT_SUCCESS);
@@ -327,53 +453,20 @@ int main(int argc, char *argv[])
         memset(init_buf, 0xaf, data_size);
     }
 
-    ASSERTDRV(galloc_fn(&gpu_flag_mhandle, sizeof(*g_gpu_flag_buf), true, true));
-    d_gpu_flag_buf = gpu_flag_mhandle.ptr;
-    cout << "gpu flag device ptr: 0x" << hex << d_gpu_flag_buf << dec << endl;
-
-    ASSERTDRV(cuMemsetD8(d_gpu_flag_buf, 0, sizeof(*g_gpu_flag_buf)));
-
-    ASSERTDRV(cuMemHostAlloc((void **)&h_cpu_flag_buf, sizeof(*h_cpu_flag_buf) * num_blocks, CU_MEMHOSTALLOC_PORTABLE | CU_MEMHOSTALLOC_DEVICEMAP));
-    ASSERT_NEQ(h_cpu_flag_buf, (void*)0);
-    ASSERTDRV(cuMemHostGetDevicePointer(&d_cpu_flag_buf, h_cpu_flag_buf, 0));
-    memset(h_cpu_flag_buf, 0, sizeof(*h_cpu_flag_buf) * num_blocks);
-
 
     gdr_t g = gdr_open_safe();
-
-    gdr_mh_t gpu_flag_mh;
-    void *map_gpu_flag_ptr = NULL;
-    gdr_info_t gpu_flag_info;
-    int gpu_flag_off;
 
     gdr_mh_t A_mh;
     void *map_A_ptr = NULL;
     gdr_info_t A_info;
     int A_off;
 
+    gh_mem_handle_t gpu_flag_mhandle;
+    gh_mem_handle_t cpu_flag_mhandle;
+
     BEGIN_CHECK {
-        // tokens are optional in CUDA 6.0
-        ASSERT_EQ(gdr_pin_buffer(g, d_gpu_flag_buf, sizeof(*g_gpu_flag_buf), 0, 0, &gpu_flag_mh), 0);
-        ASSERT_NEQ(gpu_flag_mh, null_mh);
-
-        ASSERT_EQ(gdr_map(g, gpu_flag_mh, &map_gpu_flag_ptr, sizeof(*g_gpu_flag_buf)), 0);
-        cout << "map_gpu_flag_ptr: " << map_gpu_flag_ptr << endl;
-
-        ASSERT_EQ(gdr_get_info(g, gpu_flag_mh, &gpu_flag_info), 0);
-        cout << "gpu_flag_info.va: " << hex << gpu_flag_info.va << dec << endl;
-        cout << "gpu_flag_info.mapped_size: " << gpu_flag_info.mapped_size << endl;
-        cout << "gpu_flag_info.page_size: " << gpu_flag_info.page_size << endl;
-        cout << "gpu_flag_info.mapped: " << gpu_flag_info.mapped << endl;
-        cout << "gpu_flag_info.wc_mapping: " << gpu_flag_info.wc_mapping << endl;
-
-        // remember that mappings start on a 64KB boundary, so let's
-        // calculate the offset from the head of the mapping to the
-        // beginning of the buffer
-        gpu_flag_off = gpu_flag_info.va - d_gpu_flag_buf;
-        cout << "gpu_flag page offset: " << gpu_flag_off << endl;
-
-        g_gpu_flag_buf = (uint32_t *)((uintptr_t)map_gpu_flag_ptr + gpu_flag_off);
-        cout << "gpu_flag user-space pointer: " << g_gpu_flag_buf << endl;
+        gh_mem_alloc(&gpu_flag_mhandle, sizeof(uint32_t), gpu_flag_loc, g);
+        gh_mem_alloc(&cpu_flag_mhandle, sizeof(uint32_t) * num_blocks, cpu_flag_loc, g);
 
         if (do_consume_data) {
             ASSERT_EQ(gdr_pin_buffer(g, d_A, data_buffer_size, 0, 0, &A_mh), 0);
@@ -406,10 +499,10 @@ int main(int argc, char *argv[])
                  << endl;
 
             cout << "Running " << num_iters << " iterations with data size "
-                 << data_size << " bytes and flag size " << sizeof(*g_gpu_flag_buf) << " bytes."
+                 << data_size << " bytes and flag size " << gpu_flag_mhandle.size << " bytes."
                  << endl;
 
-            pp_data_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)d_gpu_flag_buf, (uint32_t *)d_cpu_flag_buf, num_iters, (uint32_t *)d_A, (uint32_t *)d_B, data_size);
+            pp_data_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters, (uint32_t *)d_A, (uint32_t *)d_B, data_size);
         }
         else {
             cout << "Measuring the visibility latency of the flag value." << endl
@@ -417,9 +510,9 @@ int main(int argc, char *argv[])
                  << "We report the round-trip time from when CPU updates the flag value until it observes the notification from GPU." << endl
                  << endl;
 
-            cout << "Running " << num_iters << " iterations with flag size " << sizeof(*g_gpu_flag_buf) << " bytes." << endl;
+            cout << "Running " << num_iters << " iterations with flag size " << gpu_flag_mhandle.size << " bytes." << endl;
 
-            pp_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)d_gpu_flag_buf, (uint32_t *)d_cpu_flag_buf, num_iters);
+            pp_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters);
         }
 
         // Catching any potential errors. CUDA_ERROR_NOT_READY means the kernel
@@ -434,7 +527,10 @@ int main(int argc, char *argv[])
         // Wait for pp_kernel to be ready before starting the time measurement.
         clock_gettime(MYCLOCK, &beg);
         do {
-            val = READ_ONCE(h_cpu_flag_buf[cpu_flag_idx]);
+            if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
+                gdr_copy_from_mapping(cpu_flag_mhandle.mh, &val, &((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx], sizeof(uint32_t));
+            else
+                val = READ_ONCE(((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx]);
             if (val == i)
                 ++cpu_flag_idx;
             else
@@ -450,12 +546,18 @@ int main(int argc, char *argv[])
                 gdr_copy_to_mapping(A_mh, g_A, init_buf, data_size);
                 SB();
             }
-            gdr_copy_to_mapping(gpu_flag_mh, g_gpu_flag_buf, &val, sizeof(g_gpu_flag_buf));
+            if (gpu_flag_loc == MEM_LOC_GPU)
+                gdr_copy_to_mapping(gpu_flag_mhandle.mh, gpu_flag_mhandle.host_ptr, &val, sizeof(gpu_flag_mhandle.size));
+            else
+                WRITE_ONCE(*(uint32_t *)gpu_flag_mhandle.host_ptr, val);
             SB();
 
             cpu_flag_idx = 0;
             do {
-                val = READ_ONCE(h_cpu_flag_buf[cpu_flag_idx]);
+                if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
+                    gdr_copy_from_mapping(cpu_flag_mhandle.mh, &val, &((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx], sizeof(uint32_t));
+                else
+                    val = READ_ONCE(((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx]);
                 if (val == i + 1)
                     ++cpu_flag_idx;
                 else
@@ -474,22 +576,19 @@ int main(int argc, char *argv[])
 
         cout << "Round-trip latency per iteration is " << lat_us << " us" << endl;
 
+        gh_mem_free(&gpu_flag_mhandle);
+        gh_mem_free(&cpu_flag_mhandle);
         cout << "unmapping buffer" << endl;
-        ASSERT_EQ(gdr_unmap(g, gpu_flag_mh, map_gpu_flag_ptr, sizeof(*g_gpu_flag_buf)), 0);
         if (do_consume_data)
             ASSERT_EQ(gdr_unmap(g, A_mh, map_A_ptr, data_buffer_size), 0);
 
         cout << "unpinning buffer" << endl;
-        ASSERT_EQ(gdr_unpin_buffer(g, gpu_flag_mh), 0);
         if (do_consume_data)
             ASSERT_EQ(gdr_unpin_buffer(g, A_mh), 0);
     } END_CHECK;
 
     cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
-
-    ASSERTDRV(cuMemFreeHost(h_cpu_flag_buf));
-    ASSERTDRV(gfree_fn(&gpu_flag_mhandle));
 
     if (do_consume_data) {
         ASSERTDRV(gfree_fn(&A_mhandle));
