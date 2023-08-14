@@ -37,13 +37,20 @@ using namespace std;
 
 using namespace gdrcopy::test;
 
+// In nanoseconds
+__device__ static inline uint64_t query_globaltimer() {
+    uint64_t ret;
+    asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(ret)::"memory");
+    return ret;
+}
+
 // Measuring the ping-pong latency of flag only.
-__global__ void pp_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32_t num_iters)
+__global__ void pp_cpu_produce_gpu_consume_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32_t num_iters)
 {
     uint32_t i = 1;
     WRITE_ONCE(*cpu_flag_buf, i);
     __threadfence_system();
-    while (i < num_iters) {
+    while (i <= num_iters) {
         uint32_t val;
         do {
             val = READ_ONCE(*gpu_flag_buf);
@@ -55,6 +62,41 @@ __global__ void pp_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32
 
         i = val;
     }
+}
+
+__global__ void pp_gpu_produce_cpu_consume_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32_t num_iters, uint64_t *beg, uint64_t *end)
+{
+    uint32_t val;
+    uint32_t i = 1;
+    uint64_t _beg, _end;
+    WRITE_ONCE(*cpu_flag_buf, i);
+    __threadfence_system();
+
+    do {
+        val = READ_ONCE(*gpu_flag_buf);
+    }
+    while (val != i);
+    __threadfence_system();
+
+    i = val + 1;
+    _beg = query_globaltimer();
+    while (i <= num_iters + 1) {
+        val = i;
+        WRITE_ONCE(*cpu_flag_buf, val);
+
+        do {
+            val = READ_ONCE(*gpu_flag_buf);
+        }
+        while (val != i);
+
+        ++val;
+
+        i = val;
+    }
+    _end = query_globaltimer();
+
+    *beg = _beg;
+    *end = _end;
 }
 
 // This kernel emulates data + flag model. We consume the data by summing all
@@ -102,8 +144,8 @@ typedef enum {
 } mem_loc_t;
 
 typedef enum {
-    BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME = 0,
-    BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME,
+    BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME = 0,
+    BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME,
 } benchmark_mode_t;
 
 typedef struct {
@@ -133,7 +175,7 @@ static mem_loc_t data_buf_loc = MEM_LOC_GPU;
 static gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
 static gpu_memfree_fn_t gfree_fn = gpu_mem_free;
 
-static benchmark_mode_t benchmark_mode = BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME;
+static benchmark_mode_t benchmark_mode = BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME;
 
 static unsigned int timeout = 10;  // in s
 // Counter value before checking timeout.
@@ -392,7 +434,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    if (BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME > benchmark_mode || BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME < benchmark_mode) {
+    if (BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME > benchmark_mode || BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME < benchmark_mode) {
         cerr << "ERROR: Unrecognized mode " << benchmark_mode << "." << endl;
         exit(EXIT_FAILURE);
     }
@@ -463,10 +505,14 @@ int main(int argc, char *argv[])
     gh_mem_handle_t cpu_flag_mhandle;
     gh_mem_handle_t data_buf_mhandle;
     gh_mem_handle_t init_buf_mhandle;
+    gh_mem_handle_t gpu_beg_mhandle;
+    gh_mem_handle_t gpu_end_mhandle;
 
     BEGIN_CHECK {
         gh_mem_alloc(&gpu_flag_mhandle, sizeof(uint32_t), gpu_flag_loc, g);
         gh_mem_alloc(&cpu_flag_mhandle, sizeof(uint32_t) * num_blocks, cpu_flag_loc, g);
+        gh_mem_alloc(&gpu_beg_mhandle, sizeof(uint64_t) * num_blocks, MEM_LOC_GPU, g);
+        gh_mem_alloc(&gpu_end_mhandle, sizeof(uint64_t) * num_blocks, MEM_LOC_GPU, g);
 
         if (process_data) {
             gh_mem_alloc(&data_buf_mhandle, data_size, data_buf_loc, g);
@@ -487,13 +533,30 @@ int main(int argc, char *argv[])
         }
         else {
             cout << "Measuring the visibility latency of the flag value." << endl
-                 << "CPU does gdr_copy_to_mapping, and GPU notifies back via cuMemHostAlloc'd buffer." << endl
-                 << "We report the round-trip time from when CPU updates the flag value until it observes the notification from GPU." << endl
+                 << "Running " << num_iters << " iterations with flag size " << gpu_flag_mhandle.size << " bytes." << endl
                  << endl;
 
-            cout << "Running " << num_iters << " iterations with flag size " << gpu_flag_mhandle.size << " bytes." << endl;
+            switch (benchmark_mode) {
+                case BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME:
+                    cout << "CPU writes to gpu_flag. GPU polls on the expected gpu_flag value. "
+                         << "GPU writes back via cpu_flag. CPU polls on the expected cpu_flag value. "
+                         << "We report the round-trip time from when CPU writes to gpu_flag "
+                         << "until it observes the update in cpu_flag." << endl
+                         << "CPU does the time measurement." << endl
+                         << endl;
+                    pp_cpu_produce_gpu_consume_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters);
+                    break;
+                case BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME:
+                    cout << "GPU writes to cpu_flag. CPU polls on the expected cpu_flag value. "
+                         << "CPU writes back via gpu_flag. GPU polls on the expected gpu_flag value. "
+                         << "We report the round-trip time from when GPU writes to cpu_flag "
+                         << "until it observes the update in gpu_flag." << endl
+                         << "GPU does the time measurement." << endl
+                         << endl;
+                    pp_gpu_produce_cpu_consume_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters, (uint64_t *)gpu_beg_mhandle.gpu_ptr, (uint64_t *)gpu_end_mhandle.gpu_ptr);
+                    break;
+            }
 
-            pp_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters);
         }
 
         // Catching any potential errors. CUDA_ERROR_NOT_READY means the kernel
@@ -505,7 +568,7 @@ int main(int argc, char *argv[])
         uint32_t i = 1;
         uint32_t val;
         unsigned int cpu_flag_idx = 0;
-        // Wait for pp_kernel to be ready before starting the time measurement.
+        // Wait for the kernel to be ready before starting the time measurement.
         clock_gettime(MYCLOCK, &beg);
         do {
             if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
@@ -520,45 +583,99 @@ int main(int argc, char *argv[])
         while (cpu_flag_idx < num_blocks);
         LB();
 
-        // Restart the timer for measurement.
-        clock_gettime(MYCLOCK, &beg);
-        while (i < num_iters) {
-            if (process_data) {
-                gdr_copy_to_mapping(data_buf_mhandle.mh, data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
-                SB();
-            }
-            if (gpu_flag_loc == MEM_LOC_GPU)
-                gdr_copy_to_mapping(gpu_flag_mhandle.mh, gpu_flag_mhandle.host_ptr, &val, sizeof(gpu_flag_mhandle.size));
-            else
-                WRITE_ONCE(*(uint32_t *)gpu_flag_mhandle.host_ptr, val);
-            SB();
+        switch (benchmark_mode) {
+            case BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME: {
+                // Restart the timer for measurement.
+                clock_gettime(MYCLOCK, &beg);
+                while (i <= num_iters) {
+                    if (process_data) {
+                        gdr_copy_to_mapping(data_buf_mhandle.mh, data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
+                        SB();
+                    }
+                    if (gpu_flag_loc == MEM_LOC_GPU)
+                        gdr_copy_to_mapping(gpu_flag_mhandle.mh, gpu_flag_mhandle.host_ptr, &val, sizeof(gpu_flag_mhandle.size));
+                    else
+                        WRITE_ONCE(*(uint32_t *)gpu_flag_mhandle.host_ptr, val);
+                    SB();
 
-            cpu_flag_idx = 0;
-            do {
-                if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
-                    gdr_copy_from_mapping(cpu_flag_mhandle.mh, &val, &((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx], sizeof(uint32_t));
-                else
-                    val = READ_ONCE(((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx]);
-                if (val == i + 1)
-                    ++cpu_flag_idx;
-                else
-                    check_timeout(beg, timeout_us);
+                    cpu_flag_idx = 0;
+                    do {
+                        if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
+                            gdr_copy_from_mapping(cpu_flag_mhandle.mh, &val, &((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx], sizeof(uint32_t));
+                        else
+                            val = READ_ONCE(((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx]);
+                        if (val == i + 1)
+                            ++cpu_flag_idx;
+                        else
+                            check_timeout(beg, timeout_us);
+                    }
+                    while (cpu_flag_idx < num_blocks);
+                    LB();
+
+                    i = val;
+                }
+                clock_gettime(MYCLOCK, &end);
+
+                ASSERTDRV(cuStreamSynchronize(0));
+
+                lat_us = time_diff(beg, end) / (double)num_iters;
+                break;
             }
-            while (cpu_flag_idx < num_blocks);
-            LB();
-            i = val;
+            case BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME: {
+                uint64_t gpu_time_beg = 0, gpu_time_end = 0;
+                // Notify GPU that CPU is ready so that GPU can start the timer.
+                if (gpu_flag_loc == MEM_LOC_GPU)
+                    gdr_copy_to_mapping(gpu_flag_mhandle.mh, gpu_flag_mhandle.host_ptr, &val, sizeof(gpu_flag_mhandle.size));
+                else
+                    WRITE_ONCE(*(uint32_t *)gpu_flag_mhandle.host_ptr, val);
+                SB();
+
+                clock_gettime(MYCLOCK, &beg);
+                while (i <= num_iters) {
+                    cpu_flag_idx = 0;
+                    do {
+                        if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
+                            gdr_copy_from_mapping(cpu_flag_mhandle.mh, &val, &((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx], sizeof(uint32_t));
+                        else
+                            val = READ_ONCE(((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx]);
+                        if (val == i + 1)
+                            ++cpu_flag_idx;
+                        else
+                            check_timeout(beg, timeout_us);
+                    }
+                    while (cpu_flag_idx < num_blocks);
+                    LB();
+
+                    if (gpu_flag_loc == MEM_LOC_GPU)
+                        gdr_copy_to_mapping(gpu_flag_mhandle.mh, gpu_flag_mhandle.host_ptr, &val, sizeof(gpu_flag_mhandle.size));
+                    else
+                        WRITE_ONCE(*(uint32_t *)gpu_flag_mhandle.host_ptr, val);
+                    SB();
+
+                    i = val;
+                }
+
+                ASSERTDRV(cuStreamSynchronize(0));
+
+                ASSERTDRV(cuMemcpyDtoH(&gpu_time_beg, gpu_beg_mhandle.gpu_ptr, sizeof(uint64_t)));
+                ASSERTDRV(cuMemcpyDtoH(&gpu_time_end, gpu_end_mhandle.gpu_ptr, sizeof(uint64_t)));
+
+                lat_us = ((gpu_time_end - gpu_time_beg) / 1000.0) / (double)num_iters;
+                break;
+            }
+            default:
+                cout << "ERROR: Unrecognized mode." << endl;
+                exit(EXIT_FAILURE);
         }
-        clock_gettime(MYCLOCK, &end);
 
         ASSERTDRV(cuStreamSynchronize(0));
-
-        clock_gettime(MYCLOCK, &end);
-        lat_us = time_diff(beg, end) / (double)num_iters;
 
         cout << "Round-trip latency per iteration is " << lat_us << " us" << endl;
 
         gh_mem_free(&gpu_flag_mhandle);
         gh_mem_free(&cpu_flag_mhandle);
+        gh_mem_free(&gpu_beg_mhandle);
+        gh_mem_free(&gpu_end_mhandle);
         if (process_data) {
             gh_mem_free(&data_buf_mhandle);
             gh_mem_free(&init_buf_mhandle);
