@@ -57,8 +57,10 @@ __global__ void pp_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32
     }
 }
 
-// This kernel emulates data + flag model. We consume the data by copying it to another GPU buffer.
-__global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32_t num_iters, uint32_t *A, uint32_t *B, size_t data_size)
+// This kernel emulates data + flag model. We consume the data by summing all
+// elements to the cpu_flag. The values of all data elements are zero. So, it
+// does not affect the outcome. This is just for creating data dependency.
+__global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32_t num_iters, uint32_t *A, size_t data_size)
 {
     uint64_t my_tid = blockIdx.x * blockDim.x + threadIdx.x;
     uint64_t num_threads = gridDim.x * blockDim.x;
@@ -83,7 +85,7 @@ __global__ void pp_data_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, u
         __syncthreads();
 
         for (uint64_t idx = my_tid; idx < num_elements; idx += num_threads)
-            B[idx] = A[idx];
+            flag_val += READ_ONCE(A[idx]);
         __syncthreads();
 
         if (threadIdx.x == 0) {
@@ -98,6 +100,11 @@ typedef enum {
     MEM_LOC_GPU = 0,
     MEM_LOC_HOST
 } mem_loc_t;
+
+typedef enum {
+    BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME = 0,
+    BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME,
+} benchmark_mode_t;
 
 typedef struct {
     CUdeviceptr gpu_ptr;
@@ -121,9 +128,12 @@ static unsigned int num_threads_per_block = 1024;
 
 static mem_loc_t gpu_flag_loc = MEM_LOC_GPU;
 static mem_loc_t cpu_flag_loc = MEM_LOC_HOST;
+static mem_loc_t data_buf_loc = MEM_LOC_GPU;
 
 static gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
 static gpu_memfree_fn_t gfree_fn = gpu_mem_free;
+
+static benchmark_mode_t benchmark_mode = BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME;
 
 static unsigned int timeout = 10;  // in s
 // Counter value before checking timeout.
@@ -235,9 +245,16 @@ static void print_usage(const char *path)
     cout << "                           0 means measuring the visibility latency of the flag" << endl;
     cout << "   -B <nblocks>        Number of CUDA blocks (default: " << num_blocks << ")" << endl;
     cout << "   -T <nthreads>       Number of threads per CUDA blocks (default: " << num_threads_per_block << ")" << endl;
+    cout << "   -m <mode>           Benchmark mode (default: " << benchmark_mode << ")" << endl;
+    cout << "                           0: CPU produces and notifies GPU. GPU consumes and notifies CPU." << endl;
+    cout << "                           1: GPU produces and notifies CPU. CPU consumes and notifies GPU." << endl;
     cout << "   -G <gpu-flag-loc>   The location of GPU flag (default: " << mem_loc_to_str(gpu_flag_loc) << ")" << endl;
     cout << "                           Choices: gpumem, hostmem" << endl;
+    cout << "                           This flag is used by CPU to notify GPU." << endl;
     cout << "   -C <cpu-flag-loc>   The location of CPU flag (default: " << mem_loc_to_str(cpu_flag_loc) << ")" << endl;
+    cout << "                           Choices: gpumem, hostmem" << endl;
+    cout << "                           This flag is used by GPU to notify CPU." << endl;
+    cout << "   -D <data-buf-loc>   The location of data buffer (default: " << mem_loc_to_str(data_buf_loc) << ")" << endl;
     cout << "                           Choices: gpumem, hostmem" << endl;
 }
 
@@ -274,25 +291,13 @@ static inline void check_timeout(struct timespec start, double timeout_us)
 
 int main(int argc, char *argv[])
 {
-    uint32_t *g_A;
-
-    CUdeviceptr d_A = 0;
-    CUdeviceptr d_B = 0;
-
-    gpu_mem_handle_t A_mhandle;
-    gpu_mem_handle_t B_mhandle;
-
-    size_t data_buffer_size = 0;
-
-    uint32_t *init_buf = NULL;
-
     struct timespec beg, end;
     double lat_us;
     double timeout_us;
 
     while (1) {
         int c;
-        c = getopt(argc, argv, "d:t:u:a:s:B:T:G:C:h");
+        c = getopt(argc, argv, "d:t:u:a:s:B:T:m:G:C:D:h");
         if (c == -1)
             break;
 
@@ -331,6 +336,9 @@ int main(int argc, char *argv[])
             case 'T':
                 num_threads_per_block = strtol(optarg, NULL, 0);
                 break;
+            case 'm':
+                benchmark_mode = (benchmark_mode_t)strtol(optarg, NULL, 0);
+                break;
             case 'G': {
                 string optarg_str = string(optarg);
                 int status = str_to_mem_loc(&gpu_flag_loc, optarg_str);
@@ -349,6 +357,15 @@ int main(int argc, char *argv[])
                 }
                 break;
             }
+            case 'D': {
+                string optarg_str = string(optarg);
+                int status = str_to_mem_loc(&data_buf_loc, optarg_str);
+                if (status) {
+                    cerr << "Unrecognized data-buf-loc argument" << endl;
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            }
             case 'h':
                 print_usage(argv[0]);
                 exit(EXIT_SUCCESS);
@@ -358,10 +375,10 @@ int main(int argc, char *argv[])
         }
     }
 
-    const bool do_consume_data = (data_size > 0);
+    const bool process_data = (data_size > 0);
 
-    if (data_size % sizeof(*g_A) != 0) {
-        cerr << "ERROR: data_size must be divisible by " << sizeof(*g_A) << "." << endl;
+    if (data_size % sizeof(uint32_t) != 0) {
+        cerr << "ERROR: data_size must be divisible by " << sizeof(uint32_t) << "." << endl;
         exit(EXIT_FAILURE);
     }
 
@@ -372,6 +389,11 @@ int main(int argc, char *argv[])
 
     if (num_threads_per_block <= 0) {
         cerr << "ERROR: nthreads must be at least 1." << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    if (BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME > benchmark_mode || BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME < benchmark_mode) {
+        cerr << "ERROR: Unrecognized mode " << benchmark_mode << "." << endl;
         exit(EXIT_FAILURE);
     }
 
@@ -420,7 +442,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    if (!do_consume_data) {
+    if (!process_data) {
         cout << "We will measure the visibility of the flag value only. "
              << "Setting nblocks and nthreads to 1."
              << endl;
@@ -435,61 +457,20 @@ int main(int argc, char *argv[])
     else
         cout << "gpu alloc fn: cuMemCreate" << endl;
 
-    if (do_consume_data) {
-        data_buffer_size = PAGE_ROUND_UP(data_size, GPU_PAGE_SIZE);
-
-        ASSERTDRV(galloc_fn(&A_mhandle, data_buffer_size, true, true));
-        d_A = A_mhandle.ptr;
-        cout << "d_A device ptr: 0x" << hex << d_A << dec << endl;
-
-        ASSERTDRV(galloc_fn(&B_mhandle, data_buffer_size, true, true));
-        d_B = B_mhandle.ptr;
-        cout << "d_B device ptr: 0x" << hex << d_B << dec << endl;
-
-        ASSERTDRV(cuMemAllocHost((void **)&init_buf, data_size));
-        ASSERT_NEQ(init_buf, (void*)0);
-
-        // Just set it to a random value. We don't use the content anyway.
-        memset(init_buf, 0xaf, data_size);
-    }
-
-
     gdr_t g = gdr_open_safe();
-
-    gdr_mh_t A_mh;
-    void *map_A_ptr = NULL;
-    gdr_info_t A_info;
-    int A_off;
 
     gh_mem_handle_t gpu_flag_mhandle;
     gh_mem_handle_t cpu_flag_mhandle;
+    gh_mem_handle_t data_buf_mhandle;
+    gh_mem_handle_t init_buf_mhandle;
 
     BEGIN_CHECK {
         gh_mem_alloc(&gpu_flag_mhandle, sizeof(uint32_t), gpu_flag_loc, g);
         gh_mem_alloc(&cpu_flag_mhandle, sizeof(uint32_t) * num_blocks, cpu_flag_loc, g);
 
-        if (do_consume_data) {
-            ASSERT_EQ(gdr_pin_buffer(g, d_A, data_buffer_size, 0, 0, &A_mh), 0);
-            ASSERT_NEQ(A_mh, null_mh);
-
-            ASSERT_EQ(gdr_map(g, A_mh, &map_A_ptr, data_buffer_size), 0);
-            cout << "map_A_ptr: " << map_A_ptr << endl;
-
-            ASSERT_EQ(gdr_get_info(g, A_mh, &A_info), 0);
-            cout << "A_info.va: " << hex << A_info.va << dec << endl;
-            cout << "A_info.mapped_size: " << A_info.mapped_size << endl;
-            cout << "A_info.page_size: " << A_info.page_size << endl;
-            cout << "A_info.mapped: " << A_info.mapped << endl;
-            cout << "A_info.wc_mapping: " << A_info.wc_mapping << endl;
-
-            // remember that mappings start on a 64KB boundary, so let's
-            // calculate the offset from the head of the mapping to the
-            // beginning of the buffer
-            A_off = A_info.va - d_A;
-            cout << "A page offset: " << A_off << endl;
-
-            g_A = (uint32_t *)((uintptr_t)map_A_ptr + A_off);
-            cout << "A user-space pointer: " << (void *)g_A << endl;
+        if (process_data) {
+            gh_mem_alloc(&data_buf_mhandle, data_size, data_buf_loc, g);
+            gh_mem_alloc(&init_buf_mhandle, data_size, MEM_LOC_HOST, g);
 
             cout << "Measuring the latency of data + flag model." << endl
                  << "CPU does gdr_copy_to_mapping for data followed by gdr_copy_to_mapping for flag. "
@@ -502,7 +483,7 @@ int main(int argc, char *argv[])
                  << data_size << " bytes and flag size " << gpu_flag_mhandle.size << " bytes."
                  << endl;
 
-            pp_data_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters, (uint32_t *)d_A, (uint32_t *)d_B, data_size);
+            pp_data_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters, (uint32_t *)data_buf_mhandle.gpu_ptr, data_size);
         }
         else {
             cout << "Measuring the visibility latency of the flag value." << endl
@@ -542,8 +523,8 @@ int main(int argc, char *argv[])
         // Restart the timer for measurement.
         clock_gettime(MYCLOCK, &beg);
         while (i < num_iters) {
-            if (do_consume_data) {
-                gdr_copy_to_mapping(A_mh, g_A, init_buf, data_size);
+            if (process_data) {
+                gdr_copy_to_mapping(data_buf_mhandle.mh, data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
                 SB();
             }
             if (gpu_flag_loc == MEM_LOC_GPU)
@@ -578,23 +559,14 @@ int main(int argc, char *argv[])
 
         gh_mem_free(&gpu_flag_mhandle);
         gh_mem_free(&cpu_flag_mhandle);
-        cout << "unmapping buffer" << endl;
-        if (do_consume_data)
-            ASSERT_EQ(gdr_unmap(g, A_mh, map_A_ptr, data_buffer_size), 0);
-
-        cout << "unpinning buffer" << endl;
-        if (do_consume_data)
-            ASSERT_EQ(gdr_unpin_buffer(g, A_mh), 0);
+        if (process_data) {
+            gh_mem_free(&data_buf_mhandle);
+            gh_mem_free(&init_buf_mhandle);
+        }
     } END_CHECK;
 
     cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
-
-    if (do_consume_data) {
-        ASSERTDRV(gfree_fn(&A_mhandle));
-        ASSERTDRV(gfree_fn(&B_mhandle));
-        ASSERTDRV(cuMemFreeHost(init_buf));
-    }
 
     return 0;
 }
