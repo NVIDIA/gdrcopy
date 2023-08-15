@@ -676,7 +676,10 @@ int main(int argc, char *argv[])
                 clock_gettime(MYCLOCK, &beg);
                 while (i <= num_iters) {
                     if (process_data) {
-                        gdr_copy_to_mapping(data_buf_mhandle.mh, data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
+                        if (data_buf_loc == MEM_LOC_GPU)
+                            gdr_copy_to_mapping(data_buf_mhandle.mh, data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
+                        else
+                            memcpy(data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
                         SB();
                     }
                     if (gpu_flag_loc == MEM_LOC_GPU)
@@ -735,6 +738,14 @@ int main(int argc, char *argv[])
                     }
                     while (cpu_flag_idx < num_blocks);
                     LB();
+
+                    if (process_data) {
+                        if (data_buf_loc == MEM_LOC_GPU)
+                            gdr_copy_from_mapping(data_buf_mhandle.mh, init_buf_mhandle.host_ptr, data_buf_mhandle.host_ptr, data_size);
+                        else
+                            memcpy(init_buf_mhandle.host_ptr, data_buf_mhandle.host_ptr, data_size);
+                        LB();
+                    }
 
                     if (gpu_flag_loc == MEM_LOC_GPU)
                         gdr_copy_to_mapping(gpu_flag_mhandle.mh, gpu_flag_mhandle.host_ptr, &val, sizeof(gpu_flag_mhandle.size));
