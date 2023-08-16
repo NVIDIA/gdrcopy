@@ -22,7 +22,7 @@
 
 # Restart this number at 1 if MAJOR_VERSION or MINOR_VERSION changes
 # See https://www.debian.org/doc/debian-policy/ch-controlfields.html#version
-DEBIAN_VERSION=1
+DEBIAN_VERSION=2
 
 SCRIPT_DIR_PATH="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."
@@ -96,7 +96,7 @@ MODULE_SUBDIR=$(awk '/MODULE_SUBDIR \?=/ { print $3 }' ${TOP_DIR_PATH}/src/gdrdr
 
 MAJOR_VERSION=$(awk '/#define GDR_API_MAJOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
 MINOR_VERSION=$(awk '/#define GDR_API_MINOR_VERSION/ { print $3 }' ${TOP_DIR_PATH}/include/gdrapi.h | tr -d '\n')
-VERSION="${MAJOR_VERSION}.${MINOR_VERSION}"
+VERSION="${MAJOR_VERSION}.${MINOR_VERSION}.1"
 if [ "X$VERSION" == "X" ]; then
     echo "Failed to get version numbers!" >&2
     exit 1

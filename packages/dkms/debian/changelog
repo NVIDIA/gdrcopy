@@ -1,4 +1,10 @@
-gdrdrv-dkms (@FULL_VERSION@) unstable; urgency=low
+gdrdrv-dkms (2.3.1) stable; urgency=low
+
+  * Add a workaround for the GPL-compatibility issue when compile with CONFIG_ARCH_HAS_CC_PLATFORM on Linux kernel 5.18+.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 12 May 2023 11:59:59 -0700
+
+gdrdrv-dkms (2.3) stable; urgency=low
 
   * Change the package maintainer to GPUDirect Team.
   * Add Davide Rossetti and Pak Makthub as Uploaders.
@@ -6,13 +12,13 @@ gdrdrv-dkms (@FULL_VERSION@) unstable; urgency=low
 
  -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 23 Jul 2021 11:59:59 -0700
 
-gdrdrv-dkms (2.2) unstable; urgency=low
+gdrdrv-dkms (2.2) stable; urgency=low
 
   * No change.
 
  -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Feb 2021 11:59:59 -0700
 
-gdrdrv-dkms (2.1) unstable; urgency=low
+gdrdrv-dkms (2.1) stable; urgency=low
 
   * Change the package maintainer to Davide Rossetti.
 
