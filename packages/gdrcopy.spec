@@ -314,7 +314,21 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Fri May 12 2023 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
+* Fri Sep 01 2023 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
+- Various bug fixes in the test and benchmark applications.
+- Prefix all applications with "gdrcopy_".
+- Introduce more unit tests in gdrcopy_sanity.
+- Introduce gdrcopy\_pplat benchmark application.
+- Introduce gdr_get_info_v2.
+- Introduce new copy algorithm for device mappings.
+- Add support for NVIDIA BLUEFIELD-3.
+- Add support for Linux kernel >= 6.3.
+- Add support for SLES and OpenSUSE.
+- Relicense gdrdrv to Dual MIT/GPL.
+- Fix bugs in gdrdrv when pinning two small buffers back-to-back.
+- Add support for coherent platforms such as Grace-Hopper.
+- Add support for Confidential Computing (CC).
+* Fri May 12 2023 Pak Markthub <pmarkthub@nvidia.com> 2.3.1-1
 - Add a workaround for the GPL-compatibility issue when compile with CONFIG_ARCH_HAS_CC_PLATFORM on Linux kernel 5.18+.
 - Fix error in init.d/gdrcopy due to missing /etc/rc.d/init.d/functions.
 * Fri Jul 23 2021 Pak Markthub <pmarkthub@nvidia.com> 2.3-1
