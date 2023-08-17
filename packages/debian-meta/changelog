@@ -1,3 +1,20 @@
+gdrcopy (2.4) stable; urgency=low
+
+  * Various bug fixes in the test and benchmark applications.
+  * Prefix all applications with "gdrcopy_".
+  * Introduce more unit tests in gdrcopy_sanity.
+  * Introduce gdrcopy_pplat benchmark application.
+  * Introduce gdr_get_info_v2.
+  * Introduce new copy algorithm for device mappings.
+  * Add support for NVIDIA BLUEFIELD-3.
+  * Add support for Linux kernel >= 6.3.
+  * Relicense gdrdrv to Dual MIT/GPL.
+  * Fix bugs in gdrdrv when pinning two small buffers back-to-back.
+  * Add support for coherent platforms such as Grace-Hopper.
+  * Add support for Confidential Computing (CC).
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Sep 2023 11:59:59 -0700
+
 gdrcopy (2.3.1) stable; urgency=low
 
   * Add a workaround for the GPL-compatibility issue when compile with CONFIG_ARCH_HAS_CC_PLATFORM on Linux kernel 5.18+.
