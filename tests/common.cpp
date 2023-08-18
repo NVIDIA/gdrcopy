@@ -31,7 +31,6 @@
 namespace gdrcopy {
     namespace test {
         bool print_dbg_msg = false;
-        const char *testname = "";
 
         void print_dbg(const char* fmt, ...)
         {

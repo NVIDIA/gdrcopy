@@ -2,18 +2,13 @@ DESTBIN ?=
 CUDA ?= /usr/local/cuda
 NVCC ?= $(CUDA)/bin/nvcc
 
-# note that pkg-config respects PKG_CONFIG_PATH, which can be used
-# to pick libcheck from a user-defined path
-CHECK_INC  := $(shell pkg-config --cflags-only-I check)
-CHECK_LIBS := $(shell pkg-config --libs check)
-
 GDRAPI_INC := ../include
 GDRAPI_SRC := ../src
 
 CUDA_LIB := -L $(CUDA)/lib64 -L $(CUDA)/lib -L /usr/lib64/nvidia -L /usr/lib/nvidia -L $(CUDA)/lib64/stubs
 CUDA_INC += -I $(CUDA)/include
 
-CPPFLAGS := $(CUDA_INC) -I $(GDRAPI_INC) -I $(GDRAPI_SRC) -I $(CUDA)/include $(CHECK_INC)
+CPPFLAGS := $(CUDA_INC) -I $(GDRAPI_INC) -I $(GDRAPI_SRC) -I $(CUDA)/include
 LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64 -L $(GDRAPI_SRC)
 COMMONCFLAGS := -O2
 CFLAGS   += $(COMMONCFLAGS)
@@ -29,17 +24,18 @@ all: exes
 
 exes: $(EXES)
 
+testsuites/testsuite.o: testsuites/testsuite.cpp testsuites/testsuite.hpp common.hpp
 common.o: common.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 copybw.o: copybw.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
-sanity.o: sanity.cpp $(GDRAPI_INC)/gdrapi.h $(GDRAPI_SRC)/gdrapi_internal.h common.hpp
+sanity.o: sanity.cpp $(GDRAPI_INC)/gdrapi.h $(GDRAPI_SRC)/gdrapi_internal.h common.hpp testsuites/testsuite.hpp
 copylat.o: copylat.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 apiperf.o: apiperf.cpp $(GDRAPI_INC)/gdrapi.h common.hpp
 
 gdrcopy_copybw: copybw.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
-gdrcopy_sanity: sanity.o common.o
-	$(LINK.cc)  -o $@ $^ $(LIBS) $(CHECK_LIBS)
+gdrcopy_sanity: sanity.o common.o testsuites/testsuite.o
+	$(LINK.cc)  -o $@ $^ $(LIBS)
 
 gdrcopy_copylat: copylat.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
@@ -54,7 +50,7 @@ gdrcopy_pplat: pplat.o common.o
 	$(NVCC) -o $@ -c $^ $(LIBS) $(CPPFLAGS) $(NVCCFLAGS)
 
 clean:
-	rm -f *.o $(EXES) *~ core.*
+	rm -f *.o $(EXES) *~ core.* testsuites/*.o
 
 install: exes
 	@ echo "installing exes in $(DESTBIN)..." && \

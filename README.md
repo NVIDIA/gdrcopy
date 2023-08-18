@@ -50,8 +50,7 @@ please refer to the official GPUDirect RDMA [design
 document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 
 The device driver requires GPU display driver >= 418.40 on ppc64le and >= 331.14 on other platforms. The library and tests
-require CUDA >= 6.0. Additionally, the `gdrcopy_sanity` test requires check >= 0.9.8 and
-subunit.
+require CUDA >= 6.0.
 
 DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL
 or SLE,
@@ -61,14 +60,13 @@ package. See [Build and installation](#build-and-installation) section for more 
 ```shell
 # On RHEL
 # dkms can be installed from epel-release. See https://fedoraproject.org/wiki/EPEL.
-$ sudo yum install dkms check check-devel subunit subunit-devel
+$ sudo yum install dkms
 
-# On Debian
-$ sudo apt install check libsubunit0 libsubunit-dev
+# On Debian - No additional dependency
 
 # On SLE / Leap
 # On SLE dkms can be installed from PackageHub.
-$ sudo zypper install dkms check-devel rpmbuild
+$ sudo zypper install dkms rpmbuild
 ```
 
 CUDA and GPU display driver must be installed before building and/or installing GDRCopy.
@@ -98,10 +96,10 @@ We provide three ways for building and installing GDRCopy.
 ```shell
 # For RHEL:
 $ sudo yum groupinstall 'Development Tools'
-$ sudo yum install dkms rpm-build make check check-devel subunit subunit-devel
+$ sudo yum install dkms rpm-build make
 
 # For SLE:
-$ sudo zypper in dkms rpmbuild check-devel
+$ sudo zypper in dkms rpmbuild
 
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-rpm-packages.sh
@@ -119,7 +117,7 @@ version used to build it.
 ### deb package
 
 ```shell
-$ sudo apt install build-essential devscripts debhelper check libsubunit-dev fakeroot pkg-config dkms
+$ sudo apt install build-essential devscripts debhelper fakeroot pkg-config dkms
 $ cd packages
 $ CUDA=<cuda-install-top-dir> ./build-deb-packages.sh
 $ sudo dpkg -i gdrdrv-dkms_<version>_<arch>.<platform>.deb
@@ -133,14 +131,6 @@ $ sudo dpkg -i gdrcopy_<version>_<arch>.<platform>.deb
 ```shell
 $ make prefix=<install-to-this-location> CUDA=<cuda-install-top-dir> all install
 $ sudo ./insmod.sh
-```
-
-If `libcheck` is installed in a non-standard path and therefore is not
-picked by `pkg-config`, you can set the `PKG_CONFIG_PATH` environment
-variable to the directory which contains the `check.pc` file and pass it
-down to make:
-```shell
-$ PKG_CONFIG_PATH=/check_install_path/lib/pkgconfig/ make <...>
 ```
 
 ### Notes
@@ -166,9 +156,38 @@ restrictions:
 
 Execute provided tests:
 ```shell
-$ gdrcopy_sanity
-Running suite(s): Sanity
-100%: Checks: 27, Failures: 0, Errors: 0
+$ gdrcopy_sanity 
+Total: 28, Passed: 28, Failed: 0, Waived: 0
+
+List of passed tests:
+    basic_child_thread_pins_buffer_cumemalloc
+    basic_child_thread_pins_buffer_vmmalloc
+    basic_cumemalloc
+    basic_small_buffers_mapping
+    basic_unaligned_mapping
+    basic_vmmalloc
+    basic_with_tokens
+    data_validation_cumemalloc
+    data_validation_vmmalloc
+    invalidation_access_after_free_cumemalloc
+    invalidation_access_after_free_vmmalloc
+    invalidation_access_after_gdr_close_cumemalloc
+    invalidation_access_after_gdr_close_vmmalloc
+    invalidation_fork_access_after_free_cumemalloc
+    invalidation_fork_access_after_free_vmmalloc
+    invalidation_fork_after_gdr_map_cumemalloc
+    invalidation_fork_after_gdr_map_vmmalloc
+    invalidation_fork_child_gdr_map_parent_cumemalloc
+    invalidation_fork_child_gdr_map_parent_vmmalloc
+    invalidation_fork_child_gdr_pin_parent_with_tokens
+    invalidation_fork_map_and_free_cumemalloc
+    invalidation_fork_map_and_free_vmmalloc
+    invalidation_two_mappings_cumemalloc
+    invalidation_two_mappings_vmmalloc
+    invalidation_unix_sock_shared_fd_gdr_map_cumemalloc
+    invalidation_unix_sock_shared_fd_gdr_map_vmmalloc
+    invalidation_unix_sock_shared_fd_gdr_pin_buffer_cumemalloc
+    invalidation_unix_sock_shared_fd_gdr_pin_buffer_vmmalloc
 
 
 $ gdrcopy_copybw
