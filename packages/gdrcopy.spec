@@ -73,8 +73,8 @@ Group:          System Environment/Libraries
 License:        MIT
 URL:            https://github.com/NVIDIA/gdrcopy
 Source0:        %{name}-%{version}.tar.gz
-BuildRequires:  gcc kernel-headers check-devel
-Requires:       check
+BuildRequires:  gcc kernel-headers
+Requires:
 
 %package devel
 Summary: The development files
