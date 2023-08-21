@@ -4,6 +4,7 @@ gdrcopy (2.4) stable; urgency=low
   * Prefix all applications with "gdrcopy_".
   * Introduce more unit tests in gdrcopy_sanity.
   * Introduce gdrcopy_pplat benchmark application.
+  * Remove dependency on libcheck and libsubunit
   * Introduce gdr_get_info_v2.
   * Introduce new copy algorithm for device mappings.
   * Add support for NVIDIA BLUEFIELD-3.

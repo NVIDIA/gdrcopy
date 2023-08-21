@@ -4,6 +4,7 @@ gdrcopy-tests (2.4) stable; urgency=low
   * Prefix all applications with "gdrcopy_".
   * Introduce more unit tests in gdrcopy_sanity.
   * Introduce gdrcopy_pplat benchmark application.
+  * Remove dependency on libcheck and libsubunit
 
  -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Sep 2023 11:59:59 -0700
 

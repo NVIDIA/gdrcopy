@@ -318,7 +318,8 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 - Various bug fixes in the test and benchmark applications.
 - Prefix all applications with "gdrcopy_".
 - Introduce more unit tests in gdrcopy_sanity.
-- Introduce gdrcopy\_pplat benchmark application.
+- Introduce gdrcopy_pplat benchmark application.
+- Remove dependency on libcheck and libsubunit
 - Introduce gdr_get_info_v2.
 - Introduce new copy algorithm for device mappings.
 - Add support for NVIDIA BLUEFIELD-3.

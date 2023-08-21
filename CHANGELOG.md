@@ -5,6 +5,7 @@
 - Prefix all applications with "gdrcopy\_".
 - Introduce more unit tests in gdrcopy\_sanity.
 - Introduce gdrcopy\_pplat benchmark application.
+- Remove dependency on libcheck and libsubunit
 - Introduce gdr\_get\_info\_v2.
 - Introduce new copy algorithm for device mappings.
 - Add support for NVIDIA BLUEFIELD-3.
