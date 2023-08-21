@@ -25,6 +25,7 @@
 #include <stdarg.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdio.h>
 #include <cuda.h>
 #include <check.h>
 #include <map>
