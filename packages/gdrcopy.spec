@@ -74,7 +74,6 @@ License:        MIT
 URL:            https://github.com/NVIDIA/gdrcopy
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  gcc kernel-headers
-Requires:
 
 %package devel
 Summary: The development files
