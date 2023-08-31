@@ -1,4 +1,4 @@
-libgdrapi (2.4) stable; urgency=low
+libgdrapi (@FULL_VERSION@) stable; urgency=low
 
   * Introduce gdr_get_info_v2.
   * Introduce new copy algorithm for device mappings.

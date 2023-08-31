@@ -1,4 +1,4 @@
-gdrdrv-dkms (2.4) stable; urgency=low
+gdrdrv-dkms (@FULL_VERSION@) stable; urgency=low
 
   * Add support for NVIDIA BLUEFIELD-3.
   * Add support for Linux kernel >= 6.3.

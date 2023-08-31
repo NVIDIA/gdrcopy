@@ -1,4 +1,4 @@
-gdrcopy (2.4) stable; urgency=low
+gdrcopy (@FULL_VERSION@) stable; urgency=low
 
   * Various bug fixes in the test and benchmark applications.
   * Prefix all applications with "gdrcopy_".
