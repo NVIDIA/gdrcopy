@@ -1,0 +1,14 @@
+[Unit]
+Description=GDRCopy service
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /etc/init.d/gdrcopy start
+ExecReload=/bin/bash /etc/init.d/gdrcopy restart
+ExecStop=/bin/bash /etc/init.d/gdrcopy stop
+
+[Install]
+WantedBy=multi-user.target
+

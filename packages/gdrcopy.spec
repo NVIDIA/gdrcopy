@@ -26,18 +26,40 @@
 %global kmod_fullname kmod-%{kmod_kernel_version}-%{NVIDIA_DRIVER_VERSION}
 %endif
 
+%define gdrcopy_service_install_script                                  \
+%if 0%{?rhel} >= 9                                                      \
+if [ -e /usr/bin/systemctl ]; then                                      \
+    /usr/bin/systemctl enable gdrcopy||:                                \
+    /usr/bin/systemctl start gdrcopy||:                                 \
+fi                                                                      \
+%else                                                                   \
+if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
+   true                                                                 \
+fi                                                                      \
+/sbin/chkconfig --add gdrcopy                                           \
+service gdrcopy start                                                   \
+%endif
+
+%define gdrcopy_service_uninstall_script                                \
+%if 0%{?rhel} >= 9                                                      \
+if [ -e /usr/bin/systemctl ]; then                                      \
+    /usr/bin/systemctl stop gdrcopy||:                                  \
+    /usr/bin/systemctl disable gdrcopy||:                               \
+fi                                                                      \
+%else                                                                   \
+service gdrcopy stop||:                                                 \
+%{MODPROBE} -rq gdrdrv||:                                               \
+if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
+   true                                                                 \
+fi                                                                      \
+%endif
+
+
 %define gdrdrv_install_script                                           \
 /sbin/depmod -a %{kernel_version} &> /dev/null ||:                      \
 %{MODPROBE} -rq gdrdrv||:                                               \
 %{MODPROBE} gdrdrv||:                                                   \
-                                                                        \
-if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
-   true                                                                 \
-fi                                                                      \
-                                                                        \
-/sbin/chkconfig --add gdrcopy                                           \
-                                                                        \
-service gdrcopy start                                                    
+%{gdrcopy_service_install_script}
 
 
 %global dkms_install_script                                             \
@@ -153,6 +175,13 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/
 # Install gdrdrv service script
 install -d $RPM_BUILD_ROOT/etc/init.d
 install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
+
+%if 0%{?rhel} >= 9
+# Install systemd service
+install -d $RPM_BUILD_ROOT/usr/lib/systemd/system
+install -m 0644 $RPM_BUILD_DIR/%{name}-%{version}/gdrcopy.service $RPM_BUILD_ROOT/usr/lib/systemd/system
+%endif
+
 %else
 mkdir -p $RPM_BUILD_ROOT/etc/modprobe.d
 cat <<"EOF" > $RPM_BUILD_ROOT/etc/modprobe.d/50-gdrdrv.conf
@@ -190,11 +219,7 @@ fi
 
 
 %preun %{dkms}
-service gdrcopy stop||:
-%{MODPROBE} -rq gdrdrv||:
-if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
-   true
-fi              
+%{gdrcopy_service_uninstall_script}
 
 # Remove all versions from DKMS registry
 echo "Uninstalling and removing the driver."
@@ -209,11 +234,7 @@ find /lib/modules/*/weak-updates -name "gdrdrv.ko" -delete &> /dev/null || :
 
 %if %{BUILD_KMOD} > 0
 %preun %{kmod_fullname}
-service gdrcopy stop||:
-%{MODPROBE} -rq gdrdrv||:
-if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then
-   true
-fi              
+%{gdrcopy_service_uninstall_script}
 %endif
 
 %postun %{dkms}
@@ -290,6 +311,9 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %defattr(-,root,root,-)
 %if 0%{!?suse_version:1}
 /etc/init.d/gdrcopy
+%if 0%{?rhel} >= 9
+/usr/lib/systemd/system/gdrcopy.service
+%endif
 %else
 /etc/modprobe.d/50-gdrdrv.conf
 %endif
@@ -324,6 +348,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 - Add support for NVIDIA BLUEFIELD-3.
 - Add support for Linux kernel >= 6.3.
 - Add support for SLES and OpenSUSE.
+- Add support for systemd service on RHEL9.
 - Relicense gdrdrv to Dual MIT/GPL.
 - Fix bugs in gdrdrv when pinning two small buffers back-to-back.
 - Add support for coherent platforms such as Grace-Hopper.

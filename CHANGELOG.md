@@ -11,6 +11,7 @@
 - Add support for NVIDIA BLUEFIELD-3.
 - Add support for Linux kernel >= 6.3.
 - Add support for SLES and OpenSUSE.
+- Add support for systemd service on RHEL9.
 - Relicense gdrdrv to Dual MIT/GPL.
 - Fix bugs in gdrdrv when pinning two small buffers back-to-back.
 - Add support for coherent platforms such as Grace-Hopper.
