@@ -172,17 +172,22 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/nv-p2p-dummy.c $RPM_BUILD_ROO
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
 
 %if 0%{!?suse_version:1}
-# Install gdrdrv service script
-install -d $RPM_BUILD_ROOT/etc/init.d
-install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
+# RHEL
 
 %if 0%{?rhel} >= 9
 # Install systemd service
+install -d $RPM_BUILD_ROOT/usr/libexec/gdrcopy
+install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/usr/libexec/gdrcopy
 install -d $RPM_BUILD_ROOT/usr/lib/systemd/system
 install -m 0644 $RPM_BUILD_DIR/%{name}-%{version}/gdrcopy.service $RPM_BUILD_ROOT/usr/lib/systemd/system
+%else
+# RHEL8 or earlier
+# Install gdrdrv service script
+install -d $RPM_BUILD_ROOT/etc/init.d
+install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
 %endif
 
-%else
+%else # SUSE
 mkdir -p $RPM_BUILD_ROOT/etc/modprobe.d
 cat <<"EOF" > $RPM_BUILD_ROOT/etc/modprobe.d/50-gdrdrv.conf
 #options gdrdrv dbg_enabled=1
@@ -310,9 +315,11 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %files %{dkms}
 %defattr(-,root,root,-)
 %if 0%{!?suse_version:1}
-/etc/init.d/gdrcopy
 %if 0%{?rhel} >= 9
+/usr/libexec/gdrcopy/gdrcopy
 /usr/lib/systemd/system/gdrcopy.service
+%else
+/etc/init.d/gdrcopy
 %endif
 %else
 /etc/modprobe.d/50-gdrdrv.conf
@@ -328,7 +335,12 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %files %{kmod_fullname}
 %defattr(-,root,root,-)
 %if 0%{!?suse_version:1}
+%if 0%{?rhel} >= 9
+/usr/libexec/gdrcopy/gdrcopy
+/usr/lib/systemd/system/gdrcopy.service
+%else
 /etc/init.d/gdrcopy
+%endif
 %else
 /etc/modprobe.d/50-gdrdrv.conf
 %endif
