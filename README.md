@@ -79,8 +79,8 @@ via package management, we suggest
 - On Debian, `sudo apt install nvidia-dkms-<your-nvidia-driver-version>`.
 - On SLE, `sudo zypper install nvidia-gfx<your-nvidia-driver-version>-kmp`.
 
-The supported architectures are Linux x86_64, ppc64le, and arm64. The supported
-platforms are RHEL7, RHEL8, Ubuntu16_04, Ubuntu18_04, Ubuntu20_04,
+The supported architectures are Linux x86\_64, ppc64le, and arm64. The supported
+platforms are RHEL8, RHEL9, Ubuntu20\_04, Ubuntu22\_04,
 SLE-15 (any SP) and Leap 15.x.
 
 Root privileges are necessary to load/install the kernel-mode device
