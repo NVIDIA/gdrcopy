@@ -10,7 +10,7 @@ Homepage: https://github.com/NVIDIA/gdrcopy
 Package: gdrcopy
 Architecture: any
 Multi-Arch: same
-Depends: gdrdrv-dkms (= @VERSION@), libgdrapi (= @VERSION@), gdrcopy-tests (= @VERSION@)
+Depends: gdrdrv-dkms (= @FULL_VERSION@), libgdrapi (= @FULL_VERSION@), gdrcopy-tests (= @FULL_VERSION@)
 Maintainer: GPUDirect Team <gpudirect@nvidia.com>
 Uploaders: Davide Rossetti <drossetti@nvidia.com>, Pak Markthub <pmarkthub@nvidia.com>
 Description: GDRCopy meta-package
