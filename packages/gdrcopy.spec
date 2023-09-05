@@ -27,31 +27,41 @@
 %endif
 
 %define gdrcopy_service_install_script                                  \
+%if 0%{!?suse_version:1}                                                \
+# RHEL                                                                  \
 %if 0%{?rhel} >= 9                                                      \
 if [ -e /usr/bin/systemctl ]; then                                      \
     /usr/bin/systemctl enable gdrcopy||:                                \
     /usr/bin/systemctl start gdrcopy||:                                 \
 fi                                                                      \
 %else                                                                   \
+# RHEL 8 or earlier                                                     \
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
    true                                                                 \
 fi                                                                      \
 /sbin/chkconfig --add gdrcopy                                           \
 service gdrcopy start                                                   \
+%endif                                                                  \
+# No service for SUSE                                                   \
 %endif
 
 %define gdrcopy_service_uninstall_script                                \
+%if 0%{!?suse_version:1}                                                \
+# RHEL                                                                  \
 %if 0%{?rhel} >= 9                                                      \
 if [ -e /usr/bin/systemctl ]; then                                      \
     /usr/bin/systemctl stop gdrcopy||:                                  \
     /usr/bin/systemctl disable gdrcopy||:                               \
 fi                                                                      \
 %else                                                                   \
+# RHEL 8 or earlier                                                     \
 service gdrcopy stop||:                                                 \
 %{MODPROBE} -rq gdrdrv||:                                               \
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
    true                                                                 \
 fi                                                                      \
+%endif                                                                  \
+# No service for SUSE                                                   \
 %endif
 
 
