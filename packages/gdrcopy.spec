@@ -61,7 +61,9 @@ if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
    true                                                                 \
 fi                                                                      \
 %endif                                                                  \
-# No service for SUSE                                                   \
+%else                                                                   \
+# No service for SUSE but we still need to unload the driver            \
+%{MODPROBE} -rq gdrdrv||:                                               \
 %endif
 
 
