@@ -466,6 +466,10 @@ GDRCopy does not fully support Linux with the confidential computing (CC) config
 it does not functional if `CONFIG_ARCH_HAS_CC_PLATFORM=y` and CC is enabled at runtime. However, it works if CC is
 disabled or `CONFIG_ARCH_HAS_CC_PLATFORM=n`. This issue is not applied to AMD CPU.
 
+To allow the loading of unsupported 3rd party modules in SLE, set `allow_unsupported_modules 1` in
+/etc/modprobe.d/unsupported-modules. After making this change, modules missing the "supported" flag, will be allowed to
+load.
+
 
 ## Bug filing
 
