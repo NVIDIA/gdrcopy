@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.4] - 2023-09-01
+## [2.4] - 2023-09-19
 - Various bug fixes in the test and benchmark applications.
 - Prefix all applications with "gdrcopy\_".
 - Introduce more unit tests in gdrcopy\_sanity.
