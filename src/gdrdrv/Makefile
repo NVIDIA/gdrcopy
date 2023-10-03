@@ -18,7 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-NVIDIA_SRC_DIR ?= $(shell { find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.h" -print -quit | xargs dirname || echo "NVIDIA_DRIVER_MISSING"; } 2>/dev/null)
+NVIDIA_SRC_DIR ?= $(shell { find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.c" -print -quit | xargs dirname || echo "NVIDIA_DRIVER_MISSING"; } 2>/dev/null)
 NVIDIA_IS_OPENSOURCE ?= $(shell grep -q "MODULE_LICENSE(\"Dual MIT/GPL\")" $(NVIDIA_SRC_DIR)/nv-frontend.c && echo "y")
 
 ifneq ($(KERNELRELEASE),)
