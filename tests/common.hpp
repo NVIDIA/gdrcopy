@@ -27,7 +27,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <cuda.h>
-#include <check.h>
+#include <cstring>
 #include <map>
 #include <gdrapi.h>
 #include <gdrconfig.h>
