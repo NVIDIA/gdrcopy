@@ -60,12 +60,21 @@ void exception_signal_handle(int sig)
     print_dbg("Unexpectedly get exception signal");
 }
 
-void init_cuda(int dev_id)
+void init_cuda(int dev_id, bool waive_if_not_in_default_compute_mode = false)
 {
     CUdevice dev;
     CUcontext dev_ctx;
     ASSERTDRV(cuInit(0));
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
+
+    if (waive_if_not_in_default_compute_mode) {
+        int mode;
+        ASSERTDRV(cuDeviceGetAttribute(&mode, CU_DEVICE_ATTRIBUTE_COMPUTE_MODE, dev));
+        if (mode != CU_COMPUTEMODE_DEFAULT) {
+            print_dbg("Waive this test because GPU is not in the default compute mode.\n");
+            exit(EXIT_WAIVED);
+        }
+    }
 
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
     ASSERTDRV(cuCtxSetCurrent(dev_ctx));
