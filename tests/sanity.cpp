@@ -1441,7 +1441,7 @@ void invalidation_fork_map_and_free()
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0);
+    init_cuda(0, true);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -1563,7 +1563,7 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
 
     print_dbg("%s: Start\n", myname);
 
-    init_cuda(0);
+    init_cuda(0, true);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -1695,7 +1695,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
         write_fd = filedes_1[1];
     }
 
-    init_cuda(0);
+    init_cuda(0, true);
     filter_fn();
 
     CUdeviceptr d_A;
