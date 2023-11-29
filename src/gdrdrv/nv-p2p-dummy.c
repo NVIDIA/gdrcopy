@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2021, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2015-2023, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -91,6 +91,30 @@ int nvidia_p2p_free_page_table(struct nvidia_p2p_page_table *page_table)
     return -EINVAL;
 }
 EXPORT_SYMBOL(nvidia_p2p_free_page_table);
+
+#ifdef NVIDIA_P2P_CAP_PERSISTENT_PAGES
+int nvidia_p2p_cap_persistent_pages;
+EXPORT_SYMBOL(nvidia_p2p_cap_persistent_pages);
+#endif
+
+#ifdef NVIDIA_P2P_CAP_GET_PAGES_PERSISTENT_API
+int nvidia_p2p_get_pages_persistent(uint64_t virtual_address,
+        uint64_t length,
+        struct nvidia_p2p_page_table **page_table,
+        uint32_t flags)
+{
+    return -EINVAL;
+}
+EXPORT_SYMBOL(nvidia_p2p_get_pages_persistent);
+
+int nvidia_p2p_put_pages_persistent(uint64_t virtual_address,
+        struct nvidia_p2p_page_table *page_table,
+        uint32_t flags)
+{
+    return -EINVAL;
+}
+EXPORT_SYMBOL(nvidia_p2p_put_pages_persistent);
+#endif
 
 static int __init nv_p2p_dummy_init(void)
 {
