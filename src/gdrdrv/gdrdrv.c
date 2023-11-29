@@ -1455,6 +1455,9 @@ static int __init gdrdrv_init(void)
     if (gdrdrv_cpu_must_use_device_mapping)
         gdr_msg(KERN_INFO, "enabling use of CPU device mappings\n");
 
+    if (gdr_use_persistent_mapping())
+        gdr_msg(KERN_INFO, "Persistent mapping will be used\n");
+
     return 0;
 }
 
