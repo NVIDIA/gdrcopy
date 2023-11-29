@@ -147,6 +147,19 @@ void gdr_runtime_get_version(int *major, int *minor);
 // Query the version of gdrdrv driver
 int gdr_driver_get_version(gdr_t g, int *major, int *minor);
 
+typedef enum gdr_attr {
+    GDR_ATTR_USE_PERSISTENT_MAPPING = 1,    // gdrdrv uses persistent mapping
+
+    // For internal use only
+    GDR_ATTR_MAX
+} gdr_attr_t;
+
+// Query the attribute of GDRCopy.
+//
+// This is for querying a system-wide attribute.
+// To query an attribute associated with each memory handle, use gdr_get_info instead.
+int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v);
+
 #ifdef __cplusplus
 }
 #endif

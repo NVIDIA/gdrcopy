@@ -313,6 +313,10 @@ struct gdr_mr {
 };
 typedef struct gdr_mr gdr_mr_t;
 
+typedef enum {
+    GDR_ATTR_USE_PERSISTENT_MAPPING = 1
+} gdr_attr_t;
+
 /**
  * Prerequisite:
  * - mr must be protected by down_read(mr->sem) or stronger.
@@ -1050,6 +1054,36 @@ static int gdrdrv_get_info_v2(gdr_info_t *info, void __user *_params)
 
 //-----------------------------------------------------------------------------
 
+static int gdrdrv_get_attr(gdr_info_t *info, void __user *_params)
+{
+    struct GDRDRV_IOC_GET_ATTR_PARAMS params = {0};
+    int ret = 0;
+
+    if (copy_from_user(&params, _params, sizeof(params))) {
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    switch (params.attr) {
+    case GDR_ATTR_USE_PERSISTENT_MAPPING:
+        params.val = gdr_use_persistent_mapping();
+        break;
+    default:
+        ret = -EINVAL;
+    }
+
+    if (copy_to_user(_params, &params, sizeof(params))) {
+        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+    }
+
+ out:
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+
 static int gdrdrv_get_version(gdr_info_t *info, void __user *_params)
 {
     struct GDRDRV_IOC_GET_VERSION_PARAMS params = {0};
@@ -1110,6 +1144,10 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
 
     case GDRDRV_IOC_GET_INFO_V2:
         ret = gdrdrv_get_info_v2(info, argp);
+        break;
+
+    case GDRDRV_IOC_GET_ATTR:
+        ret = gdrdrv_get_attr(info, argp);
         break;
 
     case GDRDRV_IOC_GET_VERSION:
