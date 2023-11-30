@@ -851,6 +851,10 @@ int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
         // Assume 0.
         *v = 0;
         goto out;
+    } else if (0 != retcode) {
+        ret = errno;
+        gdr_err("ioctl error (errno=%d)\n", ret);
+        goto out;
     }
 
     *v = params.val;
