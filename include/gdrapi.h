@@ -148,7 +148,8 @@ void gdr_runtime_get_version(int *major, int *minor);
 int gdr_driver_get_version(gdr_t g, int *major, int *minor);
 
 typedef enum gdr_attr {
-    GDR_ATTR_USE_PERSISTENT_MAPPING = 1,    // gdrdrv uses persistent mapping
+    GDR_ATTR_USE_PERSISTENT_MAPPING = 1,    // Query whether gdrdrv uses persistent mapping
+                                            // or traditional (non-persistent) mapping.
 
     // For internal use only
     GDR_ATTR_MAX
