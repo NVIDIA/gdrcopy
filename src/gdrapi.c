@@ -836,7 +836,15 @@ int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
         goto out;
     }
 
-    params.attr = attr;
+    switch (attr) {
+        case GDR_ATTR_USE_PERSISTENT_MAPPING:
+            params.attr = GDRDRV_ATTR_USE_PERSISTENT_MAPPING;
+            break;
+        default:
+            gdr_err("Error: Unrecognize attr\n");
+            ret = EINVAL;
+            goto out;
+    }
     retcode = ioctl(g->fd, GDRDRV_IOC_GET_ATTR, &params);
     if (-EINVAL == retcode) {
         // gdrdrv might be too old to query this attr.

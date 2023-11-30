@@ -49,6 +49,10 @@ typedef enum {
     GDR_MR_DEVICE = 3
 } gdr_mr_type_t;
 
+typedef enum {
+    GDRDRV_ATTR_USE_PERSISTENT_MAPPING = 1
+} gdrdrv_attr_t;
+
 typedef __u64 gdr_hnd_t;
 
 //-----------
@@ -128,7 +132,7 @@ struct GDRDRV_IOC_GET_INFO_V2_PARAMS
 struct GDRDRV_IOC_GET_ATTR_PARAMS
 {
     // in
-    __u32 attr;
+    __u32 attr; // gdrdrv_attr_t
     // out
     __u32 val;
 };

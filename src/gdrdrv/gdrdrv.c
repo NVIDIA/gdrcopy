@@ -313,10 +313,6 @@ struct gdr_mr {
 };
 typedef struct gdr_mr gdr_mr_t;
 
-typedef enum {
-    GDR_ATTR_USE_PERSISTENT_MAPPING = 1
-} gdr_attr_t;
-
 /**
  * Prerequisite:
  * - mr must be protected by down_read(mr->sem) or stronger.
@@ -1066,7 +1062,7 @@ static int gdrdrv_get_attr(gdr_info_t *info, void __user *_params)
     }
 
     switch (params.attr) {
-    case GDR_ATTR_USE_PERSISTENT_MAPPING:
+    case GDRDRV_ATTR_USE_PERSISTENT_MAPPING:
         params.val = gdr_use_persistent_mapping();
         break;
     default:
