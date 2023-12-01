@@ -60,12 +60,21 @@ void exception_signal_handle(int sig)
     print_dbg("Unexpectedly get exception signal");
 }
 
-void init_cuda(int dev_id)
+void init_cuda(int dev_id, bool waive_if_not_in_default_compute_mode = false)
 {
     CUdevice dev;
     CUcontext dev_ctx;
     ASSERTDRV(cuInit(0));
     ASSERTDRV(cuDeviceGet(&dev, dev_id));
+
+    if (waive_if_not_in_default_compute_mode) {
+        int mode;
+        ASSERTDRV(cuDeviceGetAttribute(&mode, CU_DEVICE_ATTRIBUTE_COMPUTE_MODE, dev));
+        if (mode != CU_COMPUTEMODE_DEFAULT) {
+            print_dbg("Waive this test because GPU is not in the default compute mode.\n");
+            exit(EXIT_WAIVED);
+        }
+    }
 
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
     ASSERTDRV(cuCtxSetCurrent(dev_ctx));
@@ -968,6 +977,7 @@ void invalidation_fork_access_after_free()
     const size_t _size = sizeof(int) * 16;
     const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
+    bool error_in_first_signal = false;
 
     fflush(stdout);
     fflush(stderr);
@@ -990,9 +1000,10 @@ void invalidation_fork_access_after_free()
 
         do {
             print_dbg("%s: waiting for cont signal from parent\n", myname);
-            ASSERT_EQ(read(read_fd, &cont, sizeof(int)), sizeof(int));
+            // The parent process may waive out if the GPU compute mode is not default.
+            error_in_first_signal = (read(read_fd, &cont, sizeof(int)) != sizeof(int));
             print_dbg("%s: receive cont signal %d from parent\n", myname, cont);
-        } while (cont != 1);
+        } while (cont != 1 && !error_in_first_signal);
     }
     else {
         close(filedes_0[1]);
@@ -1015,8 +1026,10 @@ void invalidation_fork_access_after_free()
     if (pid == 0)
         mydata += 10;
 
-    init_cuda(0);
+    init_cuda(0, true);
     filter_fn();
+
+    ASSERT(!error_in_first_signal);
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
@@ -1428,7 +1441,7 @@ void invalidation_fork_map_and_free()
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0);
+    init_cuda(0, true);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -1550,7 +1563,7 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
 
     print_dbg("%s: Start\n", myname);
 
-    init_cuda(0);
+    init_cuda(0, true);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -1682,7 +1695,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
         write_fd = filedes_1[1];
     }
 
-    init_cuda(0);
+    init_cuda(0, true);
     filter_fn();
 
     CUdeviceptr d_A;
