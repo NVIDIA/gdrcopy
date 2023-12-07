@@ -740,6 +740,10 @@ GDRCOPY_TEST(invalidation_access_after_gdr_close_vmmalloc)
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
 void invalidation_access_after_free()
 {
+    // Waive this test until we provide a way to query whether persistent
+    // mapping is being used.
+    exit(EXIT_WAIVED);
+
     expecting_exception_signal = false;
     MB();
 
