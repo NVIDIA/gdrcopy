@@ -361,7 +361,11 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Fri Sep 01 2023 Pak Markthub <pmarkthub@nvidia.com> %{GDR_VERSION}-%{_release}
+* Mon Dec 18 2023 Pak Markthub <pmarkthub@nvidia.com> 2.4.1-%{_release}
+- Add support for persistent mapping.
+- Fix bug in src/gdrdrv/Makefile.
+- Fix compile-time bug when check.h is not found.
+* Fri Sep 01 2023 Pak Markthub <pmarkthub@nvidia.com> 2.4-1
 - Various bug fixes in the test and benchmark applications.
 - Prefix all applications with "gdrcopy_".
 - Introduce more unit tests in gdrcopy_sanity.

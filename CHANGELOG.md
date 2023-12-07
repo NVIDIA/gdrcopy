@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.4.1] - 2023-12-18
+- Add support for persistent mapping.
+- Fix bug in src/gdrdrv/Makefile.
+- Fix compile-time bug when check.h is not found.
+
 ## [2.4] - 2023-09-19
 - Various bug fixes in the test and benchmark applications.
 - Prefix all applications with "gdrcopy\_".
@@ -78,6 +83,7 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 
+[2.4.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.1
 [2.4]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4
 [2.3.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.3.1
 [2.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.3

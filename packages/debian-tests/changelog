@@ -1,4 +1,10 @@
-gdrcopy-tests (@FULL_VERSION@) stable; urgency=low
+gdrcopy-tests (2.4.1) stable; urgency=low
+
+  * Fix compile-time bug when check.h is not found.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 18 Dec 2023 11:59:59 -0700
+
+gdrcopy-tests (2.4) stable; urgency=low
 
   * Various bug fixes in the test and benchmark applications.
   * Prefix all applications with "gdrcopy_".
@@ -6,7 +12,7 @@ gdrcopy-tests (@FULL_VERSION@) stable; urgency=low
   * Introduce gdrcopy_pplat benchmark application.
   * Remove dependency on libcheck and libsubunit
 
- -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Sep 2023 11:59:59 -0700
+ -- Pak Markthub <pmarkthub@nvidia.com>  Fri, 01 Sep 2023 11:59:59 -0700
 
 gdrcopy-tests (2.3.1) stable; urgency=low
 
