@@ -818,6 +818,51 @@ int gdr_driver_get_version(gdr_t g, int *major, int *minor)
     return 0;
 }
 
+int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
+{
+    int ret = 0;
+    int retcode;
+    struct GDRDRV_IOC_GET_ATTR_PARAMS params;
+
+    if (attr < 1 || attr >= GDR_ATTR_MAX) {
+        ret = EINVAL;
+        goto out;
+    }
+
+    // gdrdrv does not support attribute querying.
+    // Always assume that the value is 0.
+    if (g->gdrdrv_version < GDRDRV_MINIMUM_VERSION_WITH_GET_ATTR) {
+        *v = 0;
+        goto out;
+    }
+
+    switch (attr) {
+        case GDR_ATTR_USE_PERSISTENT_MAPPING:
+            params.attr = GDRDRV_ATTR_USE_PERSISTENT_MAPPING;
+            break;
+        default:
+            gdr_err("Error: Unrecognize attr\n");
+            ret = EINVAL;
+            goto out;
+    }
+    retcode = ioctl(g->fd, GDRDRV_IOC_GET_ATTR, &params);
+    if (-EINVAL == retcode) {
+        // gdrdrv might be too old to query this attr.
+        // Assume 0.
+        *v = 0;
+        goto out;
+    } else if (0 != retcode) {
+        ret = errno;
+        gdr_err("ioctl error (errno=%d)\n", ret);
+        goto out;
+    }
+
+    *v = params.val;
+
+out:
+    return ret;
+}
+
 // ==============================================================================
 // Obsoleted API. Provided for compatibility only.
 // ==============================================================================

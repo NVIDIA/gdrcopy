@@ -249,6 +249,8 @@ static int info_enabled = 0;
 #define gdr_err(FMT, ARGS...)                               \
     gdr_msg(KERN_DEBUG, FMT, ## ARGS)
 
+static int use_persistent_mapping = 0;
+
 //-----------------------------------------------------------------------------
 
 MODULE_AUTHOR("drossetti@nvidia.com");
@@ -259,6 +261,8 @@ module_param(dbg_enabled, int, 0000);
 MODULE_PARM_DESC(dbg_enabled, "enable debug tracing");
 module_param(info_enabled, int, 0000);
 MODULE_PARM_DESC(info_enabled, "enable info tracing");
+module_param(use_persistent_mapping, int, 0000);
+MODULE_PARM_DESC(user_persistent_mapping, "use persistent mapping instead of traditional (non-persistent) mapping");
 
 //-----------------------------------------------------------------------------
 
@@ -363,6 +367,8 @@ struct gdr_info {
 };
 typedef struct gdr_info gdr_info_t;
 
+//-----------------------------------------------------------------------------
+
 static int gdrdrv_check_same_process(gdr_info_t *info, struct task_struct *tsk)
 {
     int same_proc;
@@ -374,6 +380,24 @@ static int gdrdrv_check_same_process(gdr_info_t *info, struct task_struct *tsk)
                 info->tgid, task_tgid(tsk));
     }
     return same_proc;
+}
+
+//-----------------------------------------------------------------------------
+
+static inline int gdr_support_persistent_mapping(void)
+{
+#if defined(NVIDIA_P2P_CAP_GET_PAGES_PERSISTENT_API)
+    return 1;
+#elif defined(NVIDIA_P2P_CAP_PERSISTENT_PAGES)
+    return !!(nvidia_p2p_cap_persistent_pages);
+#else
+    return 0;
+#endif
+}
+
+static inline int gdr_use_persistent_mapping(void)
+{
+    return use_persistent_mapping && gdr_support_persistent_mapping();
 }
 
 //-----------------------------------------------------------------------------
@@ -451,10 +475,24 @@ static void gdr_free_mr_unlocked(gdr_mr_t *mr)
         up_write(&mr->sem);
 
         // In case gdrdrv_get_pages_free_callback is inflight, nvidia_p2p_put_pages will be blocked.
+        #ifdef NVIDIA_P2P_CAP_GET_PAGES_PERSISTENT_API
+        if (gdr_use_persistent_mapping()) {
+            status = nvidia_p2p_put_pages_persistent(mr->va, page_table, 0);
+            if (status) {
+                gdr_err("nvidia_p2p_put_pages_persistent error %d\n", status);
+            }
+        } else {
+            status = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, page_table);
+            if (status) {
+                gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", status);
+            }
+        }
+        #else
         status = nvidia_p2p_put_pages(mr->p2p_token, mr->va_space, mr->va, page_table);
         if (status) {
             gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", status);
         }
+        #endif
     } else {
         gdr_dbg("invoking unpin_buffer while callback has already been fired\n");
 
@@ -584,6 +622,8 @@ static gdr_hnd_t gdrdrv_handle_from_off(unsigned long off)
 
 //-----------------------------------------------------------------------------
 
+typedef void (*gdr_free_callback_fn_t)(void *);
+
 static void gdrdrv_get_pages_free_callback(void *data)
 {
     gdr_mr_t *mr = data;
@@ -655,6 +695,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
     u64 page_virt_end;
     size_t rounded_size;
     gdr_mr_t *mr = NULL;
+    gdr_free_callback_fn_t free_callback_fn;
     #ifndef CONFIG_ARM64
     cycles_t ta, tb;
     #endif
@@ -674,18 +715,23 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
 
     init_rwsem(&mr->sem);
 
+    free_callback_fn = gdr_use_persistent_mapping() ? NULL : gdrdrv_get_pages_free_callback;
+
     mr->offset       = addr & GPU_PAGE_OFFSET;
     mr->length       = size;
-    mr->p2p_token    = p2p_token;
-    mr->va_space     = va_space;
+    if (free_callback_fn) {
+        mr->p2p_token    = p2p_token;
+        mr->va_space     = va_space;
+    } else {
+        // Token cannot be used with persistent mapping.
+        mr->p2p_token    = 0;
+        mr->va_space     = 0;
+    }
     mr->va           = page_virt_start;
     mr->mapped_size  = rounded_size;
     mr->cpu_mapping_type = GDR_MR_NONE;
     mr->page_table   = NULL;
     mr->cb_flag      = 0;
-
-    gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x)\n",
-             mr->va, mr->mapped_size, mr->p2p_token, mr->va_space);
 
     #ifndef CONFIG_ARM64
     ta = get_cycles();
@@ -697,14 +743,30 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
     // We take this semaphore to prevent race with gdrdrv_get_pages_free_callback.
     down_write(&mr->sem);
 
+    #ifdef NVIDIA_P2P_CAP_GET_PAGES_PERSISTENT_API
+    if (free_callback_fn) {
+        ret = nvidia_p2p_get_pages(mr->p2p_token, mr->va_space, mr->va, mr->mapped_size, &page_table,
+                                   free_callback_fn, mr);
+        gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x callback=%px)\n",
+                 mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, free_callback_fn);
+    } else {
+        ret = nvidia_p2p_get_pages_persistent(mr->va, mr->mapped_size, &page_table, 0);
+        gdr_info("invoking nvidia_p2p_get_pages_persistent(va=0x%llx len=%lld)\n",
+                 mr->va, mr->mapped_size);
+    }
+    #else
     ret = nvidia_p2p_get_pages(mr->p2p_token, mr->va_space, mr->va, mr->mapped_size, &page_table,
-                               gdrdrv_get_pages_free_callback, mr);
+                               free_callback_fn, mr);
+    gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x callback=%px)\n",
+             mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, free_callback_fn);
+    #endif
+
     #ifndef CONFIG_ARM64
     tb = get_cycles();
     #endif
     if (ret < 0) {
-        gdr_err("nvidia_p2p_get_pages(va=%llx len=%lld p2p_token=%llx va_space=%x) failed [ret = %d]\n",
-                mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, ret);
+        gdr_err("nvidia_p2p_get_pages(va=%llx len=%lld p2p_token=%llx va_space=%x callback=%px) failed [ret = %d]\n",
+                mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, free_callback_fn, ret);
         goto out;
     }
     mr->page_table = page_table;
@@ -988,6 +1050,36 @@ static int gdrdrv_get_info_v2(gdr_info_t *info, void __user *_params)
 
 //-----------------------------------------------------------------------------
 
+static int gdrdrv_get_attr(gdr_info_t *info, void __user *_params)
+{
+    struct GDRDRV_IOC_GET_ATTR_PARAMS params = {0};
+    int ret = 0;
+
+    if (copy_from_user(&params, _params, sizeof(params))) {
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    switch (params.attr) {
+    case GDRDRV_ATTR_USE_PERSISTENT_MAPPING:
+        params.val = gdr_use_persistent_mapping();
+        break;
+    default:
+        ret = -EINVAL;
+    }
+
+    if (copy_to_user(_params, &params, sizeof(params))) {
+        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+    }
+
+ out:
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+
 static int gdrdrv_get_version(gdr_info_t *info, void __user *_params)
 {
     struct GDRDRV_IOC_GET_VERSION_PARAMS params = {0};
@@ -1048,6 +1140,10 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
 
     case GDRDRV_IOC_GET_INFO_V2:
         ret = gdrdrv_get_info_v2(info, argp);
+        break;
+
+    case GDRDRV_IOC_GET_ATTR:
+        ret = gdrdrv_get_attr(info, argp);
         break;
 
     case GDRDRV_IOC_GET_VERSION:
@@ -1392,6 +1488,9 @@ static int __init gdrdrv_init(void)
 
     if (gdrdrv_cpu_must_use_device_mapping)
         gdr_msg(KERN_INFO, "enabling use of CPU device mappings\n");
+
+    if (gdr_use_persistent_mapping())
+        gdr_msg(KERN_INFO, "Persistent mapping will be used\n");
 
     return 0;
 }

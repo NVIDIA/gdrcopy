@@ -778,6 +778,9 @@ void invalidation_access_after_free()
 
     gdr_t g = gdr_open_safe();
 
+    int use_persistent_mapping;
+    ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_USE_PERSISTENT_MAPPING, &use_persistent_mapping), 0);
+
     gdr_mh_t mh;
     CUdeviceptr d_ptr = d_A;
 
@@ -795,6 +798,7 @@ void invalidation_access_after_free()
     int off = d_ptr - info.va;
 
     volatile int *buf_ptr = (volatile int *)((char *)bar_ptr + off);
+    int data_from_buf_ptr = 0;
 
     // Write data
     print_dbg("Writing %d into buf_ptr[0]\n", mydata);
@@ -804,14 +808,21 @@ void invalidation_access_after_free()
     ASSERTDRV(gfree_fn(&mhandle));
 
     print_dbg("Trying to read buf_ptr[0] after gpuMemFree\n");
-    expecting_exception_signal = true;
+    if (use_persistent_mapping)
+        print_dbg("Expect that we could still read buf_ptr[0] because persistent mapping is supported and enabled\n");
+    else
+        print_dbg("Expect an error because we are using traditional mapping\n");
+    expecting_exception_signal = !use_persistent_mapping;
     MB();
-    int data_from_buf_ptr = buf_ptr[0];
+    data_from_buf_ptr = buf_ptr[0];
     MB();
     expecting_exception_signal = false;
     MB();
 
-    ASSERT_NEQ(data_from_buf_ptr, mydata);
+    if (use_persistent_mapping)
+        ASSERT_EQ(data_from_buf_ptr, mydata);
+    else
+        ASSERT_NEQ(data_from_buf_ptr, mydata);
 
     ASSERT_EQ(gdr_unmap(g, mh, bar_ptr, size), 0);
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);

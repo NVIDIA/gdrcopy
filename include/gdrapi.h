@@ -30,7 +30,7 @@
 #define MINOR_VERSION_MASK      (((uint32_t)1 << MAJOR_VERSION_SHIFT) - 1)
 
 #define GDR_API_MAJOR_VERSION    2
-#define GDR_API_MINOR_VERSION    4
+#define GDR_API_MINOR_VERSION    5
 #define GDR_API_VERSION          ((GDR_API_MAJOR_VERSION << MAJOR_VERSION_SHIFT) | GDR_API_MINOR_VERSION)
 
 #define MINIMUM_GDRDRV_MAJOR_VERSION    2
@@ -146,6 +146,20 @@ void gdr_runtime_get_version(int *major, int *minor);
 
 // Query the version of gdrdrv driver
 int gdr_driver_get_version(gdr_t g, int *major, int *minor);
+
+typedef enum gdr_attr {
+    GDR_ATTR_USE_PERSISTENT_MAPPING = 1,    // Query whether gdrdrv uses persistent mapping
+                                            // or traditional (non-persistent) mapping.
+
+    // For internal use only
+    GDR_ATTR_MAX
+} gdr_attr_t;
+
+// Query the attribute of GDRCopy.
+//
+// This is for querying a system-wide attribute.
+// To query an attribute associated with each memory handle, use gdr_get_info instead.
+int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v);
 
 #ifdef __cplusplus
 }
