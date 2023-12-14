@@ -101,7 +101,8 @@ if [ "X$VERSION" == "X" ]; then
     echo "Failed to get version numbers!" >&2
     exit 1
 fi
-FULL_VERSION="${VERSION}-${DEBIAN_VERSION}"
+#FULL_VERSION="${VERSION}-${DEBIAN_VERSION}"
+FULL_VERSION="${VERSION}"
 
 tmpdir=`mktemp -d /tmp/gdr.XXXXXX`
 if [ ! -d "${tmpdir}" ]; then
