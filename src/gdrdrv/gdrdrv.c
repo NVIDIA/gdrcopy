@@ -262,7 +262,7 @@ MODULE_PARM_DESC(dbg_enabled, "enable debug tracing");
 module_param(info_enabled, int, 0000);
 MODULE_PARM_DESC(info_enabled, "enable info tracing");
 module_param(use_persistent_mapping, int, 0000);
-MODULE_PARM_DESC(user_persistent_mapping, "use persistent mapping instead of traditional (non-persistent) mapping");
+MODULE_PARM_DESC(use_persistent_mapping, "use persistent mapping instead of traditional (non-persistent) mapping");
 
 //-----------------------------------------------------------------------------
 
