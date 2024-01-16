@@ -105,6 +105,11 @@ static inline int gdr_is_mapped(const gdr_mapping_type_t mapping_type)
     return mapping_type != GDR_MAPPING_TYPE_NONE;
 }
 
+static inline size_t round_up_size(size_t size, size_t align) {
+  assert((align > 0) && ((align & (align - 1)) == 0));
+  return ((size + align - 1) & (~(align - 1)));
+}
+
 gdr_t gdr_open(void)
 {
     gdr_t g = NULL;
@@ -216,6 +221,7 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
 {
     int ret = 0;
     int retcode;
+    size_t requested_size = 0;
 
     if (!handle) {
         return EINVAL;
@@ -226,9 +232,10 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
         return ENOMEM;
     }
 
+    requested_size = round_up_size(size, GPU_PAGE_SIZE);
     struct GDRDRV_IOC_PIN_BUFFER_PARAMS params;
     params.addr = addr;
-    params.size = size;
+    params.size = requested_size;
     params.p2p_token = p2p_token;
     params.va_space = va_space;
     params.handle = 0;
@@ -237,6 +244,7 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     if (0 != retcode) {
         ret = errno;
         gdr_err("ioctl error (errno=%d)\n", ret);
+        free(mh);
         goto err;
     }
     mh->handle = params.handle;
