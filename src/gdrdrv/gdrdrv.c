@@ -43,6 +43,13 @@
 #endif
 
 /**
+ * This is needed for round_up()
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+#include <linux/math.h>
+#endif
+
+/**
  * HAVE_UNLOCKED_IOCTL has been dropped in kernel version 5.9.
  * There is a chance that the removal might be ported back to 5.x.
  * So if HAVE_UNLOCKED_IOCTL is not defined in kernel v5, we define it.
@@ -296,7 +303,6 @@ struct gdr_mr {
     struct list_head node;
     gdr_hnd_t handle;
     u64 offset;
-    u64 length;
     u64 p2p_token;
     u32 va_space;
     u32 page_size;
@@ -709,16 +715,16 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
     memset(mr, 0, sizeof(*mr));
 
     // do proper alignment, as required by NVIDIA driver.
+    // align both size and addr as it is a requirement of nvidia_p2p_get_pages* API
     page_virt_start  = addr & GPU_PAGE_MASK;
-    page_virt_end    = addr + size - 1;
-    rounded_size     = page_virt_end - page_virt_start + 1;
+    page_virt_end    = round_up((addr + size), GPU_PAGE_SIZE);
+    rounded_size     = page_virt_end - page_virt_start;
 
     init_rwsem(&mr->sem);
 
     free_callback_fn = gdr_use_persistent_mapping() ? NULL : gdrdrv_get_pages_free_callback;
 
     mr->offset       = addr & GPU_PAGE_OFFSET;
-    mr->length       = size;
     if (free_callback_fn) {
         mr->p2p_token    = p2p_token;
         mr->va_space     = va_space;
