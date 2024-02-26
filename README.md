@@ -43,8 +43,8 @@ The library comes with a few tests like:
 
 ## Requirements
 
-GPUDirect RDMA requires NVIDIA Data Center or Professional Graphics GPUs based on Kepler or newer generations, see [GPUDirect
-RDMA](http://developer.nvidia.com/gpudirect).  For more technical informations,
+GPUDirect RDMA requires [NVIDIA Data Center GPU](https://www.nvidia.com/en-us/data-center/) or [NVIDIA RTX GPU](https://www.nvidia.com/en-us/design-visualization/rtx/) (formerly Tesla and Quadro) based on Kepler or newer generations, see [GPUDirect
+RDMA](http://developer.nvidia.com/gpudirect).  For more general information,
 please refer to the official GPUDirect RDMA [design
 document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 
