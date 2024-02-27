@@ -19,8 +19,45 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+# Function to check directory writability and noexec flag
+check_dir() {
+    local dir=$1
+    local mount_point
+
+    # Check if directory exists and is writable
+    if [[ -d "$dir" && -w "$dir" ]]; then
+        # Find the mount point for the directory
+        mount_point=$(df --output=target "$dir" | tail -1)
+
+        # Check if the mount point has the noexec flag
+        if ! mount | grep " on $mount_point type " | grep -q 'noexec'; then
+            # Return success if the directory is suitable
+            return 0
+        fi
+    fi
+
+    # Return failure
+    return 1
+}
+
+# Initialize working_path as an empty string
+working_path=""
+
+# Check /tmp, /dev/shm, and current directory in order
+if check_dir "/tmp"; then
+    working_path="/tmp"
+elif check_dir "/dev/shm"; then
+    working_path="/dev/shm"
+elif check_dir "$(pwd)"; then
+    working_path="$(pwd)"
+fi
+
+if [ -z "$working_path" ]; then
+    exit 1
+fi
+
 topdir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-dir=$(mktemp -d -p .)
+dir=$(mktemp -d -p $working_path)
 src=$dir/arch.c
 exe=$dir/arch
 cat <<EOF >$src
