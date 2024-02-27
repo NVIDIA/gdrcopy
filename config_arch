@@ -20,7 +20,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 topdir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-dir=$(mktemp -d)
+dir=$(mktemp -d -p .)
 src=$dir/arch.c
 exe=$dir/arch
 cat <<EOF >$src
