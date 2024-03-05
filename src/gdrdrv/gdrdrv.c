@@ -1420,10 +1420,6 @@ static int __init gdrdrv_init(void)
 {
     int result;
 
-#if defined(CONFIG_ARM64)
-    int i;
-#endif
-
     result = register_chrdev(gdrdrv_major, DEVNAME, &gdrdrv_fops);
     if (result < 0) {
         gdr_err("can't get major %d\n", gdrdrv_major);
@@ -1453,7 +1449,7 @@ static int __init gdrdrv_init(void)
         gdr_msg(KERN_INFO, "The platform may support CPU cached mappings. Decision to use cached mappings is left to the pinning function.\n");
 
 #if defined(CONFIG_ARM64)
-    for (i = 0; i < sizeof(GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID) / sizeof(GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID[0]); ++i)
+    for (int i = 0; i < sizeof(GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID) / sizeof(*GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID); ++i)
     {
         struct pci_dev *pdev = pci_get_device(GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID, GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID[i], NULL);
         if (pdev) {
