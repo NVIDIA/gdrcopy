@@ -62,7 +62,7 @@
 //-----------------------------------------------------------------------------
 
 static const unsigned int GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID = 0x15b3;
-static const unsigned int GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID = 0xa2db;
+static const unsigned int GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID[2] = {0xa2da, 0xa2db};
 
 //-----------------------------------------------------------------------------
 
@@ -1483,11 +1483,13 @@ static int __init gdrdrv_init(void)
         gdr_msg(KERN_INFO, "The platform may support CPU cached mappings. Decision to use cached mappings is left to the pinning function.\n");
 
 #if defined(CONFIG_ARM64)
+    for (int i = 0; i < ARRAY_SIZE(GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID); ++i)
     {
-        struct pci_dev *pdev = pci_get_device(GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID, GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID, NULL);
+        struct pci_dev *pdev = pci_get_device(GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID, GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID[i], NULL);
         if (pdev) {
             pci_dev_put(pdev);
             gdrdrv_cpu_must_use_device_mapping = 1;
+            break;
         }
     }
 #endif
