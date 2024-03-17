@@ -65,6 +65,7 @@ struct GDRDRV_IOC_PIN_BUFFER_PARAMS
     __u64 p2p_token;
     __u32 va_space;
     // out
+    __u64 paddr;
     gdr_hnd_t handle;
 };
 
@@ -147,6 +148,8 @@ struct GDRDRV_IOC_GET_VERSION_PARAMS
     __u32 gdrdrv_version;
     __u32 minimum_gdr_api_version;
 };
+
+#define GDRDRV_IOC_P2P_DMA_MAP_BUFFER _IOWR(GDRDRV_IOCTL, 6, struct GDRDRV_IOC_PIN_BUFFER_PARAMS)
 
 #define GDRDRV_IOC_GET_VERSION _IOWR(GDRDRV_IOCTL, 255, struct GDRDRV_IOC_GET_VERSION_PARAMS *)
 

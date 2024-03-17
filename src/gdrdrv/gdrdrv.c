@@ -693,6 +693,161 @@ static inline int gdr_generate_mr_handle(gdr_info_t *info, gdr_mr_t *mr)
 
 //-----------------------------------------------------------------------------
 
+static int __gdrdrv_p2p_dma_map_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_token, u32 va_space, u64 *paddr, gdr_hnd_t *p_handle)
+{
+    int ret = 0;
+    struct nvidia_p2p_page_table *page_table = NULL;
+    u64 page_virt_start;
+    u64 page_virt_end;
+    size_t rounded_size;
+    gdr_mr_t *mr = NULL;
+    gdr_free_callback_fn_t free_callback_fn;
+    #ifndef CONFIG_ARM64
+    cycles_t ta, tb;
+    #endif
+
+    mr = kmalloc(sizeof(gdr_mr_t), GFP_KERNEL);
+    if (!mr) {
+        gdr_err("can't alloc kernel memory\n");
+        ret = -ENOMEM;
+        goto out;
+    }
+    memset(mr, 0, sizeof(*mr));
+
+    // do proper alignment, as required by NVIDIA driver.
+    page_virt_start  = addr & GPU_PAGE_MASK;
+    page_virt_end    = addr + size - 1;
+    rounded_size     = page_virt_end - page_virt_start + 1;
+
+    init_rwsem(&mr->sem);
+
+    free_callback_fn = gdr_use_persistent_mapping() ? NULL : gdrdrv_get_pages_free_callback;
+
+    mr->offset       = addr & GPU_PAGE_OFFSET;
+    mr->length       = size;
+    if (free_callback_fn) {
+        mr->p2p_token    = p2p_token;
+        mr->va_space     = va_space;
+    } else {
+        // Token cannot be used with persistent mapping.
+        mr->p2p_token    = 0;
+        mr->va_space     = 0;
+    }
+    mr->va           = page_virt_start;
+    mr->mapped_size  = rounded_size;
+    mr->cpu_mapping_type = GDR_MR_NONE;
+    mr->page_table   = NULL;
+    mr->cb_flag      = 0;
+
+    #ifndef CONFIG_ARM64
+    ta = get_cycles();
+    #endif
+
+    // After nvidia_p2p_get_pages returns (successfully), gdrdrv_get_pages_free_callback may be invoked anytime.
+    // mr setup must be done before calling that API. The memory barrier is included in down_write.
+
+    // We take this semaphore to prevent race with gdrdrv_get_pages_free_callback.
+    down_write(&mr->sem);
+
+    #ifdef NVIDIA_P2P_CAP_GET_PAGES_PERSISTENT_API
+    if (free_callback_fn) {
+        ret = nvidia_p2p_get_pages(mr->p2p_token, mr->va_space, mr->va, mr->mapped_size, &page_table,
+                                   free_callback_fn, mr);
+        gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x callback=%px)\n",
+                 mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, free_callback_fn);
+    } else {
+        ret = nvidia_p2p_get_pages_persistent(mr->va, mr->mapped_size, &page_table, 0);
+        gdr_info("invoking nvidia_p2p_get_pages_persistent(va=0x%llx len=%lld)\n",
+                 mr->va, mr->mapped_size);
+    }
+    #else
+    ret = nvidia_p2p_get_pages(mr->p2p_token, mr->va_space, mr->va, mr->mapped_size, &page_table,
+                               free_callback_fn, mr);
+    gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x callback=%px)\n",
+             mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, free_callback_fn);
+    #endif
+
+    #ifndef CONFIG_ARM64
+    tb = get_cycles();
+    #endif
+    if (ret < 0) {
+        gdr_err("nvidia_p2p_get_pages(va=%llx len=%lld p2p_token=%llx va_space=%x callback=%px) failed [ret = %d]\n",
+                mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, free_callback_fn, ret);
+        goto out;
+    }
+    mr->page_table = page_table;
+    #ifndef CONFIG_ARM64
+    mr->tm_cycles = tb - ta;
+    mr->tsc_khz = get_tsc_khz();
+    #endif
+
+
+    // check version before accessing page table
+    if (!NVIDIA_P2P_PAGE_TABLE_VERSION_COMPATIBLE(page_table)) {
+        gdr_err("incompatible page table version 0x%08x\n", page_table->version);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    switch (page_table->page_size) {
+    case NVIDIA_P2P_PAGE_SIZE_4KB:
+        mr->page_size = 4*1024;
+        break;
+    case NVIDIA_P2P_PAGE_SIZE_64KB:
+        mr->page_size = 64*1024;
+        break;
+    case NVIDIA_P2P_PAGE_SIZE_128KB:
+        mr->page_size = 128*1024;
+        break;
+    default:
+        gdr_err("unexpected page_size\n");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    // we are not really ready for a different page size
+    if (page_table->page_size != NVIDIA_P2P_PAGE_SIZE_64KB) {
+        gdr_err("nvidia_p2p_get_pages assumption of 64KB pages failed size_id=%d\n", page_table->page_size);
+        ret = -EINVAL;
+        goto out;
+    }
+    {
+        int i;
+        gdr_dbg("page table entries: %d\n", page_table->entries);
+        for (i=0; i<MIN(20,page_table->entries); ++i) {
+            gdr_dbg("page[%d]=0x%016llx%s\n", i, page_table->pages[i]->physical_address, (i>19)?"and counting":"");
+        }
+    }
+
+    // here a typical driver would use the page_table to fill in some HW
+    // DMA data structure
+    *paddr = page_table->pages[0]->physical_address;
+    gdr_dbg("paddr 0x%llx\n", *paddr);
+
+    mutex_lock(&info->lock);
+    if (gdr_generate_mr_handle(info, mr) != 0) {
+        gdr_err("No address space left for BAR1 mapping.\n");
+        ret = -ENOMEM;
+    }
+
+    if (!ret) {
+        list_add(&mr->node, &info->mr_list);
+        *p_handle = mr->handle;
+        up_write(&mr->sem);
+    }
+    mutex_unlock(&info->lock);
+
+out:
+    if (ret && mr) {
+        gdr_free_mr_unlocked(mr);
+        mr = NULL;
+    }
+
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+
 static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_token, u32 va_space, gdr_hnd_t *p_handle)
 {
     int ret = 0;
@@ -879,6 +1034,51 @@ static int __gdrdrv_unpin_buffer(gdr_info_t *info, gdr_hnd_t handle)
     gdr_free_mr_unlocked(mr);
 
  out:
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+
+static int gdrdrv_p2p_dma_map_buffer(gdr_info_t *info, void __user *_params)
+{
+    int ret = 0;
+
+    struct GDRDRV_IOC_PIN_BUFFER_PARAMS params = {0};
+
+    int has_handle = 0;
+    gdr_hnd_t handle;
+
+    if (copy_from_user(&params, _params, sizeof(params))) {
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    if (!params.addr) {
+        gdr_err("NULL device pointer\n");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    ret = __gdrdrv_p2p_dma_map_buffer(info, params.addr, params.size, params.p2p_token, params.va_space, &params.paddr, &handle);
+    if (ret)
+        goto out;
+
+    has_handle = 1;
+    params.handle = handle;
+
+    if (copy_to_user(_params, &params, sizeof(params))) {
+        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+    }
+
+
+out:
+    if (ret) {
+        if (has_handle)
+            __gdrdrv_unpin_buffer(info, handle);
+    }
+
     return ret;
 }
 
@@ -1154,6 +1354,10 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
 
     case GDRDRV_IOC_GET_VERSION:
         ret = gdrdrv_get_version(info, argp);
+        break;
+
+    case GDRDRV_IOC_P2P_DMA_MAP_BUFFER:
+        ret = gdrdrv_p2p_dma_map_buffer(info, argp);
         break;
 
     default:
