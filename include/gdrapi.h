@@ -79,6 +79,7 @@ typedef struct gdr_mh_s {
 // Create a peer-to-peer mapping of the device memory buffer, returning an opaque handle.
 // Note that at this point the mapping is still not accessible to user-space.
 int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token, uint32_t va_space, gdr_mh_t *handle);
+int gdr_p2p_dma_map_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token, uint32_t va_space, gdr_mh_t *handle, uint64_t *paddr);
 
 // Destroys the peer-to-peer mapping and frees the handle.
 //

@@ -54,6 +54,7 @@ extern "C" {
 
 typedef struct gdr_memh_t { 
     uint32_t handle;
+    uint64_t paddr;
     LIST_ENTRY(gdr_memh_t) entries;
     gdr_mapping_type_t mapping_type;
 } gdr_memh_t;

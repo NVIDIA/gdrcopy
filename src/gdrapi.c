@@ -212,6 +212,44 @@ int gdr_close(gdr_t g)
     return ret;
 }
 
+int gdr_p2p_dma_map_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token, uint32_t va_space, gdr_mh_t *handle, uint64_t *paddr)
+{
+    int ret = 0;
+    int retcode;
+    size_t requested_size = 0;
+
+    if (!handle) {
+        return EINVAL;
+    }
+
+    gdr_memh_t *mh = calloc(1, sizeof(gdr_memh_t));
+    if (!mh) {
+        return ENOMEM;
+    }
+
+    requested_size = round_up_size(size, GPU_PAGE_SIZE);
+    struct GDRDRV_IOC_PIN_BUFFER_PARAMS params;
+    params.addr = addr;
+    params.size = requested_size;
+    params.p2p_token = p2p_token;
+    params.va_space = va_space;
+    params.handle = 0;
+
+    retcode = ioctl(g->fd, GDRDRV_IOC_P2P_DMA_MAP_BUFFER, &params);
+    if (0 != retcode) {
+        ret = errno;
+        gdr_err("ioctl error (errno=%d)\n", ret);
+        free(mh);
+        goto err;
+    }
+    mh->handle = params.handle;
+    LIST_INSERT_HEAD(&g->memhs, mh, entries);
+    *handle = from_memh(mh);
+    *paddr = params.paddr;
+ err:
+    return ret;
+}
+
 int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token, uint32_t va_space, gdr_mh_t *handle)
 {
     int ret = 0;
