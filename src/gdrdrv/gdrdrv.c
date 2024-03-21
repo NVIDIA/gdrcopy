@@ -1483,13 +1483,18 @@ static int __init gdrdrv_init(void)
         gdr_msg(KERN_INFO, "The platform may support CPU cached mappings. Decision to use cached mappings is left to the pinning function.\n");
 
 #if defined(CONFIG_ARM64)
-    for (int i = 0; i < ARRAY_SIZE(GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID); ++i)
     {
-        struct pci_dev *pdev = pci_get_device(GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID, GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID[i], NULL);
-        if (pdev) {
-            pci_dev_put(pdev);
-            gdrdrv_cpu_must_use_device_mapping = 1;
-            break;
+        // Some compilers are strict and do not allow us to declare a variable
+        // in the for statement.
+        int i;
+        for (i = 0; i < ARRAY_SIZE(GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID); ++i)
+        {
+            struct pci_dev *pdev = pci_get_device(GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID, GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID[i], NULL);
+            if (pdev) {
+                pci_dev_put(pdev);
+                gdrdrv_cpu_must_use_device_mapping = 1;
+                break;
+            }
         }
     }
 #endif
