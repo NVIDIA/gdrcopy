@@ -41,6 +41,7 @@ int num_write_iters = 10000;
 int num_read_iters = 100;
 int dev_id = 0;
 bool do_cumemcpy = false;
+bool use_cold_cache = false;
 size_t _size = (size_t)1 << 24;
 
 void print_usage(const char *path)
@@ -56,6 +57,8 @@ void print_usage(const char *path)
     cout << "   -r <iters>      Number of read iterations (default: " << num_read_iters << ")" << endl;
     cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
     cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
+    cout << "   -C              Use cold cache (default: no)" << endl;
+    cout << "                       This option takes effect when cache mapping is used such as on Grace-Hopper." << endl;
 }
 
 int main(int argc, char *argv[])
@@ -69,7 +72,7 @@ int main(int argc, char *argv[])
 
     while(1) {        
         int c;
-        c = getopt(argc, argv, "s:d:w:r:a:hc");
+        c = getopt(argc, argv, "s:d:w:r:a:cCh");
         if (c == -1)
             break;
 
@@ -102,6 +105,9 @@ int main(int argc, char *argv[])
                 break;
             case 'c':
                 do_cumemcpy = true;
+                break;
+            case 'C':
+                use_cold_cache = true;
                 break;
             case 'h':
                 print_usage(argv[0]);
@@ -244,6 +250,10 @@ int main(int argc, char *argv[])
         uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
         cout << "user-space pointer: " << buf_ptr << endl;
 
+        cout << "use cold cache: " << (use_cold_cache ? "yes" : "no") << endl;
+        if (use_cold_cache && info.mapping_type != GDR_MAPPING_TYPE_CACHING)
+            cout << "WARNING: Cold cache has no effect on other mappings except cache mapping" << endl;
+
         // gdr_copy_to_mapping benchmark
         cout << endl;
         cout << "gdr_copy_to_mapping num iters for each size: " << num_write_iters << endl;
@@ -254,12 +264,43 @@ int main(int argc, char *argv[])
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
-            clock_gettime(MYCLOCK, &beg);
-            for (iter = 0; iter < num_write_iters; ++iter) {
-                gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
+            lat_us = 0;
+            if (use_cold_cache) {
+                for (iter = 0; iter < num_write_iters; ++iter) {
+                    // Simulate GPU reading the data written by CPU. When cache
+                    // mapping is used, the cache lines will be moved to GPU.
+                    // The next access by CPU will cause the cache lines to
+                    // move back to CPU (cold cache). gdr_copy_to_mapping will
+                    // pay this cost.
+                    ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
+
+                    MB();
+                    clock_gettime(MYCLOCK, &beg);
+                    MB();
+                    gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
+                    MB();
+                    clock_gettime(MYCLOCK, &end);
+                    MB();
+
+                    lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                }
             }
-            clock_gettime(MYCLOCK, &end);
-            lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
+            else {
+                MB();
+                clock_gettime(MYCLOCK, &beg);
+                MB();
+                for (iter = 0; iter < num_write_iters; ++iter) {
+                    MB();
+                    gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
+                    MB();
+                }
+                MB();
+                clock_gettime(MYCLOCK, &end);
+                MB();
+
+                lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+            }
+            lat_us = lat_us / (double)iter;
             printf("gdr_copy_to_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
             copy_size <<= 1;
         }
@@ -273,11 +314,43 @@ int main(int argc, char *argv[])
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
-            clock_gettime(MYCLOCK, &beg);
-            for (iter = 0; iter < num_read_iters; ++iter)
-                gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
-            clock_gettime(MYCLOCK, &end);
-            lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
+            lat_us = 0;
+            if (use_cold_cache) {
+                for (iter = 0; iter < num_read_iters; ++iter) {
+                    // Simulate GPU writing the data to the shared buffer. When
+                    // cache mapping is used, the cache lines will be moved to
+                    // GPU.  The next access by CPU will cause the cache lines
+                    // to move back to CPU (cold cache). gdr_copy_from_mapping
+                    // will pay this cost.
+                    ASSERTDRV(cuMemsetD8(d_A, 0, copy_size));
+
+                    MB();
+                    clock_gettime(MYCLOCK, &beg);
+                    MB();
+                    gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
+                    MB();
+                    clock_gettime(MYCLOCK, &end);
+                    MB();
+
+                    lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                }
+            }
+            else {
+                MB();
+                clock_gettime(MYCLOCK, &beg);
+                MB();
+                for (iter = 0; iter < num_read_iters; ++iter) {
+                    MB();
+                    gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
+                    MB();
+                }
+                MB();
+                clock_gettime(MYCLOCK, &end);
+                MB();
+
+                lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+            }
+            lat_us = lat_us / (double)iter;
             printf("gdr_copy_from_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
             copy_size <<= 1;
         }
