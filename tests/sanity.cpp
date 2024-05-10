@@ -50,6 +50,7 @@ using namespace std;
 using namespace gdrcopy::test;
 
 volatile bool expecting_exception_signal = false;
+int g_dev_id = 0;
 
 void exception_signal_handle(int sig)
 {
@@ -211,7 +212,7 @@ void basic()
     expecting_exception_signal = false;
     MB();
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
     filter_fn();
 
     const size_t _size = 256*1024+16;
@@ -237,7 +238,7 @@ void basic()
 
     ASSERTDRV(gfree_fn(&mhandle));
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(basic_cumemalloc)
@@ -258,7 +259,7 @@ GDRCOPY_TEST(basic_with_tokens)
     expecting_exception_signal = false;
     MB();
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
 
     const size_t _size = 256*1024+16;
     const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
@@ -287,7 +288,7 @@ GDRCOPY_TEST(basic_with_tokens)
 
     ASSERTDRV(gpu_mem_free(&mhandle));
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 /**
@@ -304,7 +305,7 @@ GDRCOPY_TEST(basic_unaligned_mapping)
     expecting_exception_signal = false;
     MB();
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
 
     // Allocate for a few bytes so that cuMemAlloc returns an unaligned address
     // in the next allocation. This behavior is observed in GPU Driver 410 and
@@ -400,7 +401,7 @@ GDRCOPY_TEST(basic_unaligned_mapping)
     for (int i = 0; i < cnt; ++i)
         ASSERTDRV(gpu_mem_free(&A_mhandle[i]));
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 /**
@@ -419,7 +420,7 @@ GDRCOPY_TEST(basic_small_buffers_mapping)
     expecting_exception_signal = false;
     MB();
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
 
     const size_t fa_size = GPU_PAGE_SIZE;
     CUdeviceptr d_fa;
@@ -467,7 +468,7 @@ GDRCOPY_TEST(basic_small_buffers_mapping)
 
     ASSERTDRV(gpu_mem_free(&fa_mhandle));
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
@@ -476,7 +477,7 @@ void data_validation()
     expecting_exception_signal = false;
     MB();
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
     filter_fn();
 
     const size_t _size = 256*1024+16;
@@ -627,7 +628,7 @@ void data_validation()
     delete init_buf;
     delete copy_buf;
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(data_validation_cumemalloc)
@@ -672,7 +673,7 @@ void invalidation_access_after_gdr_close()
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -720,7 +721,7 @@ void invalidation_access_after_gdr_close()
 
     ASSERT_NEQ(data_from_buf_ptr, mydata);
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(invalidation_access_after_gdr_close_cumemalloc)
@@ -765,7 +766,7 @@ void invalidation_access_after_free()
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -828,7 +829,7 @@ void invalidation_access_after_free()
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(invalidation_access_after_free_cumemalloc)
@@ -870,7 +871,7 @@ void invalidation_two_mappings()
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
     filter_fn();
 
     CUdeviceptr d_A[2];
@@ -934,7 +935,7 @@ void invalidation_two_mappings()
 
     ASSERT_EQ(gdr_close(g), 0);
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(invalidation_two_mappings_cumemalloc)
@@ -1037,7 +1038,7 @@ void invalidation_fork_access_after_free()
     if (pid == 0)
         mydata += 10;
 
-    init_cuda(0, true);
+    init_cuda(g_dev_id, true);
     filter_fn();
 
     ASSERT(!error_in_first_signal);
@@ -1117,7 +1118,7 @@ void invalidation_fork_access_after_free()
 
     ASSERT_EQ(gdr_close(g), 0);
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(invalidation_fork_access_after_free_cumemalloc)
@@ -1165,7 +1166,7 @@ void invalidation_fork_after_gdr_map()
     const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -1280,7 +1281,7 @@ void invalidation_fork_after_gdr_map()
         ASSERT_EQ(gdr_close(g), 0);
     }
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(invalidation_fork_after_gdr_map_cumemalloc)
@@ -1322,7 +1323,7 @@ void invalidation_fork_child_gdr_map_parent()
     const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     const char *myname;
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -1369,7 +1370,7 @@ void invalidation_fork_child_gdr_map_parent()
         ASSERTDRV(gfree_fn(&mhandle));
         ASSERT_EQ(gdr_close(g), 0);
 
-        finalize_cuda(0);
+        finalize_cuda(g_dev_id);
     }
 }
 
@@ -1452,7 +1453,7 @@ void invalidation_fork_map_and_free()
 
     int mydata = (rand() % 1000) + 1;
 
-    init_cuda(0, true);
+    init_cuda(g_dev_id, true);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -1516,7 +1517,7 @@ void invalidation_fork_map_and_free()
 
     ASSERT_EQ(gdr_close(g), 0);
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(invalidation_fork_map_and_free_cumemalloc)
@@ -1574,7 +1575,7 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
 
     print_dbg("%s: Start\n", myname);
 
-    init_cuda(0, true);
+    init_cuda(g_dev_id, true);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -1624,7 +1625,7 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
         ASSERT_EQ(child_exit_status, EXIT_SUCCESS);
     }
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_pin_buffer_cumemalloc)
@@ -1706,7 +1707,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
         write_fd = filedes_1[1];
     }
 
-    init_cuda(0, true);
+    init_cuda(g_dev_id, true);
     filter_fn();
 
     CUdeviceptr d_A;
@@ -1776,7 +1777,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
         ASSERT_EQ(child_exit_status, EXIT_SUCCESS);
     }
 
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(invalidation_unix_sock_shared_fd_gdr_map_cumemalloc)
@@ -1864,7 +1865,7 @@ GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
         read_fd = filedes_0[0];
         write_fd = filedes_1[1];
 
-        init_cuda(0);
+        init_cuda(g_dev_id);
 
         gpu_mem_handle_t mhandle;
         ASSERTDRV(gpu_mem_alloc(&mhandle, size, true, true));
@@ -1883,7 +1884,7 @@ GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
 
         ASSERTDRV(gpu_mem_free(&mhandle));
 
-        finalize_cuda(0);
+        finalize_cuda(g_dev_id);
     }
 }
 
@@ -1958,7 +1959,7 @@ void basic_child_thread_pins_buffer()
     memset(&t, 0, sizeof(mt_test_info));
     t.size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
-    init_cuda(0);
+    init_cuda(g_dev_id);
     filter_fn();
 
     t.gfree_fn = gfree_fn;
@@ -2003,7 +2004,7 @@ void basic_child_thread_pins_buffer()
         ASSERT_EQ(pthread_create(&tid, NULL, thr_fun_cleanup, &t), 0);
         ASSERT_EQ(pthread_join(tid, NULL), 0);
     }
-    finalize_cuda(0);
+    finalize_cuda(g_dev_id);
 }
 
 GDRCOPY_TEST(basic_child_thread_pins_buffer_cumemalloc)
@@ -2029,6 +2030,7 @@ void print_usage(const char *path)
     cout << "   -s              DON'T print summary report." << endl;
     cout << "   -l              List all available tests." << endl;
     cout << "   -t <test>       Run the specified test only." << endl;
+    cout << "   -d <gpu>        GPU ID (default: " << g_dev_id << ")" << endl;
 }
 
 void print_all_tests()
@@ -2047,7 +2049,7 @@ int main(int argc, char *argv[])
     int status;
     vector<string> tests;
 
-    while ((c = getopt(argc, argv, "hvslt:")) != -1) {
+    while ((c = getopt(argc, argv, "hvslt:d:")) != -1) {
         switch (c) {
             case 'h':
                 print_usage(argv[0]);
@@ -2063,6 +2065,9 @@ int main(int argc, char *argv[])
                 return EXIT_SUCCESS;
             case 't':
                 tests.emplace_back(optarg);
+                break;
+            case 'd':
+                g_dev_id = strtol(optarg, NULL, 0);
                 break;
             default:
                 cerr << "Invalid option" << endl;
