@@ -41,6 +41,7 @@
 #include <asm/types.h>
 #include <assert.h>
 #include <sys/queue.h>
+#include <pthread.h>
 
 #include "gdrconfig.h"
 #include "gdrapi.h"
@@ -55,6 +56,8 @@ enum gdrcopy_msg_level {
     GDRCOPY_MSG_WARN,
     GDRCOPY_MSG_ERROR
 };
+
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static int gdr_msg_level = GDRCOPY_MSG_ERROR;
 static int gdr_enable_logging = -1;
@@ -99,6 +102,7 @@ static gdr_mh_t from_memh(gdr_memh_t *memh) {
 }
 
 static void gdr_init_cpu_flags(void);
+static int _gdr_unpin_buffer(gdr_t g, gdr_mh_t handle);
 
 static inline int gdr_is_mapped(const gdr_mapping_type_t mapping_type)
 {
@@ -157,6 +161,11 @@ gdr_t gdr_open(void)
         goto err_fd;
     }
 
+    if (ret) {
+        gdr_err("Error in pthread_mutex_init with errno=%d\n", ret);
+        goto err_fd;
+    }
+
     g->fd = fd;
     LIST_INIT(&g->memhs);
 
@@ -194,15 +203,16 @@ int gdr_close(gdr_t g)
     int retcode;
     gdr_memh_t *mh, *next_mh;
 
+    pthread_mutex_lock(&mutex);
     mh = g->memhs.lh_first;
     while (mh != NULL) {
         // gdr_unpin_buffer frees mh, so we need to get the next one
         // beforehand.
         next_mh = mh->entries.le_next;
-        ret = gdr_unpin_buffer(g, from_memh(mh));
+        ret = _gdr_unpin_buffer(g, from_memh(mh));
         if (ret) {
             gdr_err("error unpinning buffer inside gdr_close (errno=%d/%s)\n", ret, strerror(ret));
-            return ret;
+            goto err;
         }
         mh = next_mh;
     }
@@ -214,6 +224,9 @@ int gdr_close(gdr_t g)
     }
     g->fd = 0;
     free(g);
+
+err:
+    pthread_mutex_unlock(&mutex);
     return ret;
 }
 
@@ -240,6 +253,7 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     params.va_space = va_space;
     params.handle = 0;
 
+    pthread_mutex_lock(&mutex);
     retcode = ioctl(g->fd, GDRDRV_IOC_PIN_BUFFER, &params);
     if (0 != retcode) {
         ret = errno;
@@ -250,11 +264,13 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     mh->handle = params.handle;
     LIST_INSERT_HEAD(&g->memhs, mh, entries);
     *handle = from_memh(mh);
+
  err:
+    pthread_mutex_unlock(&mutex);
     return ret;
 }
 
-int gdr_unpin_buffer(gdr_t g, gdr_mh_t handle)
+static int _gdr_unpin_buffer(gdr_t g, gdr_mh_t handle)
 {
     int ret = 0;
     int retcode;
@@ -273,13 +289,23 @@ int gdr_unpin_buffer(gdr_t g, gdr_mh_t handle)
     return ret;
 }
 
+int gdr_unpin_buffer(gdr_t g, gdr_mh_t handle)
+{
+    int ret = 0;
+    pthread_mutex_lock(&mutex);
+    ret = _gdr_unpin_buffer(g, handle);
+    pthread_mutex_unlock(&mutex);
+    return ret;
+}
+
 int gdr_get_callback_flag(gdr_t g, gdr_mh_t handle, int *flag)
 {
     int ret = 0;
     int retcode;
     gdr_memh_t *mh = to_memh(handle);
-
     struct GDRDRV_IOC_GET_CB_FLAG_PARAMS params;
+
+    pthread_mutex_lock(&mutex);
     params.handle = mh->handle;
     retcode = ioctl(g->fd, GDRDRV_IOC_GET_CB_FLAG, &params);
     if (0 != retcode) {
@@ -288,6 +314,7 @@ int gdr_get_callback_flag(gdr_t g, gdr_mh_t handle, int *flag)
     } else {
         *flag = params.flag;
     }
+    pthread_mutex_unlock(&mutex);
     return ret;
 }
 
@@ -349,9 +376,11 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
     gdr_info_v2_t info = {0,};
     gdr_memh_t *mh = to_memh(handle);
 
+    pthread_mutex_lock(&mutex);
     if (gdr_is_mapped(mh->mapping_type)) {
         gdr_err("mh is mapped already\n");
-        return EAGAIN;
+        ret = EAGAIN;
+        goto err;
     }
     size_t rounded_size = (size + g->page_size - 1) & g->page_mask;
     off_t magic_off = (off_t)mh->handle << g->page_shift;
@@ -380,7 +409,9 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
     }
     mh->mapping_type = info.mapping_type;
     gdr_dbg("mapping_type=%d\n", mh->mapping_type);
- err:
+
+err:
+    pthread_mutex_unlock(&mutex);
     return ret;
 }
 
@@ -391,11 +422,13 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
     size_t rounded_size;
     gdr_memh_t *mh = to_memh(handle);
 
+    pthread_mutex_lock(&mutex);
     rounded_size = (size + g->page_size - 1) & g->page_mask;
 
     if (!gdr_is_mapped(mh->mapping_type)) {
         gdr_err("mh is not mapped yet\n");
-        return EINVAL;
+        ret = EINVAL;
+        goto err;
     }
     retcode = munmap(va, rounded_size);
     if (-1 == retcode) {
@@ -406,7 +439,9 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
         goto err;
     }
     mh->mapping_type = GDR_MAPPING_TYPE_NONE;
- err:
+
+err:
+    pthread_mutex_unlock(&mutex);
     return ret;
 }
 
