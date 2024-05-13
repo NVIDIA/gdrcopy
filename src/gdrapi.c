@@ -161,11 +161,6 @@ gdr_t gdr_open(void)
         goto err_fd;
     }
 
-    if (ret) {
-        gdr_err("Error in pthread_mutex_init with errno=%d\n", ret);
-        goto err_fd;
-    }
-
     g->fd = fd;
     LIST_INIT(&g->memhs);
 
