@@ -20,6 +20,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -42,6 +43,7 @@
 #include <assert.h>
 #include <sys/queue.h>
 #include <pthread.h>
+#include <sys/types.h>
 
 #include "gdrconfig.h"
 #include "gdrapi.h"
@@ -259,6 +261,7 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     mh->handle = params.handle;
     LIST_INSERT_HEAD(&g->memhs, mh, entries);
     *handle = from_memh(mh);
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_pin_buffer: 1: mh=%p\n", getpid(), gettid(), mh);
 
  err:
     pthread_mutex_unlock(&mutex);
@@ -278,7 +281,9 @@ static int _gdr_unpin_buffer(gdr_t g, gdr_mh_t handle)
         ret = errno;
         gdr_err("ioctl error (errno=%d)\n", ret);
     }
+    printf("===> [%d, %d] GDRCopy Checkpoint _gdr_unpin_buffer: 1: mh=%p\n", getpid(), gettid(), mh);
     LIST_REMOVE(mh, entries);
+    printf("===> [%d, %d] GDRCopy Checkpoint _gdr_unpin_buffer: 2: mh=%p\n", getpid(), gettid(), mh);
     free(mh);
     
     return ret;
@@ -405,7 +410,10 @@ int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
     mh->mapping_type = info.mapping_type;
     gdr_dbg("mapping_type=%d\n", mh->mapping_type);
 
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_map: 1: mh=%p\n", getpid(), gettid(), mh);
+
 err:
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_map: 2: mh=%p, ret=%d\n", getpid(), gettid(), mh, ret);
     pthread_mutex_unlock(&mutex);
     return ret;
 }
@@ -420,22 +428,28 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
     pthread_mutex_lock(&mutex);
     rounded_size = (size + g->page_size - 1) & g->page_mask;
 
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_unmap: 1: mh=%p\n", getpid(), gettid(), mh);
     if (!gdr_is_mapped(mh->mapping_type)) {
+        printf("===> [%d, %d] GDRCopy Checkpoint gdr_unmap: 2: mh=%p\n", getpid(), gettid(), mh);
         gdr_err("mh is not mapped yet\n");
         ret = EINVAL;
         goto err;
     }
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_unmap: 3: mh=%p\n", getpid(), gettid(), mh);
     retcode = munmap(va, rounded_size);
     if (-1 == retcode) {
         int __errno = errno;
+        printf("===> [%d, %d] GDRCopy Checkpoint gdr_unmap: 4: mh=%p\n", getpid(), gettid(), mh);
         gdr_err("error %s(%d) while unmapping handle %x, rounded_size=%zu\n",
                 strerror(__errno), __errno, handle, rounded_size);
         ret = __errno;
         goto err;
     }
     mh->mapping_type = GDR_MAPPING_TYPE_NONE;
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_unmap: 5: mh=%p\n", getpid(), gettid(), mh);
 
 err:
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_unmap: 6: mh=%p, ret=%d\n", getpid(), gettid(), mh, ret);
     pthread_mutex_unlock(&mutex);
     return ret;
 }
