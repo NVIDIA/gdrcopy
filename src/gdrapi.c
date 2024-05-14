@@ -233,13 +233,20 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     int retcode;
     size_t requested_size = 0;
 
+    gdr_memh_t *mh = NULL;
+
+    pthread_mutex_lock(&mutex);
     if (!handle) {
-        return EINVAL;
+        printf("===> [%d, %d] GDRCopy Checkpoint gdr_pin_buffer: 1: handle is NULL\n", getpid(), gettid());
+        ret = EINVAL;
+        goto err;
     }
 
-    gdr_memh_t *mh = calloc(1, sizeof(gdr_memh_t));
+    mh = calloc(1, sizeof(gdr_memh_t));
     if (!mh) {
-        return ENOMEM;
+        printf("===> [%d, %d] GDRCopy Checkpoint gdr_pin_buffer: 2: Cannot allocate mh\n", getpid(), gettid());
+        ret = ENOMEM;
+        goto err;
     }
 
     requested_size = round_up_size(size, GPU_PAGE_SIZE);
@@ -250,7 +257,6 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     params.va_space = va_space;
     params.handle = 0;
 
-    pthread_mutex_lock(&mutex);
     retcode = ioctl(g->fd, GDRDRV_IOC_PIN_BUFFER, &params);
     if (0 != retcode) {
         ret = errno;
@@ -261,9 +267,10 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     mh->handle = params.handle;
     LIST_INSERT_HEAD(&g->memhs, mh, entries);
     *handle = from_memh(mh);
-    printf("===> [%d, %d] GDRCopy Checkpoint gdr_pin_buffer: 1: mh=%p\n", getpid(), gettid(), mh);
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_pin_buffer: 3: mh=%p\n", getpid(), gettid(), mh);
 
- err:
+err:
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_pin_buffer: 4: mh=%p, ret=%d\n", getpid(), gettid(), mh, ret);
     pthread_mutex_unlock(&mutex);
     return ret;
 }
