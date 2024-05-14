@@ -183,6 +183,8 @@ gdr_t gdr_open(void)
 
     g->gdrdrv_version = params.gdrdrv_version;
 
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_open: 1\n", getpid(), gettid());
+
     return g;
 
 err_fd:
@@ -190,6 +192,8 @@ err_fd:
 
 err_mem:
     free(g);
+
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_open: 2\n", getpid(), gettid());
 
     return NULL;
 }
@@ -201,18 +205,22 @@ int gdr_close(gdr_t g)
     gdr_memh_t *mh, *next_mh;
 
     pthread_mutex_lock(&mutex);
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_close: 1\n", getpid(), gettid());
     mh = g->memhs.lh_first;
     while (mh != NULL) {
         // gdr_unpin_buffer frees mh, so we need to get the next one
         // beforehand.
         next_mh = mh->entries.le_next;
+        printf("===> [%d, %d] GDRCopy Checkpoint gdr_close: 2: mh=%p, next_mh=%p\n", getpid(), gettid(), mh, next_mh);
         ret = _gdr_unpin_buffer(g, from_memh(mh));
+        printf("===> [%d, %d] GDRCopy Checkpoint gdr_close: 3: mh=%p, next_mh=%p\n", getpid(), gettid(), mh, next_mh);
         if (ret) {
             gdr_err("error unpinning buffer inside gdr_close (errno=%d/%s)\n", ret, strerror(ret));
             goto err;
         }
         mh = next_mh;
     }
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_close: 4\n", getpid(), gettid());
 
     retcode = close(g->fd);
     if (-1 == retcode) {
@@ -221,8 +229,10 @@ int gdr_close(gdr_t g)
     }
     g->fd = 0;
     free(g);
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_close: 5\n", getpid(), gettid());
 
 err:
+    printf("===> [%d, %d] GDRCopy Checkpoint gdr_close: 6\n", getpid(), gettid());
     pthread_mutex_unlock(&mutex);
     return ret;
 }
