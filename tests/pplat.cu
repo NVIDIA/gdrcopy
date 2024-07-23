@@ -119,22 +119,28 @@ __global__ void pp_data_cpu_produce_gpu_consume_kernel(uint32_t *gpu_flag_buf, u
 
     for (; i <= num_iters; ++i) {
         if (threadIdx.x == 0) {
+#if __CUDA_ARCH__ >= 700
+            do {
+                asm volatile("ld.acquire.sys.global.u32 %0, [%1];" : "=r"(flag_val) : "l"(gpu_flag_buf));
+            }
+            while (flag_val != i);
+#else
             do {
                 flag_val = READ_ONCE(*gpu_flag_buf);
             }
             while (flag_val != i);
             __threadfence_system();
+#endif
         }
         __syncthreads();
 
         for (uint64_t idx = my_tid; idx < num_elements; idx += num_threads)
-            flag_val += READ_ONCE(A[idx]);
+            flag_val += A[idx];
         __syncthreads();
 
         if (threadIdx.x == 0) {
             ++flag_val;
             WRITE_ONCE(cpu_flag_buf[blockIdx.x], flag_val);
-            __threadfence_system();
         }
     }
 }
@@ -163,20 +169,21 @@ __global__ void pp_data_gpu_produce_cpu_consume_kernel(uint32_t *gpu_flag_buf, u
     if (threadIdx.x == 0)
         _beg = query_globaltimer();
     for (i = 2; i <= num_iters + 1; ++i) {
-        flag_val = i;
+        ++flag_val;
         for (uint64_t idx = my_tid; idx < num_elements; idx += num_threads) {
             // We want to write 0. We do calculation just to create data dependency.
-            WRITE_ONCE(A[idx], flag_val - i);
+            WRITE_ONCE(A[idx], 0);
         }
         __syncthreads();
 
         if (threadIdx.x == 0) {
+#if __CUDA_ARCH__ >= 700
             // Data should be visible to CPU before the flag.
+            asm volatile("st.release.sys.global.u32 [%0], %1;" :: "l"(&cpu_flag_buf[blockIdx.x]), "r"(flag_val));
+#else
             __threadfence_system();
-
             WRITE_ONCE(cpu_flag_buf[blockIdx.x], flag_val);
-            __threadfence_system();
-
+#endif
             do {
                 flag_val = READ_ONCE(*gpu_flag_buf);
             }
