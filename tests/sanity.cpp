@@ -206,7 +206,8 @@ int recvfd(int socket)
     return fd;
 }
 
-template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
+template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn,
+          bool use_v2 = false, uint32_t pin_flags = GDR_PIN_FLAG_DEFAULT>
 void basic()
 {
     expecting_exception_signal = false;
@@ -231,7 +232,10 @@ void basic()
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    if (use_v2)
+        ASSERT_EQ(gdr_pin_buffer_v2(g, d_ptr, size, pin_flags, &mh), 0);
+    else
+        ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
@@ -246,11 +250,29 @@ GDRCOPY_TEST(basic_cumemalloc)
     basic<gpu_mem_alloc, gpu_mem_free, null_filter>();
 }
 
+GDRCOPY_TEST(basic_v2_cumemalloc)
+{
+    basic<gpu_mem_alloc, gpu_mem_free, null_filter, true>();
+}
+
+GDRCOPY_TEST(basic_v2_forcepci_cumemalloc)
+{
+    basic<gpu_mem_alloc, gpu_mem_free, null_filter, true, GDR_PIN_FLAG_FORCE_PCIE>();
+}
+
 #if CUDA_VERSION >= 11000
 // VMM with GDR support is available from CUDA 11.0
 GDRCOPY_TEST(basic_vmmalloc)
 {
     basic<gpu_vmm_alloc, gpu_vmm_free, vmm_filter>();
+}
+GDRCOPY_TEST(basic_v2_vmmalloc)
+{
+    basic<gpu_vmm_alloc, gpu_vmm_free, vmm_filter, true>();
+}
+GDRCOPY_TEST(basic_v2_forcepci_vmmalloc)
+{
+    basic<gpu_vmm_alloc, gpu_vmm_free, vmm_filter, true, GDR_PIN_FLAG_FORCE_PCIE>();
 }
 #endif
 
@@ -471,7 +493,8 @@ GDRCOPY_TEST(basic_small_buffers_mapping)
     finalize_cuda(g_dev_id);
 }
 
-template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
+template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn,
+    bool use_v2 = false, uint32_t pin_flags = GDR_PIN_FLAG_DEFAULT>
 void data_validation()
 {
     expecting_exception_signal = false;
@@ -506,7 +529,11 @@ void data_validation()
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+     if (use_v2)
+        ASSERT_EQ(gdr_pin_buffer_v2(g, d_ptr, size, pin_flags, &mh), 0);
+    else
+        ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+
     ASSERT_NEQ(mh, null_mh);
 
     gdr_info_t info;
@@ -634,6 +661,16 @@ void data_validation()
 GDRCOPY_TEST(data_validation_cumemalloc)
 {
     data_validation<gpu_mem_alloc, gpu_mem_free, null_filter>();
+}
+
+GDRCOPY_TEST(data_validation_v2_cumemalloc)
+{
+    data_validation<gpu_mem_alloc, gpu_mem_free, null_filter, true>();
+}
+
+GDRCOPY_TEST(data_validation_v2_forcepci_cumemalloc)
+{
+    data_validation<gpu_mem_alloc, gpu_mem_free, null_filter, true, GDR_PIN_FLAG_FORCE_PCIE>();
 }
 
 #if CUDA_VERSION >= 11000
