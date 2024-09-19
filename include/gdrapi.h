@@ -80,6 +80,19 @@ typedef struct gdr_mh_s {
 // Note that at this point the mapping is still not accessible to user-space.
 int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token, uint32_t va_space, gdr_mh_t *handle);
 
+typedef enum gdr_pin_flags {
+    GDR_PIN_FLAG_DEFAULT = 0,
+    GDR_PIN_FLAG_FORCE_PCIE = 1
+} gdr_ping_flags_t;
+
+// P2P tokens are deprecated, so dropping them here
+// supported flags:
+// - GDR_PIN_FLAG_DEFAULT default mapping mechanism
+// - GDR_PIN_FLAG_FORCE_PCIE,
+//   force creation of a GPU BAR1 mapping on coherent platforms
+//   only supported when persistent mapping is enabled, returns EINVAL otherwise
+int gdr_pin_buffer_v2(gdr_t g, unsigned long addr, size_t size, uint32_t flags, gdr_mh_t *handle);
+
 // Destroys the peer-to-peer mapping and frees the handle.
 //
 // If there exists a corresponding user-space mapping, gdr_unmap should be

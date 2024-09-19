@@ -247,6 +247,43 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     return ret;
 }
 
+int gdr_pin_buffer_v2(gdr_t g, unsigned long addr, size_t size, uint32_t flags, gdr_mh_t *handle)
+{
+    int ret = 0;
+    int retcode;
+
+    if (!handle) {
+        return EINVAL;
+    }
+
+    gdr_memh_t *mh = calloc(1, sizeof(gdr_memh_t));
+    if (!mh) {
+        return ENOMEM;
+    }
+
+    struct GDRDRV_IOC_PIN_BUFFER_V2_PARAMS params;
+    params.addr = addr;
+    params.size = size;
+    params.flags = 0;
+    if (flags & GDR_PIN_FLAG_FORCE_PCIE)
+        params.flags |= GDRDRV_PIN_BUFFER_FLAG_FORCE_PCIE;
+    params.pad = 0;
+    params.handle = 0;
+
+    retcode = ioctl(g->fd, GDRDRV_IOC_PIN_BUFFER, &params);
+    if (0 != retcode) {
+        ret = errno;
+        gdr_err("ioctl error (errno=%d)\n", ret);
+        free(mh);
+        goto err;
+    }
+    mh->handle = params.handle;
+    LIST_INSERT_HEAD(&g->memhs, mh, entries);
+    *handle = from_memh(mh);
+ err:
+    return ret;
+}
+
 int gdr_unpin_buffer(gdr_t g, gdr_mh_t handle)
 {
     int ret = 0;
