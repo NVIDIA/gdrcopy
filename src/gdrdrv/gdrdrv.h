@@ -141,6 +141,25 @@ struct GDRDRV_IOC_GET_ATTR_PARAMS
 
 //-----------
 
+struct GDRDRV_IOC_PIN_BUFFER_V2_PARAMS
+{
+    // in
+    __u64 addr;
+    __u64 size;
+    __u32 flags;
+    __u32 pad;
+    // out
+    gdr_hnd_t handle;
+};
+
+#define GDRDRV_PIN_BUFFER_FLAG_DEFAULT ((__u32)0x0)
+// On supported platforms, force the creation of GPU BAR1 mappings
+#define GDRDRV_PIN_BUFFER_FLAG_FORCE_PCIE ((__u32)0x1)
+
+#define GDRDRV_IOC_PIN_BUFFER_V2 _IOWR(GDRDRV_IOCTL, 7, struct GDRDRV_IOC_PIN_BUFFER_V2_PARAMS)
+
+//-----------
+
 struct GDRDRV_IOC_GET_VERSION_PARAMS
 {
     // out
