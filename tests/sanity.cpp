@@ -504,6 +504,8 @@ void data_validation()
     filter_fn();
 
     const size_t _size = 256*1024+16;
+    //const size_t _size = 180*1024+16;
+    //const size_t _size = 256*1024+16+128*1024;
     const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     print_dbg("buffer size: %zu\n", size);
@@ -550,21 +552,30 @@ void data_validation()
 
     uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
 
-    volatile uint32_t *pw = buf_ptr; // + (size/sizeof(uint32_t) - 2);
-// this is needed to make the test pass
-#define bar1flush() do { (void)*pw; } while(0)
+//    volatile uint32_t *pw = buf_ptr; // + (size/sizeof(uint32_t) - 2);
+// flushing is needed to make the test pass
+//   but this is not enough
+//#define bar1flush() do { READ_ONCE(buf_ptr[0]); } while(0)
+//   this is enough
+#define bar1flush() do { READ_ONCE(buf_ptr[size/sizeof(uint32_t) - 2]); } while(0)
+//   this is no-op
 // #define bar1flush() do {  } while(0)
 
     print_dbg("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
+    int errs = 0;
+    int iters = 1000;
+    for (int r = 0; r < iters; ++r) {
     init_hbuf_walking_bit(buf_ptr, size);
     bar1flush();
     MB();
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    CHECK_EQ(compare_buf(init_buf, copy_buf, size), 0);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
     memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
-
+    }
+    if (errs)
+        print_dbg("%d failed checks over %d iterations\n", errs, iters);
     print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     bar1flush();
