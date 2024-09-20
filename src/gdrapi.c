@@ -270,7 +270,7 @@ int gdr_pin_buffer_v2(gdr_t g, unsigned long addr, size_t size, uint32_t flags, 
     params.pad = 0;
     params.handle = 0;
 
-    retcode = ioctl(g->fd, GDRDRV_IOC_PIN_BUFFER, &params);
+    retcode = ioctl(g->fd, GDRDRV_IOC_PIN_BUFFER_V2, &params);
     if (0 != retcode) {
         ret = errno;
         gdr_err("ioctl error (errno=%d)\n", ret);
