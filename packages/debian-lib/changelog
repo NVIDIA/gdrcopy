@@ -1,3 +1,9 @@
+libgdrapi (2.4.2) stable; urgency=low
+
+  * Fix memory leak in gdr_pin_buffer.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 21 Oct 2024 11:59:59 -0700
+
 libgdrapi (2.4.1) stable; urgency=low
 
   * No change

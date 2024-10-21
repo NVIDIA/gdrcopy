@@ -1,4 +1,11 @@
+gdrdrv-dkms (2.4.2) stable; urgency=low
+
+  * Fix the size alignment bug in gdrdrv.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 21 Oct 2024 11:59:59 -0700
+
 gdrdrv-dkms (2.4.1) stable; urgency=low
+
   * Add support for persistent mapping.
   * Fix bug in src/gdrdrv/Makefile.
 

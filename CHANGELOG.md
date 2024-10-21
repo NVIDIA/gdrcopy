@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.4.2] - 2024-10-21
+- Fix the size alignment bug in gdrdrv.
+- Fix memory leak in gdr\_pin\_buffer.
+
 ## [2.4.1] - 2023-12-18
 - Add support for persistent mapping.
 - Fix bug in src/gdrdrv/Makefile.
@@ -83,6 +87,7 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 
+[2.4.2]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.2
 [2.4.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.1
 [2.4]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4
 [2.3.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.3.1

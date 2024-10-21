@@ -1,3 +1,10 @@
+gdrcopy (2.4.2) stable; urgency=low
+
+  * Fix the size alignment bug in gdrdrv.
+  * Fix memory leak in gdr_pin_buffer.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 21 Oct 2024 11:59:59 -0700
+
 gdrcopy (2.4.1) stable; urgency=low
 
   * Add support for persistent mapping.
