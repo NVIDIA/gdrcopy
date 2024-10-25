@@ -43,6 +43,13 @@
 #endif
 
 /**
+ * This is needed for pat_enabled()
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,2,0) && defined(CONFIG_X86_64) && defined(GDRDRV_OPENSOURCE_NVIDIA)
+#include <arch/x86/include/asm/memtype.h>
+#endif
+
+/**
  * This is needed for round_up()
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
@@ -100,6 +107,24 @@ void address_space_init_once(struct address_space *mapping)
 }
 #endif
 
+static inline bool gdrdrv_pat_enabled(void)
+{
+#if defined(CONFIG_X86_64) && LINUX_VERSION_CODE >= KERNEL_VERSION(4,2,0)
+
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+    // pat_enabled is GPL.
+    return pat_enabled();
+#else
+    // We cannot use pat_enabled here because it is GPL.
+    // Assume that it is enabled to handle the worst case scenario.
+    return true;
+#endif
+
+#else
+    // PAT is used on x86 only. It has been introduced in Linux v4.2.
+    return false;
+#endif
+}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
 /**
@@ -1200,7 +1225,7 @@ static const struct vm_operations_struct gdrdrv_vm_ops = {
  * reimplement io_remap_pfn_range according to the Linux kernel 5.17.15, which
  * predates support for Intel CC.
  */
-static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
+static inline int _gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
 {
 #if defined(GDRDRV_OPENSOURCE_NVIDIA) || !((defined(CONFIG_X86_64) || defined(CONFIG_X86_32)) && IS_ENABLED(CONFIG_ARCH_HAS_CC_PLATFORM))
     return io_remap_pfn_range(vma, vaddr, pfn, size, prot);
@@ -1212,6 +1237,48 @@ static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned
 
     return remap_pfn_range(vma, vaddr, pfn, size, __pgprot(__sme_clr(pgprot_val(prot))));
 #endif
+}
+
+/*----------------------------------------------------------------------------*/
+
+static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
+{
+    int status = 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,13,0) && defined(CONFIG_X86_64)
+    // Upstream Linux kernel has introduced track_pfn_remap in remap_pfn_range
+    // since v5.13. On x86-64, PAT may be enabled. In that situation,
+    // track_pfn_remap may fail if we do not call io_remap_pfn_range that
+    // covers the entire VMA -- see
+    // https://elixir.bootlin.com/linux/v5.13/source/arch/x86/mm/pat/memtype.c#L1047-L1055.
+    // As a WAR, we call io_remap_pfn_range for each host `PAGE_SIZE` one by
+    // one until we cover the entire `size`.
+    BUG_ON(!vma);
+    if (gdrdrv_pat_enabled() && !(vaddr == vma->vm_start && size == (vma->vm_end - vma->vm_start))) {
+        size_t remaining_size = size;
+        unsigned long chunk_pfn = pfn;
+        unsigned long chunk_paddr = pfn << PAGE_SHIFT;
+        unsigned long chunk_vaddr = vaddr;
+        unsigned long chunk_size;
+        while (remaining_size > 0) {
+            chunk_size = MIN(remaining_size, PAGE_SIZE);
+            status = _gdrdrv_io_remap_pfn_range(vma, chunk_vaddr, chunk_pfn, chunk_size, prot);
+            if (status) {
+                gdr_err("Error %d in _gdrdrv_io_remap_pfn_range chunk_vaddr=%#lx, chunk_pfn=%#lx, chunk_size=%zu\n", status, chunk_vaddr, chunk_pfn, chunk_size);
+                return status;
+            }
+            chunk_vaddr += chunk_size;
+            chunk_paddr += chunk_size;
+            chunk_pfn = chunk_paddr >> PAGE_SHIFT;
+            remaining_size -= chunk_size;
+        }
+    }
+    else
+#endif
+    {
+        status = _gdrdrv_io_remap_pfn_range(vma, vaddr, pfn, size, prot);
+    }
+
+    return status;
 }
 
 /*----------------------------------------------------------------------------*/
