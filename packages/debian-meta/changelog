@@ -2,8 +2,9 @@ gdrcopy (2.4.2) stable; urgency=low
 
   * Fix the size alignment bug in gdrdrv.
   * Fix memory leak in gdr_pin_buffer.
+  * Add support for another flavor of BF3.
 
- -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 21 Oct 2024 11:59:59 -0700
+ -- Pak Markthub <pmarkthub@nvidia.com>  Thu, 31 Oct 2024 11:59:59 -0700
 
 gdrcopy (2.4.1) stable; urgency=low
 

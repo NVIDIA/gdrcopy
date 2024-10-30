@@ -361,9 +361,10 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Mon Oct 21 2024 Pak Markthub <pmarkthub@nvidia.com> 2.4.2-%{_release}
+* Thu Oct 31 2024 Pak Markthub <pmarkthub@nvidia.com> 2.4.2-%{_release}
 - Fix the size alignment bug in gdrdrv.
 - Fix memory leak in gdr\_pin\_buffer.
+- Add support for another flavor of BF3.
 * Mon Dec 18 2023 Pak Markthub <pmarkthub@nvidia.com> 2.4.1-%{_release}
 - Add support for persistent mapping.
 - Fix bug in src/gdrdrv/Makefile.

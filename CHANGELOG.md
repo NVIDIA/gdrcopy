@@ -1,8 +1,9 @@
 # Changelog
 
-## [2.4.2] - 2024-10-21
+## [2.4.2] - 2024-10-31
 - Fix the size alignment bug in gdrdrv.
 - Fix memory leak in gdr\_pin\_buffer.
+- Add support for another flavor of BF3.
 
 ## [2.4.1] - 2023-12-18
 - Add support for persistent mapping.
