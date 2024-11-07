@@ -87,10 +87,12 @@ typedef enum gdr_pin_flags {
 
 // P2P tokens are deprecated, so dropping them here
 // supported flags:
-// - GDR_PIN_FLAG_DEFAULT default mapping mechanism
-// - GDR_PIN_FLAG_FORCE_PCIE,
-//   force creation of a GPU BAR1 mapping on coherent platforms
-//   only supported when persistent mapping is enabled, returns EINVAL otherwise
+// - GDR_PIN_FLAG_DEFAULT, default mapping mechanism
+// - GDR_PIN_FLAG_FORCE_PCIE, forces creation of a GPU BAR1 mapping
+//   supported on specific coherent platforms only
+//   persistent mappings must be enabled
+//   requires GPU driver r570+ at run time
+//   returns EINVAL otherwise
 int gdr_pin_buffer_v2(gdr_t g, unsigned long addr, size_t size, uint32_t flags, gdr_mh_t *handle);
 
 // Destroys the peer-to-peer mapping and frees the handle.
