@@ -18,9 +18,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-NVIDIA_SRC_DIR ?= $(shell { find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.c" -print -quit | xargs dirname || echo "NVIDIA_DRIVER_MISSING"; } 2>/dev/null)
-NVIDIA_IS_OPENSOURCE ?= $(shell grep -r "MODULE_LICENSE" $(NVIDIA_SRC_DIR)/ | grep -s -q "GPL" && echo "y")
-
 ifneq ($(KERNELRELEASE),)
 
 kver_major:=$(shell echo $(KERNELRELEASE) | awk -F '.' '// { print $$2;}' )
@@ -34,7 +31,15 @@ ifeq ($(NVIDIA_IS_OPENSOURCE),y)
 ccflags-y += -DGDRDRV_OPENSOURCE_NVIDIA
 endif
 
+ifeq ($(HAVE_VM_FLAGS_SET),y)
+ccflags-y += -DGDRDRV_HAVE_VM_FLAGS_SET
+endif
+
 else
+
+export NVIDIA_SRC_DIR ?= $(shell { find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.c" -print -quit | xargs dirname || echo "NVIDIA_DRIVER_MISSING"; } 2>/dev/null)
+export NVIDIA_IS_OPENSOURCE ?= $(shell grep -r "MODULE_LICENSE" $(NVIDIA_SRC_DIR)/ | grep -s -q "GPL" && echo "y")
+export HAVE_VM_FLAGS_SET := $(shell ../../scripts/test_gdrdrv_HAVE_VM_FLAGS_SET.sh)
 
 KVER ?= $(shell uname -r)
 MODULES_DIR := /lib/modules/$(KVER)
@@ -53,6 +58,7 @@ all: build
 build:
 	@ echo "Picking NVIDIA driver sources from NVIDIA_SRC_DIR=$(NVIDIA_SRC_DIR). If that does not meet your expectation, you might have a stale driver still around and that might cause problems."
 	@ echo "Setting NVIDIA_IS_OPENSOURCE=$(NVIDIA_IS_OPENSOURCE)"
+	@ echo "Setting HAVE_VM_FLAGS_SET=$(HAVE_VM_FLAGS_SET)"
 	@ $(MAKE) -C $(KDIR) $(MAKE_PARAMS) M=$(PWD) modules
 
 install: build
