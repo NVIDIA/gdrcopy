@@ -101,7 +101,7 @@ void address_space_init_once(struct address_space *mapping)
 #endif
 
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
+#ifndef GDRDRV_HAVE_VM_FLAGS_SET
 /**
  * This API requires Linux kernel 6.3.
  * See https://github.com/torvalds/linux/commit/bc292ab00f6c7a661a8a605c714e8a148f629ef6
