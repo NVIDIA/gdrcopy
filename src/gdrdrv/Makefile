@@ -44,11 +44,6 @@ MODULE_SUBDIR ?= /kernel/drivers/misc/
 MODULE_DESTDIR := $(MODULES_DIR)/$(MODULE_SUBDIR)
 DEPMOD := /sbin/depmod
 
-REL := $(subst ., , $(subst -, , $(shell uname -r)))
-REL_MAJOR  := $(word 1,$(REL))
-REL_MEDIUM := $(word 2,$(REL))
-REL_MINOR  := $(word 3,$(REL))
-
 export NVIDIA_SRC_DIR ?= $(shell { find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.c" -print -quit | xargs dirname || echo "NVIDIA_DRIVER_MISSING"; } 2>/dev/null)
 export NVIDIA_IS_OPENSOURCE ?= $(shell grep -r "MODULE_LICENSE" $(NVIDIA_SRC_DIR)/ | grep -s -q "GPL" && echo "y")
 export HAVE_VM_FLAGS_SET := $(shell ../../scripts/test_gdrdrv_HAVE_VM_FLAGS_SET.sh -k $(KVER))
