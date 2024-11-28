@@ -1,5 +1,11 @@
 # Changelog
 
+## [master]
+- Waive some unit tests in gdrcopy\_sanity if the GPU compute mode is not set as default.
+- Introduce gdr\_get\_attribute API and GDR\_ATTR\_USE\_PERSISTENT\_MAPPING.
+- Add persistent mapping support in gdrcopy\_sanity.
+- Support setting GPU ID in gdrcopy\_sanity.
+
 ## [2.4.3] - 2024-12-02
 - Fix NVIDIA\_IS\_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
 - Fix compile error in gdrdrv when compile on RHEL9.5.
@@ -92,6 +98,7 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 
+[master]: https://github.com/NVIDIA/gdrcopy
 [2.4.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.3
 [2.4.2]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.2
 [2.4.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.1
