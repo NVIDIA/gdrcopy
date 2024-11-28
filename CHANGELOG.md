@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.4.3] - 2024-12-02
+- Fix NVIDIA\_IS\_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
+- Fix compile error in gdrdrv when compile on RHEL9.5.
+
+## [2.4.2] - 2024-10-31
+- Fix the size alignment bug in gdrdrv.
+- Fix memory leak in gdr\_pin\_buffer.
+- Add support for another flavor of BF3.
+
+## [2.4.1] - 2023-12-18
+- Add support for persistent mapping.
+- Fix bug in src/gdrdrv/Makefile.
+- Fix compile-time bug when check.h is not found.
+
 ## [2.4] - 2023-09-19
 - Various bug fixes in the test and benchmark applications.
 - Prefix all applications with "gdrcopy\_".
@@ -78,6 +92,9 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 
+[2.4.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.3
+[2.4.2]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.2
+[2.4.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.1
 [2.4]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4
 [2.3.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.3.1
 [2.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.3
