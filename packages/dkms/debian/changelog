@@ -1,4 +1,4 @@
-gdrdrv-dkms (2.4.2) stable; urgency=low
+gdrdrv-dkms (2.4.3) stable; urgency=low
 
   * Fix NVIDIA_IS_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
   * Fix compile error in gdrdrv when compile on RHEL9.5.
