@@ -361,9 +361,11 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Mon Dec 02 2024 Pak Markthub <pmarkthub@nvidia.com> 2.4.3-%{_release}
+- Fix NVIDIA_IS_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
 * Thu Oct 31 2024 Pak Markthub <pmarkthub@nvidia.com> 2.4.2-%{_release}
 - Fix the size alignment bug in gdrdrv.
-- Fix memory leak in gdr\_pin\_buffer.
+- Fix memory leak in gdr_pin_buffer.
 - Add support for another flavor of BF3.
 * Mon Dec 18 2023 Pak Markthub <pmarkthub@nvidia.com> 2.4.1-%{_release}
 - Add support for persistent mapping.

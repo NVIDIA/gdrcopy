@@ -1,5 +1,12 @@
 gdrdrv-dkms (2.4.2) stable; urgency=low
 
+  * Fix NVIDIA_IS_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
+  * Fix compile error in gdrdrv when compile on RHEL9.5.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 02 Dec 2024 11:59:59 -0700
+
+gdrdrv-dkms (2.4.2) stable; urgency=low
+
   * Fix the size alignment bug in gdrdrv.
   * Add support for another flavor of BF3.
 
