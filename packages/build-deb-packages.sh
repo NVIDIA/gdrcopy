@@ -185,6 +185,7 @@ if [[ ${build_driver_package} == 1 ]]; then
     ex cp -r ${tmpdir}/gdrcopy/src/gdrdrv ${dkmsdir}/gdrdrv-${VERSION}
     ex rm -rf ${dkmsdir}/gdrdrv-${VERSION}/debian-*
     ex cp ${SCRIPT_DIR_PATH}/dkms.conf ${dkmsdir}/gdrdrv-${VERSION}/
+    ex cp -r ${TOP_DIR_PATH}/scripts ${dkmsdir}/gdrdrv-${VERSION}
     ex cd ${dkmsdir}
     ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
     ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
