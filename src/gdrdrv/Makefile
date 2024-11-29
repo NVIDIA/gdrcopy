@@ -46,7 +46,9 @@ DEPMOD := /sbin/depmod
 
 export NVIDIA_SRC_DIR ?= $(shell { find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.c" -print -quit | xargs dirname || echo "NVIDIA_DRIVER_MISSING"; } 2>/dev/null)
 export NVIDIA_IS_OPENSOURCE ?= $(shell grep -r "MODULE_LICENSE" $(NVIDIA_SRC_DIR)/ | grep -s -q "GPL" && echo "y")
-export HAVE_VM_FLAGS_SET := $(shell ../../scripts/test_gdrdrv_HAVE_VM_FLAGS_SET.sh -k $(KVER))
+
+CONF_SCRIPT_DIR ?= $(PWD)/../../scripts
+export HAVE_VM_FLAGS_SET ?= $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_VM_FLAGS_SET.sh -k $(KVER))
 
 all: build
 
