@@ -15,6 +15,9 @@ ifeq ("$(wildcard $(NAME)-$(VERSION))", "$(NAME)-$(VERSION)")
 
 	# sets 0755 for dirs, 0644 for files
 	chmod a-wx+rX,u+w -R "$(SRC)/$(NAME)-$(VERSION)"
+
+	# set u+x for all files under the scripts folder
+	chmod u+x -R "$(SRC)/$(NAME)-$(VERSION)/scripts"
 endif
 
 #tarball, possibly with binaries
