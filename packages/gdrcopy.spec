@@ -182,6 +182,7 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/gdrdrv.h $RPM_BUILD_ROOT%{usr
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/Makefile $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/nv-p2p-dummy.c $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
+cp -a -r $RPM_BUILD_DIR/%{name}-%{version}/scripts $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 
 %if 0%{!?suse_version:1}
 # RHEL
@@ -341,6 +342,7 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %{usr_src_dir}/gdrdrv-%{version}/Makefile
 %{usr_src_dir}/gdrdrv-%{version}/nv-p2p-dummy.c
 %{usr_src_dir}/gdrdrv-%{version}/dkms.conf
+%{usr_src_dir}/gdrdrv-%{version}/scripts/*
 
 
 %if %{BUILD_KMOD} > 0

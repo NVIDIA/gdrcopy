@@ -131,7 +131,7 @@ ex cd ${TOP_DIR_PATH}
 
 ex mkdir -p $tmpdir/gdrcopy
 ex rm -rf $tmpdir/gdrcopy/*
-ex cp -r packages/dkms.conf packages/rhel/init.d packages/rhel/gdrcopy.service insmod.sh Makefile README.md include src tests config_arch LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
+ex cp -r packages/dkms.conf packages/rhel/init.d packages/rhel/gdrcopy.service scripts/ insmod.sh Makefile README.md include src tests config_arch LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
 ex rm -f $tmpdir/gdrcopy-$VERSION.tar.gz
 
 ex cd $tmpdir/gdrcopy
