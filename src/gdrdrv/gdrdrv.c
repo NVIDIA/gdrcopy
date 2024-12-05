@@ -1258,7 +1258,7 @@ static long gdrdrv_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 
 /*----------------------------------------------------------------------------*/
 
-void gdrdrv_vma_close(struct vm_area_struct *vma)
+static void gdrdrv_vma_close(struct vm_area_struct *vma)
 {
     gdr_mr_t *mr = (gdr_mr_t *)vma->vm_private_data;
     gdr_dbg("closing vma=0x%px vm_file=0x%px vm_private_data=0x%px mr=0x%px mr->vma=0x%px\n", vma, vma->vm_file, vma->vm_private_data, mr, mr->vma);
