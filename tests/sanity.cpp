@@ -2136,6 +2136,8 @@ void leakage_pin_pages_fork()
             print_dbg("%s: receive cont signal %d from child\n", myname, recv_msg);
         } while (recv_msg != 2);
 
+        ASSERTDRV(gfree_fn(&mhandle));
+
         // The first connection has been destroyed ungracefully.
         // Create a new one for querying information.
         gdr_t g2 = gdr_open_safe();
