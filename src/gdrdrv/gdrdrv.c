@@ -37,6 +37,7 @@
 #include <linux/timex.h>
 #include <linux/timer.h>
 #include <linux/pci.h>
+#include <linux/capability.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
 #include <linux/sched/signal.h>
@@ -408,6 +409,23 @@ static inline int gdr_support_persistent_mapping(void)
 static inline int gdr_use_persistent_mapping(void)
 {
     return use_persistent_mapping && gdr_support_persistent_mapping();
+}
+
+//-----------------------------------------------------------------------------
+
+static int gdrdrv_external_query_nv_get_pages_refcount(int *val)
+{
+    int64_t refcount = atomic64_read(&gdrdrv_nv_get_pages_refcount);
+    if (!capable(CAP_SYS_ADMIN))
+        return -EPERM;
+
+    if (unlikely(refcount > INT_MAX))
+        *val = INT_MAX;
+    else if (unlikely(refcount < INT_MIN))
+        *val = INT_MIN;
+    else
+        *val = (int)refcount;
+    return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -1079,6 +1097,9 @@ static int gdrdrv_get_attr(gdr_info_t *info, void __user *_params)
     switch (params.attr) {
     case GDRDRV_ATTR_USE_PERSISTENT_MAPPING:
         params.val = gdr_use_persistent_mapping();
+        break;
+    case GDRDRV_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT:
+        ret = gdrdrv_external_query_nv_get_pages_refcount(&params.val);
         break;
     default:
         ret = -EINVAL;
