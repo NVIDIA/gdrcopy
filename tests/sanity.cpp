@@ -570,7 +570,7 @@ void data_validation()
     print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    CHECK_EQ(compare_buf(init_buf, copy_buf, size), 0);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
     memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
@@ -578,7 +578,7 @@ void data_validation()
     print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     gdr_copy_from_mapping(mh, copy_buf, buf_ptr, size);
-    CHECK_EQ(compare_buf(init_buf, copy_buf, size), 0);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
     memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
@@ -591,7 +591,7 @@ void data_validation()
         print_dbg("check 4.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset on mapping\n", i, extra_dwords);
         gdr_copy_to_mapping(mh, buf_ptr + extra_dwords, init_buf, size - extra_off);
         gdr_copy_from_mapping(mh, copy_buf, buf_ptr + extra_dwords, size - extra_off);
-        CHECK_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
+        errs += compare_buf(init_buf, copy_buf, size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -600,7 +600,7 @@ void data_validation()
         print_dbg("check 5.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset on mapping\n", i, extra_off);
         gdr_copy_to_mapping(mh, (char*)buf_ptr + extra_off, init_buf, size - extra_off);
         gdr_copy_from_mapping(mh, copy_buf, (char*)buf_ptr + extra_off, size - extra_off);
-        CHECK_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
+        errs += compare_buf(init_buf, copy_buf, size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -610,7 +610,7 @@ void data_validation()
         print_dbg("check 6.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset on host buffer\n", i, extra_dwords);
         gdr_copy_to_mapping(mh, buf_ptr, init_buf + extra_dwords, size - extra_off);
         gdr_copy_from_mapping(mh, copy_buf + extra_dwords, buf_ptr, size - extra_off);
-        CHECK_EQ(compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off), 0);
+        errs += compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -619,7 +619,7 @@ void data_validation()
         print_dbg("check 7.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset on host buffer\n", i, extra_off);
         gdr_copy_to_mapping(mh, buf_ptr, (char *)init_buf + extra_off, size - extra_off);
         gdr_copy_from_mapping(mh, (char *)copy_buf + extra_off, buf_ptr, size - extra_off);
-        CHECK_EQ(compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off), 0);
+        errs += compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -629,7 +629,7 @@ void data_validation()
         print_dbg("check 8.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset on both mapping and host buffer\n", i, extra_dwords);
         gdr_copy_to_mapping(mh, buf_ptr + extra_dwords, init_buf + extra_dwords, size - extra_off);
         gdr_copy_from_mapping(mh, copy_buf + extra_dwords, buf_ptr + extra_dwords, size - extra_off);
-        CHECK_EQ(compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off), 0);
+        errs += compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -638,7 +638,7 @@ void data_validation()
         print_dbg("check 9.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset on both mapping and host buffer\n", i, extra_off);
         gdr_copy_to_mapping(mh, (char *)buf_ptr + extra_off, (char *)init_buf + extra_off, size - extra_off);
         gdr_copy_from_mapping(mh, (char *)copy_buf + extra_off, (char *)buf_ptr + extra_off, size - extra_off);
-        CHECK_EQ(compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off), 0);
+        errs += compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());

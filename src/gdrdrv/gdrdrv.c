@@ -1144,6 +1144,13 @@ static int gdrdrv_get_attr(gdr_info_t *info, void __user *_params)
     case GDRDRV_ATTR_USE_PERSISTENT_MAPPING:
         params.val = gdr_use_persistent_mapping();
         break;
+    case GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE:
+#ifdef NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING
+        params.val = 1;
+#else
+        params.val = 0;
+#endif
+        break;
     default:
         ret = -EINVAL;
     }
@@ -1499,11 +1506,10 @@ out:
         mr->mapping = filp->f_mapping;
 
         BUG_ON(cpu_mapping_type == GDR_MR_NONE);
+        // An mr with force_pci=1 should have not been mapped as cached on the CPU
+        BUG_ON(mr->force_pci && (cpu_mapping_type == GDR_MR_CACHING));
         mr->cpu_mapping_type = cpu_mapping_type;
-        // TODO: turn this into a BUG
-        if (mr->force_pci && (cpu_mapping_type == GDR_MR_CACHING)) {
-            gdr_err("mr with force_pci=1 should have not been mapped as caching on the CPU\n");
-        }
+
         gdr_dbg("mr vma=0x%px mapping=0x%px\n", mr->vma, mr->mapping);
     }
 
