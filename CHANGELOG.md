@@ -2,9 +2,11 @@
 
 ## [master]
 - Waive some unit tests in gdrcopy\_sanity if the GPU compute mode is not set as default.
-- Introduce gdr\_get\_attribute API and GDR\_ATTR\_USE\_PERSISTENT\_MAPPING.
+- Introduce gdr\_get\_attribute API and GDR\_ATTR\_USE\_PERSISTENT\_MAPPING and GDR\_ATTR\_GLOBAL\_NV\_GET\_PAGES\_REFCOUNT.
 - Add persistent mapping support in gdrcopy\_sanity.
 - Support setting GPU ID in gdrcopy\_sanity.
+- Fix nvidia\_p2p\_get\_pages\_persistent leakage in gdrdrv.
+- Introduce leakage\_pin\_pages\_fork\_cumemalloc unit test.
 
 ## [2.4.3] - 2024-12-02
 - Fix NVIDIA\_IS\_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
