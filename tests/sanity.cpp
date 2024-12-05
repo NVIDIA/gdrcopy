@@ -2093,6 +2093,19 @@ GDRCOPY_TEST(basic_child_thread_pins_buffer_vmmalloc)
 }
 #endif
 
+GDRCOPY_TEST(attributes_sanity)
+{
+    gdr_t g = gdr_open_safe();
+
+    int use_persistent_mapping;
+    ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_USE_PERSISTENT_MAPPING, &use_persistent_mapping), 0);
+
+    int pin_flag_force_pcie = 0;
+    ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE, &pin_flag_force_pcie), 0);
+
+    ASSERT_EQ(gdr_close(g), 0);
+}
+
 void print_usage(const char *path)
 {
     cout << "Usage: " << path << " [-h][-v][-s][-l][-t <test>]" << endl;
