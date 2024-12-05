@@ -1521,7 +1521,7 @@ static int __init gdrdrv_init(void)
 
 static void __exit gdrdrv_cleanup(void)
 {
-    uint64_t last_nv_get_pages_refcount;
+    int64_t last_nv_get_pages_refcount;
     gdr_msg(KERN_INFO, "unregistering major number %d\n", gdrdrv_major);
 
     /* cleanup_module is never called if registering failed */
