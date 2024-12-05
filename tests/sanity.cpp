@@ -750,6 +750,8 @@ GDRCOPY_TEST(invalidation_access_after_gdr_close_vmmalloc)
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
 void invalidation_access_after_free()
 {
+    int status = 0;
+
     expecting_exception_signal = false;
     MB();
 
@@ -780,7 +782,11 @@ void invalidation_access_after_free()
     gdr_t g = gdr_open_safe();
 
     int use_persistent_mapping;
-    ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_USE_PERSISTENT_MAPPING, &use_persistent_mapping), 0);
+    status = gdr_get_attribute(g, GDR_ATTR_USE_PERSISTENT_MAPPING, &use_persistent_mapping);
+    if (status == -EINVAL) {
+        print_dbg("Cannot query use_persistent_mapping. gdrdrv might be too old. Assume that this is non-persistent mapping.\n");
+        use_persistent_mapping = 0;
+    }
 
     gdr_mh_t mh;
     CUdeviceptr d_ptr = d_A;
@@ -2019,6 +2025,133 @@ GDRCOPY_TEST(basic_child_thread_pins_buffer_vmmalloc)
     basic_child_thread_pins_buffer<gpu_vmm_alloc, gpu_vmm_free, vmm_filter>();
 }
 #endif
+
+template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
+void leakage_pin_pages_fork()
+{
+    int status = 0;
+
+    expecting_exception_signal = false;
+    MB();
+
+    int filedes_0[2];
+    int filedes_1[2];
+    int read_fd;
+    int write_fd;
+    ASSERT_NEQ(pipe(filedes_0), -1);
+    ASSERT_NEQ(pipe(filedes_1), -1);
+
+    srand(time(NULL));
+
+    const size_t _size = sizeof(int) * 16;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
+    const char *myname;
+
+    int send_msg = 1;
+    int recv_msg = 0;
+
+    init_cuda(g_dev_id, true);
+    filter_fn();
+
+    gdr_t g = gdr_open_safe();
+
+    int start_nv_get_pages_refcount = 0;
+    int end_nv_get_pages_refcount = 0;
+
+    status = gdr_get_attribute(g, GDR_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT, &start_nv_get_pages_refcount);
+    if (status == -EINVAL) {
+        print_dbg("gdrdrv might be too old. This unit test is not supported. Waiving this test.\n");
+        exit(EXIT_WAIVED);
+    }
+    else if (status == -EPERM) {
+        print_dbg("This unit test must be run with a user with CAP_SYS_ADMIN such as root. Waiving this test.\n");
+        exit(EXIT_WAIVED);
+    }
+    else if (start_nv_get_pages_refcount > 0) {
+        print_dbg("Some processes might be using GDRCopy. Waiving this test.\n");
+        exit(EXIT_WAIVED);
+    }
+    else if (start_nv_get_pages_refcount < 0) {
+        print_dbg("Global nv_get_pages_refcount should not be below 0. This is a bug!\n");
+        ASSERT_EQ(start_nv_get_pages_refcount, 0);
+    }
+
+    fflush(stdout);
+    fflush(stderr);
+
+    pid_t pid = fork();
+    ASSERT(pid >= 0);
+
+    myname = pid == 0 ? "child" : "parent";
+
+    print_dbg("%s: Start\n", myname);
+
+    if (pid == 0) {
+        close(filedes_0[0]);
+        close(filedes_1[1]);
+
+        read_fd = filedes_1[0];
+        write_fd = filedes_0[1];
+
+        print_dbg("%s: waiting for cont signal from parent\n", myname);
+        do {
+            ASSERT_EQ(read(read_fd, &recv_msg, sizeof(int)), sizeof(int));
+            print_dbg("%s: receive cont signal %d from parent\n", myname, recv_msg);
+        } while (recv_msg != 1);
+
+        print_dbg("%s: calling gdr_close\n", myname);
+        ASSERT_EQ(gdr_close(g), 0);
+
+        send_msg = 2;
+        print_dbg("%s: telling parent what we are done\n", myname);
+        ASSERT_EQ(write(write_fd, &send_msg, sizeof(int)), sizeof(int));
+    }
+    else {
+        close(filedes_0[1]);
+        close(filedes_1[0]);
+
+        read_fd = filedes_0[0];
+        write_fd = filedes_1[1];
+
+        CUdeviceptr d_A;
+        gpu_mem_handle_t mhandle;
+        ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+        d_A = mhandle.ptr;
+
+        gdr_mh_t mh;
+        CUdeviceptr d_ptr = d_A;
+        ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+        ASSERT_NEQ(mh, null_mh);
+
+        print_dbg("%s: Closing g->fd\n", myname);
+        close(g->fd);
+
+        send_msg = 1;
+        print_dbg("%s: sending cont signal to child\n", myname);
+        ASSERT_EQ(write(write_fd, &send_msg, sizeof(int)), sizeof(int));
+
+        print_dbg("%s: waiting for cont signal from child\n", myname);
+        do {
+            ASSERT_EQ(read(read_fd, &recv_msg, sizeof(int)), sizeof(int));
+            print_dbg("%s: receive cont signal %d from child\n", myname, recv_msg);
+        } while (recv_msg != 2);
+
+        // The first connection has been destroyed ungracefully.
+        // Create a new one for querying information.
+        gdr_t g2 = gdr_open_safe();
+
+        ASSERT_EQ(gdr_get_attribute(g2, GDR_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT, &end_nv_get_pages_refcount), 0);
+        ASSERT_EQ(end_nv_get_pages_refcount, 0);
+
+        finalize_cuda(g_dev_id);
+    }
+}
+
+GDRCOPY_TEST(leakage_pin_pages_fork_cumemalloc)
+{
+    leakage_pin_pages_fork<gpu_mem_alloc, gpu_mem_free, null_filter>();
+}
+
 
 void print_usage(const char *path)
 {
