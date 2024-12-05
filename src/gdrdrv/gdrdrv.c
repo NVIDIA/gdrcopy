@@ -527,11 +527,6 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
         gdr_err("filp contains no info\n");
         return -EIO;
     }
-    // Check that the caller is the same process that did gdrdrv_open
-    if (!gdrdrv_check_same_process(info, current)) {
-        gdr_dbg("filp is not opened by the current process\n");
-        return -EACCES;
-    }
 
     mutex_lock(&info->lock);
     list_for_each_safe(p, n, &info->mr_list) {
