@@ -585,8 +585,10 @@ void data_validation()
     }
     if (errs) {
         print_dbg("%d failed checks over %d iterations\n", errs, iters);
-	exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
+
+    errs = 0;
     print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
@@ -662,6 +664,11 @@ void data_validation()
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
+    }
+
+    if (errs) {
+        print_dbg("%d failed checks\n", errs);
+        exit(EXIT_FAILURE);
     }
 
     print_dbg("unmapping\n");
