@@ -206,6 +206,26 @@ int recvfd(int socket)
     return fd;
 }
 
+static int pin_buffer_v2_helper(int dev_id, gdr_t g, unsigned long addr, size_t size, uint32_t flags, gdr_mh_t *handle)
+{
+    if (flags & GDR_PIN_FLAG_FORCE_PCIE) {
+        // waive the test if not supported on the platform under test or the flag is not supported
+        int attr = 0;
+        ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE, &attr), 0);
+
+        CUdevice dev;
+        ASSERTDRV(cuDeviceGet(&dev, dev_id));
+        int is_coherent;
+        ASSERTDRV(cuDeviceGetAttribute(&is_coherent, CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES, dev));
+
+        if (!attr || !is_coherent) {
+            print_dbg("waiving this test because it is unsupported\n");
+            exit(EXIT_WAIVED);
+        }
+    }
+    return gdr_pin_buffer_v2(g, addr, size, flags, handle);
+}
+
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn,
           bool use_v2 = false, uint32_t pin_flags = GDR_PIN_FLAG_DEFAULT>
 void basic()
@@ -233,7 +253,7 @@ void basic()
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
     if (use_v2)
-        ASSERT_EQ(gdr_pin_buffer_v2(g, d_ptr, size, pin_flags, &mh), 0);
+        ASSERT_EQ(pin_buffer_v2_helper(g_dev_id, g, d_ptr, size, pin_flags, &mh), 0);
     else
         ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
@@ -531,8 +551,8 @@ void data_validation()
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-     if (use_v2)
-        ASSERT_EQ(gdr_pin_buffer_v2(g, d_ptr, size, pin_flags, &mh), 0);
+    if (use_v2)
+        ASSERT_EQ(pin_buffer_v2_helper(g_dev_id, g, d_ptr, size, pin_flags, &mh), 0);
     else
         ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
 
