@@ -72,6 +72,10 @@ static int gdrdrv_cpu_must_use_device_mapping = 0;
 
 //-----------------------------------------------------------------------------
 
+static atomic64_t gdrdrv_nv_get_pages_refcount = ATOMIC_INIT(0);
+
+//-----------------------------------------------------------------------------
+
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
 /**
  * This API is available after Linux kernel 2.6.32
@@ -499,6 +503,10 @@ static void gdr_free_mr_unlocked(gdr_mr_t *mr)
             gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", status);
         }
         #endif
+
+        if (!status) {
+            atomic64_fetch_dec(&gdrdrv_nv_get_pages_refcount);
+        }
     } else {
         gdr_dbg("invoking unpin_buffer while callback has already been fired\n");
 
@@ -637,6 +645,8 @@ static void gdrdrv_get_pages_free_callback(void *data)
     page_table = mr->page_table;
     if (page_table) {
         nvidia_p2p_free_page_table(page_table);
+        // NVIDIA driver takes back those pages. Decrement the refcount here.
+        atomic64_fetch_dec(&gdrdrv_nv_get_pages_refcount);
         if (gdr_mr_is_mapped(mr))
             gdr_mr_destroy_all_mappings(mr);
     } else {
@@ -761,6 +771,10 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
     gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x callback=%px)\n",
              mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, free_callback_fn);
     #endif
+
+    if (!ret) {
+        atomic64_fetch_inc(&gdrdrv_nv_get_pages_refcount);
+    }
 
     #ifndef CONFIG_ARM64
     tb = get_cycles();
@@ -1507,10 +1521,14 @@ static int __init gdrdrv_init(void)
 
 static void __exit gdrdrv_cleanup(void)
 {
+    uint64_t last_nv_get_pages_refcount;
     gdr_msg(KERN_INFO, "unregistering major number %d\n", gdrdrv_major);
 
     /* cleanup_module is never called if registering failed */
     unregister_chrdev(gdrdrv_major, DEVNAME);
+
+    last_nv_get_pages_refcount = atomic64_read(&gdrdrv_nv_get_pages_refcount);
+    BUG_ON(0 != last_nv_get_pages_refcount);
 }
 
 //-----------------------------------------------------------------------------
