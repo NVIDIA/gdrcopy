@@ -889,7 +889,7 @@ int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
             params.attr = GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE;
             break;
         default:
-            gdr_dbg("unsupported attribute\n");
+            gdr_dbg("undefined attribute\n");
             ret = EINVAL;
             goto out;
     }
