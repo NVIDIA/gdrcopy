@@ -822,11 +822,10 @@ int gdr_driver_get_version(gdr_t g, int *major, int *minor)
 int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
 {
     int ret = 0;
-    int retcode;
     struct GDRDRV_IOC_GET_ATTR_PARAMS params;
 
     if (attr < 1 || attr >= GDR_ATTR_MAX) {
-        ret = EINVAL;
+        ret = -EINVAL;
         goto out;
     }
 
@@ -841,24 +840,18 @@ int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
         case GDR_ATTR_USE_PERSISTENT_MAPPING:
             params.attr = GDRDRV_ATTR_USE_PERSISTENT_MAPPING;
             break;
+        case GDR_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT:
+            params.attr = GDRDRV_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT;
+            break;
         default:
             gdr_err("Error: Unrecognize attr\n");
-            ret = EINVAL;
+            ret = -EINVAL;
             goto out;
     }
-    retcode = ioctl(g->fd, GDRDRV_IOC_GET_ATTR, &params);
-    if (-EINVAL == retcode) {
-        // gdrdrv might be too old to query this attr.
-        // Assume 0.
-        *v = 0;
-        goto out;
-    } else if (0 != retcode) {
-        ret = errno;
-        gdr_err("ioctl error (errno=%d)\n", ret);
-        goto out;
-    }
+    ret = ioctl(g->fd, GDRDRV_IOC_GET_ATTR, &params);
 
-    *v = params.val;
+    if (!ret)
+        *v = params.val;
 
 out:
     return ret;

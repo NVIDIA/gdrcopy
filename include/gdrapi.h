@@ -150,7 +150,11 @@ int gdr_driver_get_version(gdr_t g, int *major, int *minor);
 typedef enum gdr_attr {
     GDR_ATTR_USE_PERSISTENT_MAPPING = 1,    // Query whether gdrdrv uses persistent mapping
                                             // or traditional (non-persistent) mapping.
-
+    GDR_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT = 2,  // Query how many nvidia_p2p_get_pages
+                                                // have been called by gdrdrv without
+                                                // corresponding put_pages or free_callback.
+                                                // This information is aggregated from all processes.
+                                                // Require CAP_SYS_ADMIN.
     // For internal use only
     GDR_ATTR_MAX
 } gdr_attr_t;
