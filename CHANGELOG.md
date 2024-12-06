@@ -1,6 +1,7 @@
 # Changelog
 
 ## [master]
+- Introduce gdr_pin_buffer_v2 API, GDR\_PIN\_FLAG\_FORCE\_PCIE pin flag and the  GDR\_ATTR\_SUPPORT\_PIN\_FLAG\_FORCE\_PCIE attribute. Extend gdrcopy\_sanity coverage to those new APIs.
 - Waive some unit tests in gdrcopy\_sanity if the GPU compute mode is not set as default.
 - Introduce gdr\_get\_attribute API and GDR\_ATTR\_USE\_PERSISTENT\_MAPPING.
 - Add persistent mapping support in gdrcopy\_sanity.
