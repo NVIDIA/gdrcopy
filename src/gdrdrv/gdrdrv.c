@@ -316,6 +316,7 @@ struct gdr_mr {
     struct vm_area_struct *vma;
     struct address_space *mapping;
     struct rw_semaphore sem;
+    unsigned force_pci:1;
 };
 typedef struct gdr_mr gdr_mr_t;
 
@@ -693,7 +694,7 @@ static inline int gdr_generate_mr_handle(gdr_info_t *info, gdr_mr_t *mr)
 
 //-----------------------------------------------------------------------------
 
-static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_token, u32 va_space, gdr_hnd_t *p_handle)
+static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_token, u32 va_space, u32 flags, gdr_hnd_t *p_handle)
 {
     int ret = 0;
     struct nvidia_p2p_page_table *page_table = NULL;
@@ -705,6 +706,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
     #ifndef CONFIG_ARM64
     cycles_t ta, tb;
     #endif
+    u32 get_pages_flags;
 
     mr = kmalloc(sizeof(gdr_mr_t), GFP_KERNEL);
     if (!mr) {
@@ -724,14 +726,34 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
 
     free_callback_fn = gdr_use_persistent_mapping() ? NULL : gdrdrv_get_pages_free_callback;
 
+    get_pages_flags = 0;
     mr->offset       = addr & GPU_PAGE_OFFSET;
-    if (free_callback_fn) {
+    if (!gdr_use_persistent_mapping()) {
+        if (GDRDRV_PIN_BUFFER_FLAG_DEFAULT != flags) {
+            gdr_err("flags are not supported in non persistent mode\n");
+            ret = -EINVAL;
+            goto out;
+        }
         mr->p2p_token    = p2p_token;
         mr->va_space     = va_space;
     } else {
-        // Token cannot be used with persistent mapping.
+        if (p2p_token || va_space) {
+            gdr_err("p2p token and va space are deprecated and now unsupported\n");
+            ret = -EINVAL;
+            goto out;
+        }
         mr->p2p_token    = 0;
         mr->va_space     = 0;
+        if (flags & GDRDRV_PIN_BUFFER_FLAG_FORCE_PCIE) {
+#ifdef NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING
+            get_pages_flags |= NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING;
+            mr->force_pci = 1;
+#else
+            gdr_err("The GPU driver used to build this module did not have the NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING flag\n");
+            ret = -EINVAL;
+            goto out;
+#endif
+        }
     }
     mr->va           = page_virt_start;
     mr->mapped_size  = rounded_size;
@@ -756,7 +778,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
         gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x callback=%px)\n",
                  mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, free_callback_fn);
     } else {
-        ret = nvidia_p2p_get_pages_persistent(mr->va, mr->mapped_size, &page_table, 0);
+        ret = nvidia_p2p_get_pages_persistent(mr->va, mr->mapped_size, &page_table, get_pages_flags);
         gdr_info("invoking nvidia_p2p_get_pages_persistent(va=0x%llx len=%lld)\n",
                  mr->va, mr->mapped_size);
     }
@@ -905,7 +927,58 @@ static int gdrdrv_pin_buffer(gdr_info_t *info, void __user *_params)
         goto out;
     }
 
-    ret = __gdrdrv_pin_buffer(info, params.addr, params.size, params.p2p_token, params.va_space, &handle);
+    ret = __gdrdrv_pin_buffer(info, params.addr, params.size, params.p2p_token, params.va_space, GDRDRV_PIN_BUFFER_FLAG_DEFAULT, &handle);
+    if (ret)
+        goto out;
+
+    has_handle = 1;
+    params.handle = handle;
+
+    if (copy_to_user(_params, &params, sizeof(params))) {
+        gdr_err("copy_to_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+    }
+
+
+out:
+    if (ret) {
+        if (has_handle)
+            __gdrdrv_unpin_buffer(info, handle);
+    }
+
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+
+static int gdrdrv_pin_buffer_v2(gdr_info_t *info, void __user *_params)
+{
+    int ret = 0;
+
+    struct GDRDRV_IOC_PIN_BUFFER_V2_PARAMS params = {0};
+
+    int has_handle = 0;
+    gdr_hnd_t handle;
+
+    if (copy_from_user(&params, _params, sizeof(params))) {
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    if (!params.addr) {
+        gdr_err("NULL device pointer\n");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    if (params.flags & ~(GDRDRV_PIN_BUFFER_FLAG_DEFAULT|GDRDRV_PIN_BUFFER_FLAG_FORCE_PCIE)) {
+        gdr_err("invalid flags\n");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    ret = __gdrdrv_pin_buffer(info, params.addr, params.size, 0, 0, params.flags, &handle);
     if (ret)
         goto out;
 
@@ -1071,6 +1144,13 @@ static int gdrdrv_get_attr(gdr_info_t *info, void __user *_params)
     case GDRDRV_ATTR_USE_PERSISTENT_MAPPING:
         params.val = gdr_use_persistent_mapping();
         break;
+    case GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE:
+#ifdef NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING
+        params.val = 1;
+#else
+        params.val = 0;
+#endif
+        break;
     default:
         ret = -EINVAL;
     }
@@ -1132,6 +1212,10 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
         ret = gdrdrv_pin_buffer(info, argp);
         break;
 
+    case GDRDRV_IOC_PIN_BUFFER_V2:
+        ret = gdrdrv_pin_buffer_v2(info, argp);
+        break;
+
     case GDRDRV_IOC_UNPIN_BUFFER:
         ret = gdrdrv_unpin_buffer(info, argp);
         break;
@@ -1174,7 +1258,7 @@ static long gdrdrv_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 
 /*----------------------------------------------------------------------------*/
 
-void gdrdrv_vma_close(struct vm_area_struct *vma)
+static void gdrdrv_vma_close(struct vm_area_struct *vma)
 {
     gdr_mr_t *mr = (gdr_mr_t *)vma->vm_private_data;
     gdr_dbg("closing vma=0x%px vm_file=0x%px vm_private_data=0x%px mr=0x%px mr->vma=0x%px\n", vma, vma->vm_file, vma->vm_private_data, mr, mr->vma);
@@ -1422,6 +1506,8 @@ out:
         mr->mapping = filp->f_mapping;
 
         BUG_ON(cpu_mapping_type == GDR_MR_NONE);
+        // An mr with force_pci=1 should have not been mapped as cached on the CPU
+        BUG_ON(mr->force_pci && (cpu_mapping_type == GDR_MR_CACHING));
         mr->cpu_mapping_type = cpu_mapping_type;
 
         gdr_dbg("mr vma=0x%px mapping=0x%px\n", mr->vma, mr->mapping);

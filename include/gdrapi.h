@@ -80,6 +80,23 @@ typedef struct gdr_mh_s {
 // Note that at this point the mapping is still not accessible to user-space.
 int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token, uint32_t va_space, gdr_mh_t *handle);
 
+typedef enum gdr_pin_flags {
+    GDR_PIN_FLAG_DEFAULT = 0,
+    GDR_PIN_FLAG_FORCE_PCIE = 1
+} gdr_ping_flags_t;
+
+// Create a peer-to-peer mapping of the device memory buffer, returning an opaque handle.
+// P2P tokens are deprecated, so dropping them here.
+// supported flags:
+// - GDR_PIN_FLAG_DEFAULT, default mapping mechanism
+// - GDR_PIN_FLAG_FORCE_PCIE, forces creation of a GPU BAR1 mapping
+//   supported on specific coherent platforms only
+//   persistent mappings must be enabled
+//   requires GPU driver r570+ at both build time and run time
+//   requires a sufficiently new gdrdrv version
+//   returns EINVAL otherwise
+int gdr_pin_buffer_v2(gdr_t g, unsigned long addr, size_t size, uint32_t flags, gdr_mh_t *handle);
+
 // Destroys the peer-to-peer mapping and frees the handle.
 //
 // If there exists a corresponding user-space mapping, gdr_unmap should be
@@ -151,6 +168,10 @@ typedef enum gdr_attr {
     GDR_ATTR_USE_PERSISTENT_MAPPING = 1,    // Query whether gdrdrv uses persistent mapping
                                             // or traditional (non-persistent) mapping.
 
+    GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE = 2, // Return non-zero if both gdrdrv and the GPU driver
+                                              // support the GDR_PIN_FLAG_FORCE_PCIE feature.
+                                              // Note that passing the flag may still lead to a run-time error,
+                                              // for example when running on unsupported platforms.
     // For internal use only
     GDR_ATTR_MAX
 } gdr_attr_t;

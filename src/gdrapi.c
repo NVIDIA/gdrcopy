@@ -247,6 +247,61 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
     return ret;
 }
 
+static int gdr_pin_buffer_v2_internal(gdr_t g, unsigned long addr, size_t size, uint32_t flags, gdr_mh_t *handle)
+{
+    int ret = 0;
+    int retcode;
+
+    if (!handle) {
+        return EINVAL;
+    }
+
+    gdr_memh_t *mh = calloc(1, sizeof(gdr_memh_t));
+    if (!mh) {
+        return ENOMEM;
+    }
+
+    struct GDRDRV_IOC_PIN_BUFFER_V2_PARAMS params;
+    params.addr = addr;
+    params.size = size;
+    params.flags = 0;
+    if (flags & GDR_PIN_FLAG_FORCE_PCIE)
+        params.flags |= GDRDRV_PIN_BUFFER_FLAG_FORCE_PCIE;
+    params.pad = 0;
+    params.handle = 0;
+
+    retcode = ioctl(g->fd, GDRDRV_IOC_PIN_BUFFER_V2, &params);
+    if (0 != retcode) {
+        ret = errno;
+        gdr_err("ioctl error (errno=%d)\n", ret);
+        free(mh);
+        goto err;
+    }
+    mh->handle = params.handle;
+    LIST_INSERT_HEAD(&g->memhs, mh, entries);
+    *handle = from_memh(mh);
+ err:
+    return ret;
+}
+
+int gdr_pin_buffer_v2(gdr_t g, unsigned long addr, size_t size, uint32_t flags, gdr_mh_t *handle)
+{
+    int ret = 0;
+
+    if (g->gdrdrv_version >= GDRDRV_MINIMUM_VERSION_WITH_PIN_BUFFER_V2) {
+        ret = gdr_pin_buffer_v2_internal(g, addr, size, flags, handle);
+    } else if (flags == GDR_PIN_FLAG_DEFAULT) {
+        // when an older driver is detected, default mappings can still be
+        // emulated via the old code path
+        ret = gdr_pin_buffer(g, addr, size, 0, 0, handle);
+    } else {
+        gdr_dbg("gdrdrv is too old and does not support the requested feature\n");
+        ret = EINVAL;
+    }
+
+    return ret;
+}
+
 int gdr_unpin_buffer(gdr_t g, gdr_mh_t handle)
 {
     int ret = 0;
@@ -825,27 +880,27 @@ int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
     int retcode;
     struct GDRDRV_IOC_GET_ATTR_PARAMS params;
 
-    if (attr < 1 || attr >= GDR_ATTR_MAX) {
-        ret = EINVAL;
-        goto out;
-    }
-
-    // gdrdrv does not support attribute querying.
-    // Always assume that the value is 0.
-    if (g->gdrdrv_version < GDRDRV_MINIMUM_VERSION_WITH_GET_ATTR) {
-        *v = 0;
-        goto out;
-    }
-
+    // check attribute first
     switch (attr) {
         case GDR_ATTR_USE_PERSISTENT_MAPPING:
             params.attr = GDRDRV_ATTR_USE_PERSISTENT_MAPPING;
             break;
+        case GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE:
+            params.attr = GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE;
+            break;
         default:
-            gdr_err("Error: Unrecognize attr\n");
+            gdr_dbg("undefined attribute\n");
             ret = EINVAL;
             goto out;
     }
+
+    // If gdrdrv does not support attribute querying, assume that the value is 0.
+    if (g->gdrdrv_version < GDRDRV_MINIMUM_VERSION_WITH_GET_ATTR) {
+        gdr_dbg("gdrdrv is too old and does not support querying attributes\n");
+        *v = 0;
+        goto out;
+    }
+
     retcode = ioctl(g->fd, GDRDRV_IOC_GET_ATTR, &params);
     if (-EINVAL == retcode) {
         // gdrdrv might be too old to query this attr.

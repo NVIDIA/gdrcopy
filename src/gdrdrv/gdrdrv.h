@@ -39,6 +39,7 @@
 
 #define GDRDRV_MINIMUM_VERSION_WITH_GET_INFO_V2 ((2 << GDRDRV_MAJOR_VERSION_SHIFT) | 4)
 #define GDRDRV_MINIMUM_VERSION_WITH_GET_ATTR    ((2 << GDRDRV_MAJOR_VERSION_SHIFT) | 5)
+#define GDRDRV_MINIMUM_VERSION_WITH_PIN_BUFFER_V2 ((2 << GDRDRV_MAJOR_VERSION_SHIFT) | 5)
 
 #define GDRDRV_IOCTL                 0xDA
 
@@ -50,7 +51,8 @@ typedef enum {
 } gdr_mr_type_t;
 
 typedef enum {
-    GDRDRV_ATTR_USE_PERSISTENT_MAPPING = 1
+    GDRDRV_ATTR_USE_PERSISTENT_MAPPING = 1,
+    GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE = 2
 } gdrdrv_attr_t;
 
 typedef __u64 gdr_hnd_t;
@@ -138,6 +140,25 @@ struct GDRDRV_IOC_GET_ATTR_PARAMS
 };
 
 #define GDRDRV_IOC_GET_ATTR _IOWR(GDRDRV_IOCTL, 6, struct GDRDRV_IOC_GET_ATTR_PARAMS *)
+
+//-----------
+
+struct GDRDRV_IOC_PIN_BUFFER_V2_PARAMS
+{
+    // in
+    __u64 addr;
+    __u64 size;
+    __u32 flags;
+    __u32 pad;
+    // out
+    gdr_hnd_t handle;
+};
+
+#define GDRDRV_PIN_BUFFER_FLAG_DEFAULT ((__u32)0x0)
+// On supported platforms, force the creation of GPU BAR1 mappings
+#define GDRDRV_PIN_BUFFER_FLAG_FORCE_PCIE ((__u32)0x1)
+
+#define GDRDRV_IOC_PIN_BUFFER_V2 _IOWR(GDRDRV_IOCTL, 7, struct GDRDRV_IOC_PIN_BUFFER_V2_PARAMS)
 
 //-----------
 

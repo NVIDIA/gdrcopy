@@ -206,7 +206,30 @@ int recvfd(int socket)
     return fd;
 }
 
-template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
+static int pin_buffer_v2_helper(int dev_id, gdr_t g, unsigned long addr, size_t size, uint32_t flags, gdr_mh_t *handle)
+{
+    if (flags & GDR_PIN_FLAG_FORCE_PCIE) {
+        // waive the test if not supported on the platform under test or the flag is not supported
+        int attr = 0;
+        ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE, &attr), 0);
+
+        CUdevice dev;
+        ASSERTDRV(cuDeviceGet(&dev, dev_id));
+        int is_coherent;
+        ASSERTDRV(cuDeviceGetAttribute(&is_coherent, CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES, dev));
+        int major;
+        ASSERTDRV(cuDeviceGetAttribute(&is_coherent, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev));
+        
+        if (!attr || !is_coherent || major < 100) {
+            print_dbg("waiving this test because it is unsupported\n");
+            exit(EXIT_WAIVED);
+        }
+    }
+    return gdr_pin_buffer_v2(g, addr, size, flags, handle);
+}
+
+template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn,
+          bool use_v2 = false, uint32_t pin_flags = GDR_PIN_FLAG_DEFAULT>
 void basic()
 {
     expecting_exception_signal = false;
@@ -231,7 +254,10 @@ void basic()
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    if (use_v2)
+        ASSERT_EQ(pin_buffer_v2_helper(g_dev_id, g, d_ptr, size, pin_flags, &mh), 0);
+    else
+        ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
     ASSERT_EQ(gdr_close(g), 0);
@@ -246,11 +272,29 @@ GDRCOPY_TEST(basic_cumemalloc)
     basic<gpu_mem_alloc, gpu_mem_free, null_filter>();
 }
 
+GDRCOPY_TEST(basic_v2_cumemalloc)
+{
+    basic<gpu_mem_alloc, gpu_mem_free, null_filter, true>();
+}
+
+GDRCOPY_TEST(basic_v2_forcepci_cumemalloc)
+{
+    basic<gpu_mem_alloc, gpu_mem_free, null_filter, true, GDR_PIN_FLAG_FORCE_PCIE>();
+}
+
 #if CUDA_VERSION >= 11000
 // VMM with GDR support is available from CUDA 11.0
 GDRCOPY_TEST(basic_vmmalloc)
 {
     basic<gpu_vmm_alloc, gpu_vmm_free, vmm_filter>();
+}
+GDRCOPY_TEST(basic_v2_vmmalloc)
+{
+    basic<gpu_vmm_alloc, gpu_vmm_free, vmm_filter, true>();
+}
+GDRCOPY_TEST(basic_v2_forcepci_vmmalloc)
+{
+    basic<gpu_vmm_alloc, gpu_vmm_free, vmm_filter, true, GDR_PIN_FLAG_FORCE_PCIE>();
 }
 #endif
 
@@ -471,7 +515,8 @@ GDRCOPY_TEST(basic_small_buffers_mapping)
     finalize_cuda(g_dev_id);
 }
 
-template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
+template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn,
+    bool use_v2 = false, uint32_t pin_flags = GDR_PIN_FLAG_DEFAULT>
 void data_validation()
 {
     expecting_exception_signal = false;
@@ -481,6 +526,8 @@ void data_validation()
     filter_fn();
 
     const size_t _size = 256*1024+16;
+    //const size_t _size = 180*1024+16;
+    //const size_t _size = 256*1024+16+128*1024;
     const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
     print_dbg("buffer size: %zu\n", size);
@@ -506,35 +553,48 @@ void data_validation()
 
     // tokens are optional in CUDA 6.0
     // wave out the test if GPUDirectRDMA is not enabled
-    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+    if (use_v2)
+        ASSERT_EQ(pin_buffer_v2_helper(g_dev_id, g, d_ptr, size, pin_flags, &mh), 0);
+    else
+        ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+
     ASSERT_NEQ(mh, null_mh);
 
     gdr_info_t info;
     ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
     ASSERT(!info.mapped);
-
     void *bar_ptr  = NULL;
     ASSERT_EQ(gdr_map(g, mh, &bar_ptr, size), 0);
 
     ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
     ASSERT(info.mapped);
+    print_dbg("wc_mapping:%d mapping:%d mapped:%d\n", info.wc_mapping, (unsigned)info.mapping_type, info.mapped);
     int off = d_ptr - info.va;
     print_dbg("off: %d\n", off);
 
     uint32_t *buf_ptr = (uint32_t *)((char *)bar_ptr + off);
 
     print_dbg("check 1: MMIO CPU initialization + read back via cuMemcpy D->H\n");
+    int errs = 0;
+    int iters = 1000;
+    for (int r = 0; r < iters; ++r) {
     init_hbuf_walking_bit(buf_ptr, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
     memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
+    }
+    if (errs) {
+        print_dbg("%d failed checks over %d iterations\n", errs, iters);
+        exit(EXIT_FAILURE);
+    }
 
+    errs = 0;
     print_dbg("check 2: gdr_copy_to_bar() + read back via cuMemcpy D->H\n");
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
-    ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
     memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
@@ -542,7 +602,7 @@ void data_validation()
     print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     gdr_copy_from_mapping(mh, copy_buf, buf_ptr, size);
-    ASSERT_EQ(compare_buf(init_buf, copy_buf, size), 0);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
     memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
     ASSERTDRV(cuCtxSynchronize());
@@ -555,7 +615,7 @@ void data_validation()
         print_dbg("check 4.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset on mapping\n", i, extra_dwords);
         gdr_copy_to_mapping(mh, buf_ptr + extra_dwords, init_buf, size - extra_off);
         gdr_copy_from_mapping(mh, copy_buf, buf_ptr + extra_dwords, size - extra_off);
-        ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
+        errs += compare_buf(init_buf, copy_buf, size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -564,7 +624,7 @@ void data_validation()
         print_dbg("check 5.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset on mapping\n", i, extra_off);
         gdr_copy_to_mapping(mh, (char*)buf_ptr + extra_off, init_buf, size - extra_off);
         gdr_copy_from_mapping(mh, copy_buf, (char*)buf_ptr + extra_off, size - extra_off);
-        ASSERT_EQ(compare_buf(init_buf, copy_buf, size - extra_off), 0);
+        errs += compare_buf(init_buf, copy_buf, size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -574,7 +634,7 @@ void data_validation()
         print_dbg("check 6.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset on host buffer\n", i, extra_dwords);
         gdr_copy_to_mapping(mh, buf_ptr, init_buf + extra_dwords, size - extra_off);
         gdr_copy_from_mapping(mh, copy_buf + extra_dwords, buf_ptr, size - extra_off);
-        ASSERT_EQ(compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off), 0);
+        errs += compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -583,7 +643,7 @@ void data_validation()
         print_dbg("check 7.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset on host buffer\n", i, extra_off);
         gdr_copy_to_mapping(mh, buf_ptr, (char *)init_buf + extra_off, size - extra_off);
         gdr_copy_from_mapping(mh, (char *)copy_buf + extra_off, buf_ptr, size - extra_off);
-        ASSERT_EQ(compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off), 0);
+        errs += compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -593,7 +653,7 @@ void data_validation()
         print_dbg("check 8.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d dwords offset on both mapping and host buffer\n", i, extra_dwords);
         gdr_copy_to_mapping(mh, buf_ptr + extra_dwords, init_buf + extra_dwords, size - extra_off);
         gdr_copy_from_mapping(mh, copy_buf + extra_dwords, buf_ptr + extra_dwords, size - extra_off);
-        ASSERT_EQ(compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off), 0);
+        errs += compare_buf(init_buf + extra_dwords, copy_buf + extra_dwords, size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
@@ -602,10 +662,15 @@ void data_validation()
         print_dbg("check 9.%d: gdr_copy_to_bar() + read back via gdr_copy_from_bar() + %d bytes offset on both mapping and host buffer\n", i, extra_off);
         gdr_copy_to_mapping(mh, (char *)buf_ptr + extra_off, (char *)init_buf + extra_off, size - extra_off);
         gdr_copy_from_mapping(mh, (char *)copy_buf + extra_off, (char *)buf_ptr + extra_off, size - extra_off);
-        ASSERT_EQ(compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off), 0);
+        errs += compare_buf((uint32_t *)((uintptr_t)init_buf + extra_off), (uint32_t *)((uintptr_t)copy_buf + extra_off), size - extra_off) ? 1 : 0;
         memset(copy_buf, 0xA5, size);
         ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
         ASSERTDRV(cuCtxSynchronize());
+    }
+
+    if (errs) {
+        print_dbg("%d failed checks\n", errs);
+        exit(EXIT_FAILURE);
     }
 
     print_dbg("unmapping\n");
@@ -634,6 +699,16 @@ void data_validation()
 GDRCOPY_TEST(data_validation_cumemalloc)
 {
     data_validation<gpu_mem_alloc, gpu_mem_free, null_filter>();
+}
+
+GDRCOPY_TEST(data_validation_v2_cumemalloc)
+{
+    data_validation<gpu_mem_alloc, gpu_mem_free, null_filter, true>();
+}
+
+GDRCOPY_TEST(data_validation_v2_forcepci_cumemalloc)
+{
+    data_validation<gpu_mem_alloc, gpu_mem_free, null_filter, true, GDR_PIN_FLAG_FORCE_PCIE>();
 }
 
 #if CUDA_VERSION >= 11000
@@ -2019,6 +2094,19 @@ GDRCOPY_TEST(basic_child_thread_pins_buffer_vmmalloc)
     basic_child_thread_pins_buffer<gpu_vmm_alloc, gpu_vmm_free, vmm_filter>();
 }
 #endif
+
+GDRCOPY_TEST(attributes_sanity)
+{
+    gdr_t g = gdr_open_safe();
+
+    int use_persistent_mapping;
+    ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_USE_PERSISTENT_MAPPING, &use_persistent_mapping), 0);
+
+    int pin_flag_force_pcie = 0;
+    ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE, &pin_flag_force_pcie), 0);
+
+    ASSERT_EQ(gdr_close(g), 0);
+}
 
 void print_usage(const char *path)
 {

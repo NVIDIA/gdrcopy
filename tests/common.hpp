@@ -72,6 +72,15 @@
 
 #define EXIT_WAIVED 2
 
+#define CHECK(x)                                                       \
+    do                                                                  \
+        {                                                               \
+            if (!(x))                                                   \
+                {                                                       \
+                    fprintf(stderr, "Check \"%s\" failed at %s:%d\n", #x, __FILE__, __LINE__); \
+                }                                                       \
+        } while (0)
+
 #define ASSERT(x)                                                       \
     do                                                                  \
         {                                                               \
@@ -95,7 +104,7 @@
         } while (0)
 
 #define ASSERT_EQ(P, V) ASSERT((P) == (V))
-#define CHECK_EQ(P, V) ASSERT((P) == (V))
+#define CHECK_EQ(P, V) CHECK((P) == (V))
 #define ASSERT_NEQ(P, V) ASSERT(!((P) == (V)))
 #define BREAK_IF_NEQ(P, V) if((P) != (V)) break
 #define BEGIN_CHECK do
