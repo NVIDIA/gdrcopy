@@ -749,7 +749,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
             get_pages_flags |= NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING;
             mr->force_pci = 1;
 #else
-            gdr_err("GPU driver does not support FORCE_BAR1_MAPPING flag\n");
+            gdr_err("The GPU driver used to build this module did not have the NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING flag\n");
             ret = -EINVAL;
             goto out;
 #endif
