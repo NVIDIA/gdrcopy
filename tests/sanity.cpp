@@ -217,8 +217,10 @@ static int pin_buffer_v2_helper(int dev_id, gdr_t g, unsigned long addr, size_t 
         ASSERTDRV(cuDeviceGet(&dev, dev_id));
         int is_coherent;
         ASSERTDRV(cuDeviceGetAttribute(&is_coherent, CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES, dev));
-
-        if (!attr || !is_coherent) {
+        int major;
+        ASSERTDRV(cuDeviceGetAttribute(&is_coherent, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev));
+        
+        if (!attr || !is_coherent || major < 100) {
             print_dbg("waiving this test because it is unsupported\n");
             exit(EXIT_WAIVED);
         }
