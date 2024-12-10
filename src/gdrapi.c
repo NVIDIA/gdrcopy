@@ -877,19 +877,8 @@ int gdr_driver_get_version(gdr_t g, int *major, int *minor)
 int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
 {
     int ret = 0;
+    int retcode;
     struct GDRDRV_IOC_GET_ATTR_PARAMS params;
-
-    if (attr < 1 || attr >= GDR_ATTR_MAX) {
-        ret = -EINVAL;
-        goto out;
-    }
-
-    // If gdrdrv does not support attribute querying, assume that the value is 0.
-    if (g->gdrdrv_version < GDRDRV_MINIMUM_VERSION_WITH_GET_ATTR) {
-        gdr_dbg("gdrdrv is too old and does not support querying attributes\n");
-        *v = 0;
-        goto out;
-    }
 
     // check attribute first
     switch (attr) {
@@ -899,19 +888,32 @@ int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
         case GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE:
             params.attr = GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE;
             break;
-        case GDR_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT:
-            params.attr = GDRDRV_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT;
-            break;
         default:
             gdr_dbg("undefined attribute\n");
             ret = EINVAL;
             goto out;
     }
 
-    ret = ioctl(g->fd, GDRDRV_IOC_GET_ATTR, &params);
+    // If gdrdrv does not support attribute querying, assume that the value is 0.
+    if (g->gdrdrv_version < GDRDRV_MINIMUM_VERSION_WITH_GET_ATTR) {
+        gdr_dbg("gdrdrv is too old and does not support querying attributes\n");
+        *v = 0;
+        goto out;
+    }
 
-    if (!ret)
-        *v = params.val;
+    retcode = ioctl(g->fd, GDRDRV_IOC_GET_ATTR, &params);
+    if (-EINVAL == retcode) {
+        // gdrdrv might be too old to query this attr.
+        // Assume 0.
+        *v = 0;
+        goto out;
+    } else if (0 != retcode) {
+        ret = errno;
+        gdr_err("ioctl error (errno=%d)\n", ret);
+        goto out;
+    }
+
+    *v = params.val;
 
 out:
     return ret;
