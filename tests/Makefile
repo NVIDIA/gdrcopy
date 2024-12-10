@@ -35,7 +35,7 @@ gdrcopy_copybw: copybw.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
 gdrcopy_sanity: sanity.o common.o testsuites/testsuite.o
-	$(LINK.cc)  -o $@ $^ $(LIBS)
+	$(LINK.cc)  -o $@ $^ $(LIBS) -lcap
 
 gdrcopy_copylat: copylat.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt

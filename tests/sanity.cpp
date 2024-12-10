@@ -34,6 +34,7 @@
 #include <cuda.h>
 #include <errno.h>
 #include <sys/queue.h>
+#include <sys/capability.h>
 
 #include <iostream>
 #include <string>
@@ -115,6 +116,30 @@ void vmm_filter()
     exit(EXIT_WAIVED);
 }
 #endif
+
+void cap_sys_admin_filter()
+{
+    int status = 0;
+    cap_t caps = cap_get_proc();
+    if (!caps) {
+        print_dbg("Cannot get the process capabilities. Waiving the test.\n");
+        exit(EXIT_WAIVED);
+    }
+
+    cap_flag_value_t cap_flag_val;
+    status = cap_get_flag(caps, CAP_SYS_ADMIN, CAP_EFFECTIVE, &cap_flag_val);
+    if (status) {
+        print_dbg("Cannot get the process cap flag. Waiving the test.\n");
+        exit(EXIT_WAIVED);
+    }
+
+    if (cap_flag_val != CAP_SET) {
+        print_dbg("This process is run without CAP_SYS_ADMIN (e.g., without sudo). Waiving the test.\n");
+        exit(EXIT_WAIVED);
+    }
+
+    cap_free(caps);
+}
 
 /**
  * Sends given file descriptior via given socket
@@ -2101,6 +2126,23 @@ GDRCOPY_TEST(basic_child_thread_pins_buffer_vmmalloc)
 }
 #endif
 
+/**
+ * This unit test tests memory leakage in gdrdrv driver. A known method for triggering this bug is as follows:
+ *
+ * 1. Initialize GDRCopy and create a connection to gdrdrv.
+ * 2. Fork without execv.
+ * 3. Parent: Allocate a CUDA buffer, pin with GDRCopy, and ungracefully close the gdrdrv fd.
+ * 4. Child: Wait for parent to finish Step 3. Then, it calls gdr_close.
+ *
+ * All gdrdrv < 2.5 is known to have this bug and has no detection mechanism in place.
+ *
+ * gdrdrv >= 2.5 has a detection mechanism, which is activated when rmmod
+ * gdrdrv. We need a user with CAP_SYS_ADMIN such as root to perform this rmmod
+ * gdrdrv operation. Otherwise, the unit test is waived. If this bug is
+ * triggered, gdrdrv may cause kernel panic. Thus, it is marked as an extended
+ * unit test and not run by default. Run it only if you know how to recover.
+ *
+ */
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
 void leakage_pin_pages_fork()
 {
@@ -2125,31 +2167,18 @@ void leakage_pin_pages_fork()
     int send_msg = 1;
     int recv_msg = 0;
 
-    init_cuda(g_dev_id, true);
-    filter_fn();
+    int gdrdrv_major;
+    int gdrdrv_minor;
 
     gdr_t g = gdr_open_safe();
+    status = gdr_driver_get_version(g, &gdrdrv_major, &gdrdrv_minor);
+    ASSERT_EQ(status, 0);
 
-    int start_nv_get_pages_refcount = 0;
-    int end_nv_get_pages_refcount = 0;
+    print_dbg("Checking for gdrdrv version. All versions before 2.5 are known to have this bug.\n");
+    ASSERT(gdrdrv_major > 2 || (gdrdrv_major == 2 && gdrdrv_minor >= 5));
 
-    status = gdr_get_attribute(g, GDR_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT, &start_nv_get_pages_refcount);
-    if (status == -EINVAL) {
-        print_dbg("gdrdrv might be too old. This unit test is not supported. Waiving this test.\n");
-        exit(EXIT_WAIVED);
-    }
-    else if (status == -EPERM) {
-        print_dbg("This unit test must be run with a user with CAP_SYS_ADMIN such as root. Waiving this test.\n");
-        exit(EXIT_WAIVED);
-    }
-    else if (start_nv_get_pages_refcount > 0) {
-        print_dbg("Some processes might be using GDRCopy. Waiving this test.\n");
-        exit(EXIT_WAIVED);
-    }
-    else if (start_nv_get_pages_refcount < 0) {
-        print_dbg("Global nv_get_pages_refcount should not be below 0. This is a bug!\n");
-        ASSERT_EQ(start_nv_get_pages_refcount, 0);
-    }
+    init_cuda(g_dev_id, true);
+    filter_fn();
 
     fflush(stdout);
     fflush(stderr);
@@ -2213,20 +2242,22 @@ void leakage_pin_pages_fork()
 
         ASSERTDRV(gfree_fn(&mhandle));
 
-        // The first connection has been destroyed ungracefully.
-        // Create a new one for querying information.
-        gdr_t g2 = gdr_open_safe();
-
-        ASSERT_EQ(gdr_get_attribute(g2, GDR_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT, &end_nv_get_pages_refcount), 0);
-        ASSERT_EQ(end_nv_get_pages_refcount, 0);
-
         finalize_cuda(g_dev_id);
+
+        print_dbg("Trying to rmmod gdrdrv. If the bug is there, it may cause kernel panic.\n");
+        status = std::system("/sbin/rmmod gdrdrv");
+        ASSERT_EQ(status, 0);
+
+        print_dbg("Calling modprobe gdrdrv. It may fail if gdrdrv is not properly installed.\n");
+        status = std::system("/sbin/modprobe gdrdrv");
+        if (status)
+            print_dbg("The unit test ran sucessfully. However, there is an error in calling /sbin/modprobe gdrdrv. We cannot automatically reload the driver.\n");
     }
 }
 
-GDRCOPY_TEST(leakage_pin_pages_fork_cumemalloc)
+GDRCOPY_EXTENDED_TEST(leakage_pin_pages_fork_cumemalloc)
 {
-    leakage_pin_pages_fork<gpu_mem_alloc, gpu_mem_free, null_filter>();
+    leakage_pin_pages_fork<gpu_mem_alloc, gpu_mem_free, cap_sys_admin_filter>();
 }
 
 GDRCOPY_TEST(attributes_sanity)
@@ -2244,7 +2275,7 @@ GDRCOPY_TEST(attributes_sanity)
 
 void print_usage(const char *path)
 {
-    cout << "Usage: " << path << " [-h][-v][-s][-l][-t <test>]" << endl;
+    cout << "Usage: " << path << " [-h][-v][-s][-l][-t <test>][-d <gpu>][-e]" << endl;
     cout << endl;
     cout << "Options:" << endl;
     cout << "   -h              Print this help text." << endl;
@@ -2253,6 +2284,7 @@ void print_usage(const char *path)
     cout << "   -l              List all available tests." << endl;
     cout << "   -t <test>       Run the specified test only." << endl;
     cout << "   -d <gpu>        GPU ID (default: " << g_dev_id << ")" << endl;
+    cout << "   -e              Enable extended unit tests." << endl;
 }
 
 void print_all_tests()
@@ -2262,16 +2294,25 @@ void print_all_tests()
     cout << "List of all available tests:" << endl;
     for (vector<string>::iterator it = tests.begin(); it != tests.end(); ++it)
         cout << "    " << *it << endl;
+
+    cout << endl;
+
+    vector<string> extended_tests;
+    gdrcopy::testsuite::get_all_extended_test_names(extended_tests);
+    cout << "List of all available extended tests:" << endl;
+    for (vector<string>::iterator it = extended_tests.begin(); it != extended_tests.end(); ++it)
+        cout << "    " << *it << endl;
 }
 
 int main(int argc, char *argv[])
 {
     int c;
     bool print_summary = true;
+    bool run_extended_test = false;
     int status;
     vector<string> tests;
 
-    while ((c = getopt(argc, argv, "hvslt:d:")) != -1) {
+    while ((c = getopt(argc, argv, "hvslt:d:e")) != -1) {
         switch (c) {
             case 'h':
                 print_usage(argv[0]);
@@ -2291,6 +2332,9 @@ int main(int argc, char *argv[])
             case 'd':
                 g_dev_id = strtol(optarg, NULL, 0);
                 break;
+            case 'e':
+                run_extended_test = true;
+                break;
             default:
                 cerr << "Invalid option" << endl;
                 return EXIT_FAILURE;
@@ -2300,7 +2344,7 @@ int main(int argc, char *argv[])
     if (tests.size() > 0)
         status = gdrcopy::testsuite::run_tests(print_summary, tests);
     else
-        status = gdrcopy::testsuite::run_all_tests(print_summary);
+        status = gdrcopy::testsuite::run_all_tests(print_summary, run_extended_test);
     if (status) {
         cerr << "Error: Encountered an error or a test failure with status=" << status << endl;
         return EXIT_FAILURE;
