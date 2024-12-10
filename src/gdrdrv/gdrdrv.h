@@ -52,8 +52,7 @@ typedef enum {
 
 typedef enum {
     GDRDRV_ATTR_USE_PERSISTENT_MAPPING = 1,
-    GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE = 2,
-    GDRDRV_ATTR_GLOBAL_NV_GET_PAGES_REFCOUNT = 3,
+    GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE = 2
 } gdrdrv_attr_t;
 
 typedef __u64 gdr_hnd_t;
