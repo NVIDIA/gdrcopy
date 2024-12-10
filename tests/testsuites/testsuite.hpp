@@ -34,6 +34,17 @@
     GDRCopy_Test_##name gdrcopy_test_##name;                                    \
     void GDRCopy_Test_##name::test()
 
+#define GDRCOPY_EXTENDED_TEST(name)                                             \
+    class GDRCopy_Test_##name : public gdrcopy::testsuite::Test                 \
+    {                                                                           \
+        public:                                                                 \
+            GDRCopy_Test_##name() : gdrcopy::testsuite::Test(#name, true) {}    \
+            virtual ~GDRCopy_Test_##name() {}                                   \
+            virtual void test();                                                \
+    };                                                                          \
+    GDRCopy_Test_##name gdrcopy_test_##name;                                    \
+    void GDRCopy_Test_##name::test()
+
 namespace gdrcopy {
     namespace testsuite {
         typedef enum {
@@ -45,7 +56,7 @@ namespace gdrcopy {
         class Test 
         {
             public: 
-                Test(std::string name);
+                Test(std::string name, bool is_extended_test = false);
                 virtual ~Test() {}
                 virtual test_status_t run();
 
@@ -56,6 +67,7 @@ namespace gdrcopy {
             
             protected:
                 std::string t_name;
+                bool is_extended_test;
 
                 virtual void register_test();
                 virtual void test() {};
@@ -73,6 +85,11 @@ namespace gdrcopy {
         void get_all_test_names(std::vector<std::string>& names);
 
         /**
+         * Fill `names` with all available extended test names.
+         */
+        void get_all_extended_test_names(std::vector<std::string>& names);
+
+        /**
          * Run all tests specified by name in `tests`.
          */
         int run_tests(bool print_summary, std::vector<std::string> tests);
@@ -80,6 +97,6 @@ namespace gdrcopy {
         /**
          * Run all available tests.
          */
-        int run_all_tests(bool print_summary);
+        int run_all_tests(bool print_summary, bool enable_extended_tests);
     }
 }
