@@ -1614,7 +1614,10 @@ static void __exit gdrdrv_cleanup(void)
     unregister_chrdev(gdrdrv_major, DEVNAME);
 
     last_nv_get_pages_refcount = atomic64_read(&gdrdrv_nv_get_pages_refcount);
-    BUG_ON(0 != last_nv_get_pages_refcount);
+    if (dbg_enabled)
+        WARN_ON(0 != last_nv_get_pages_refcount);
+    else
+        BUG_ON(0 != last_nv_get_pages_refcount);
 }
 
 //-----------------------------------------------------------------------------
