@@ -6,6 +6,7 @@
 - Introduce gdr\_get\_attribute API and GDR\_ATTR\_USE\_PERSISTENT\_MAPPING.
 - Add persistent mapping support in gdrcopy\_sanity.
 - Support setting GPU ID in gdrcopy\_sanity.
+- Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
 
 ## [2.4.3] - 2024-12-02
 - Fix NVIDIA\_IS\_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
