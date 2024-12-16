@@ -499,6 +499,7 @@ static void gdr_free_mr_unlocked(gdr_mr_t *mr)
             gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", status);
         }
         #endif
+
     } else {
         gdr_dbg("invoking unpin_buffer while callback has already been fired\n");
 
@@ -526,11 +527,6 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
     if (!info) {
         gdr_err("filp contains no info\n");
         return -EIO;
-    }
-    // Check that the caller is the same process that did gdrdrv_open
-    if (!gdrdrv_check_same_process(info, current)) {
-        gdr_dbg("filp is not opened by the current process\n");
-        return -EACCES;
     }
 
     mutex_lock(&info->lock);
@@ -1142,11 +1138,27 @@ static long gdrdrv_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 
 void gdrdrv_vma_close(struct vm_area_struct *vma)
 {
-    gdr_mr_t *mr = (gdr_mr_t *)vma->vm_private_data;
-    gdr_dbg("closing vma=0x%px vm_file=0x%px vm_private_data=0x%px mr=0x%px mr->vma=0x%px\n", vma, vma->vm_file, vma->vm_private_data, mr, mr->vma);
+    gdr_hnd_t handle;
+    gdr_mr_t *mr = NULL;
+    gdr_info_t* info = NULL;
+
+    if (!vma->vm_file)
+        return;
+
+    info = vma->vm_file->private_data;
+    if (!info)
+        return;
+
+    handle = gdrdrv_handle_from_off(vma->vm_pgoff);
+    mr = gdr_get_mr_from_handle_write(info, handle);
+    if (!mr)
+        return;
+
+    gdr_dbg("closing vma=0x%px vm_file=0x%px mr=0x%px mr->vma=0x%px\n", vma, vma->vm_file, mr, mr->vma);
     // TODO: handle multiple vma's
     mr->vma = NULL;
     mr->cpu_mapping_type = GDR_MR_NONE;
+    gdr_put_mr_write(mr);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1306,8 +1318,6 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     // Set to None first
     mr->cpu_mapping_type = GDR_MR_NONE;
     vma->vm_ops = &gdrdrv_vm_ops;
-    gdr_dbg("overwriting vma->vm_private_data=%px with mr=%px\n", vma->vm_private_data, mr);
-    vma->vm_private_data = mr;
 
     // check for physically contiguous IO ranges
     p = 0;

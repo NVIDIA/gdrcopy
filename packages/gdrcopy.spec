@@ -363,6 +363,9 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
+* Mon Dec 16 2024 Pak Markthub <pmarkthub@nvidia.com> 2.4.4-%{_release}
+- Fix the use-after-free bug of mr objects in gdrdv_vma_close.
+- Fix the resource leakage bug in gdrdrv_release.
 * Mon Dec 02 2024 Pak Markthub <pmarkthub@nvidia.com> 2.4.3-%{_release}
 - Fix NVIDIA_IS_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
 * Thu Oct 31 2024 Pak Markthub <pmarkthub@nvidia.com> 2.4.2-%{_release}
