@@ -1,12 +1,13 @@
 # Changelog
 
 ## [master]
-- Introduce gdr_pin_buffer_v2 API, GDR\_PIN\_FLAG\_FORCE\_PCIE pin flag and the  GDR\_ATTR\_SUPPORT\_PIN\_FLAG\_FORCE\_PCIE attribute. Extend gdrcopy\_sanity coverage to those new APIs.
+- Introduce gdr\_pin\_buffer\_v2 API, GDR\_PIN\_FLAG\_FORCE\_PCIE pin flag and the  GDR\_ATTR\_SUPPORT\_PIN\_FLAG\_FORCE\_PCIE attribute. Extend gdrcopy\_sanity coverage to those new APIs.
 - Waive some unit tests in gdrcopy\_sanity if the GPU compute mode is not set as default.
 - Introduce gdr\_get\_attribute API and GDR\_ATTR\_USE\_PERSISTENT\_MAPPING.
 - Add persistent mapping support in gdrcopy\_sanity.
 - Support setting GPU ID in gdrcopy\_sanity.
 - Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
+- Introduce /proc/driver/gdrdrv/params.
 
 ## [2.4.3] - 2024-12-02
 - Fix NVIDIA\_IS\_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
