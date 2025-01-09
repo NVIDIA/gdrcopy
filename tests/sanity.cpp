@@ -2109,13 +2109,12 @@ GDRCOPY_TEST(basic_child_thread_pins_buffer_vmmalloc)
  * 3. Parent: Allocate a CUDA buffer, pin with GDRCopy, and ungracefully close the gdrdrv fd.
  * 4. Child: Wait for parent to finish Step 3. Then, it calls gdr_close.
  *
- * All gdrdrv < 2.5 is known to have this bug and has no detection mechanism in place.
+ * gdrdrv before 2.4.4 is known to have this bug.
  *
  * gdrdrv >= 2.5 has a detection mechanism, which is activated when rmmod
- * gdrdrv. We need a user with CAP_SYS_ADMIN such as root to perform this rmmod
- * gdrdrv operation. Otherwise, the unit test is waived. If this bug is
- * triggered, gdrdrv may cause kernel panic. Thus, it is marked as an extended
- * unit test and not run by default. Run it only if you know how to recover.
+ * gdrdrv. If this bug is triggered, gdrdrv may cause kernel panic. Thus, it is
+ * marked as an extended unit test and not run by default. Run it only if you
+ * know how to recover.
  *
  */
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
@@ -2142,21 +2141,38 @@ void leakage_pin_pages_fork()
     int send_msg = 1;
     int recv_msg = 0;
 
-    int gdrdrv_major;
-    int gdrdrv_minor;
+    const char *file_path = "/proc/driver/gdrdrv/nv_get_pages_refcount";
+    FILE *file = NULL;
+    file = fopen(file_path, "rb");
+    if (file == NULL) {
+        print_dbg("%s cannot be opened for read. Possible root causes:\n"
+            "1. gdrdrv is too old. Only gdrdrv v2.5 and later generate this file.\n"
+            "2. gdrdrv is loaded with dbg_enabled=0. This file will not be generated.\n"
+            "3. To read this file, users with CAP_SYS_ADMIN (e.g., root) is required.\n"
+            "We lack crucial information to perform this test. Waiving it.\n",
+            file_path
+        );
+        exit(EXIT_WAIVED);
+    }
 
-    gdr_t g = gdr_open_safe();
-    status = gdr_driver_get_version(g, &gdrdrv_major, &gdrdrv_minor);
-    ASSERT_EQ(status, 0);
-
-    print_dbg("Checking for gdrdrv version. All versions before 2.5 are known to have this bug.\n");
-    ASSERT(gdrdrv_major > 2 || (gdrdrv_major == 2 && gdrdrv_minor >= 5));
+    char file_data[20];
+    size_t num_read_bytes = fread(file_data, sizeof(file_data[0]), sizeof(file_data), file);
+    ASSERT(num_read_bytes > 0);
+    file_data[sizeof(file_data) - 1] = '\0';
+    int ngp_refcount = atoi(file_data);
+    if (ngp_refcount != 0) {
+        print_dbg("nv_get_pages_refcount = %d, which is not 0. Some other processes might be using GDRCopy. We cannot accurately perform this test. Waiving it.\n");
+        exit(EXIT_WAIVED);
+    }
+    fclose(file);
 
     init_cuda(g_dev_id, true);
     filter_fn();
 
     fflush(stdout);
     fflush(stderr);
+
+    gdr_t g = gdr_open_safe();
 
     pid_t pid = fork();
     ASSERT(pid >= 0);
