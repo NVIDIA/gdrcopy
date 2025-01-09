@@ -1568,11 +1568,34 @@ static int gdrdrv_proc_params_release(struct inode *inode, struct file *filp)
     return single_release(inode, filp);
 }
 
-static const struct proc_ops gdrdrv_proc_params_pro_ops = {
+static const struct proc_ops gdrdrv_proc_params_proc_ops = {
     .proc_open = gdrdrv_proc_params_open,
     .proc_read = seq_read,
     .proc_lseek = seq_lseek,
     .proc_release = gdrdrv_proc_params_release
+};
+
+static int gdrdrv_proc_ngp_refcount_read(struct seq_file *s, void *v)
+{
+    seq_printf(s, "%lld\n", atomic64_read(&gdrdrv_nv_get_pages_refcount));
+    return 0;
+}
+
+static int gdrdrv_proc_ngp_refcount_open(struct inode *inode, struct file *filp)
+{
+    return single_open(filp, gdrdrv_proc_ngp_refcount_read, NULL);
+}
+
+static int gdrdrv_proc_ngp_refcount_release(struct inode *inode, struct file *filp)
+{
+    return single_release(inode, filp);
+}
+
+static const struct proc_ops gdrdrv_proc_ngp_refcount_proc_ops = {
+    .proc_open = gdrdrv_proc_ngp_refcount_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = gdrdrv_proc_ngp_refcount_release
 };
 
 static int gdrdrv_procfs_init(void)
@@ -1593,10 +1616,19 @@ static int gdrdrv_procfs_init(void)
         goto out;
     }
 
-    entry = proc_create("params", entry_mode, gdrdrv_proc_dir_entry, &gdrdrv_proc_params_pro_ops);
+    entry = proc_create("params", entry_mode, gdrdrv_proc_dir_entry, &gdrdrv_proc_params_proc_ops);
     if (!entry) {
         status = EINVAL;
         goto out;
+    }
+
+    if (dbg_enabled) {
+        entry_mode = (S_IFREG | S_IRUSR | S_IRGRP);
+        entry = proc_create("nv_get_pages_refcount", entry_mode, gdrdrv_proc_dir_entry, &gdrdrv_proc_ngp_refcount_proc_ops);
+        if (!entry) {
+            status = EINVAL;
+            goto out;
+        }
     }
 
 out:
