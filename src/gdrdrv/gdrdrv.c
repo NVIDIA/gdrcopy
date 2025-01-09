@@ -37,6 +37,8 @@
 #include <linux/timex.h>
 #include <linux/timer.h>
 #include <linux/pci.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
 #include <linux/sched/signal.h>
@@ -261,6 +263,8 @@ static int info_enabled = 0;
     gdr_msg(KERN_DEBUG, FMT, ## ARGS)
 
 static int use_persistent_mapping = 0;
+
+static struct proc_dir_entry *gdrdrv_proc_dir_entry = NULL;
 
 //-----------------------------------------------------------------------------
 
@@ -1269,11 +1273,27 @@ static long gdrdrv_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned 
 
 static void gdrdrv_vma_close(struct vm_area_struct *vma)
 {
-    gdr_mr_t *mr = (gdr_mr_t *)vma->vm_private_data;
-    gdr_dbg("closing vma=0x%px vm_file=0x%px vm_private_data=0x%px mr=0x%px mr->vma=0x%px\n", vma, vma->vm_file, vma->vm_private_data, mr, mr->vma);
+    gdr_hnd_t handle;
+    gdr_mr_t *mr = NULL;
+    gdr_info_t* info = NULL;
+
+    if (!vma->vm_file)
+        return;
+
+    info = vma->vm_file->private_data;
+    if (!info)
+        return;
+
+    handle = gdrdrv_handle_from_off(vma->vm_pgoff);
+    mr = gdr_get_mr_from_handle_write(info, handle);
+    if (!mr)
+        return;
+
+    gdr_dbg("closing vma=0x%px vm_file=0x%px mr=0x%px mr->vma=0x%px\n", vma, vma->vm_file, mr, mr->vma);
     // TODO: handle multiple vma's
     mr->vma = NULL;
     mr->cpu_mapping_type = GDR_MR_NONE;
+    gdr_put_mr_write(mr);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1433,8 +1453,6 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
     // Set to None first
     mr->cpu_mapping_type = GDR_MR_NONE;
     vma->vm_ops = &gdrdrv_vm_ops;
-    gdr_dbg("overwriting vma->vm_private_data=%px with mr=%px\n", vma->vm_private_data, mr);
-    vma->vm_private_data = mr;
 
     // check for physically contiguous IO ranges
     p = 0;
@@ -1530,6 +1548,77 @@ out:
 
 //-----------------------------------------------------------------------------
 
+static int gdrdrv_proc_params_read(struct seq_file *s, void *v)
+{
+    seq_printf(s, "Version: %s\n", GDRDRV_VERSION_STRING);
+    seq_printf(s, "Built for NVIDIA driver flavor: %s\n", GDRDRV_BUILT_FOR_NVIDIA_FLAVOR_STRING);
+    seq_printf(s, "Use persistent mapping: %s\n", gdr_use_persistent_mapping() ? "yes" : "no");
+    seq_printf(s, "dbg_enabled: %d\n", dbg_enabled);
+    seq_printf(s, "info_enabled: %d\n", info_enabled);
+    return 0;
+}
+
+static int gdrdrv_proc_params_open(struct inode *inode, struct file *filp)
+{
+    return single_open(filp, gdrdrv_proc_params_read, NULL);
+}
+
+static int gdrdrv_proc_params_release(struct inode *inode, struct file *filp)
+{
+    return single_release(inode, filp);
+}
+
+static const struct proc_ops gdrdrv_proc_params_pro_ops = {
+    .proc_open = gdrdrv_proc_params_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = gdrdrv_proc_params_release
+};
+
+static int gdrdrv_procfs_init(void)
+{
+    int status = 0;
+    char gdrdrv_proc_dir_name[20];
+    int gdrdrv_proc_dir_mode = (S_IFDIR | S_IRUGO | S_IXUGO);
+
+    struct proc_dir_entry *entry;
+    int entry_mode = (S_IFREG | S_IRUGO);
+
+    snprintf(gdrdrv_proc_dir_name, sizeof(gdrdrv_proc_dir_name), "driver/%s", DEVNAME);
+    gdrdrv_proc_dir_name[sizeof(gdrdrv_proc_dir_name) - 1] = '\0';
+
+    gdrdrv_proc_dir_entry = proc_mkdir_mode(gdrdrv_proc_dir_name, gdrdrv_proc_dir_mode, NULL);
+    if (!gdrdrv_proc_dir_entry) {
+        status = EINVAL;
+        goto out;
+    }
+
+    entry = proc_create("params", entry_mode, gdrdrv_proc_dir_entry, &gdrdrv_proc_params_pro_ops);
+    if (!entry) {
+        status = EINVAL;
+        goto out;
+    }
+
+out:
+    if (status) {
+        if (gdrdrv_proc_dir_entry) {
+            proc_remove(gdrdrv_proc_dir_entry);
+            gdrdrv_proc_dir_entry = NULL;
+        }
+    }
+    return status;
+}
+
+static void gdrdrv_procfs_cleanup(void)
+{
+    if (gdrdrv_proc_dir_entry)
+        proc_remove(gdrdrv_proc_dir_entry);
+
+    gdrdrv_proc_dir_entry = NULL;
+}
+
+//-----------------------------------------------------------------------------
+
 struct file_operations gdrdrv_fops = {
     .owner    = THIS_MODULE,
 
@@ -1600,6 +1689,8 @@ static int __init gdrdrv_init(void)
     if (gdr_use_persistent_mapping())
         gdr_msg(KERN_INFO, "Persistent mapping will be used\n");
 
+    gdrdrv_procfs_init();
+
     return 0;
 }
 
@@ -1609,6 +1700,8 @@ static void __exit gdrdrv_cleanup(void)
 {
     int64_t last_nv_get_pages_refcount;
     gdr_msg(KERN_INFO, "unregistering major number %d\n", gdrdrv_major);
+
+    gdrdrv_procfs_cleanup();
 
     /* cleanup_module is never called if registering failed */
     unregister_chrdev(gdrdrv_major, DEVNAME);

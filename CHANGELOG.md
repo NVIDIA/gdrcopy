@@ -8,6 +8,8 @@
 - Support setting GPU ID in gdrcopy\_sanity.
 - Fix nvidia\_p2p\_get\_pages\_persistent leakage in gdrdrv.
 - Introduce leakage\_pin\_pages\_fork\_cumemalloc unit test.
+- Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
+- Introduce /proc/driver/gdrdrv/params.
 
 ## [2.4.3] - 2024-12-02
 - Fix NVIDIA\_IS\_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
