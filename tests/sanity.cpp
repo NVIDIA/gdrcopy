@@ -34,7 +34,6 @@
 #include <cuda.h>
 #include <errno.h>
 #include <sys/queue.h>
-#include <sys/capability.h>
 
 #include <iostream>
 #include <string>
@@ -116,30 +115,6 @@ void vmm_filter()
     exit(EXIT_WAIVED);
 }
 #endif
-
-void cap_sys_admin_filter()
-{
-    int status = 0;
-    cap_t caps = cap_get_proc();
-    if (!caps) {
-        print_dbg("Cannot get the process capabilities. Waiving the test.\n");
-        exit(EXIT_WAIVED);
-    }
-
-    cap_flag_value_t cap_flag_val;
-    status = cap_get_flag(caps, CAP_SYS_ADMIN, CAP_EFFECTIVE, &cap_flag_val);
-    if (status) {
-        print_dbg("Cannot get the process cap flag. Waiving the test.\n");
-        exit(EXIT_WAIVED);
-    }
-
-    if (cap_flag_val != CAP_SET) {
-        print_dbg("This process is run without CAP_SYS_ADMIN (e.g., without sudo). Waiving the test.\n");
-        exit(EXIT_WAIVED);
-    }
-
-    cap_free(caps);
-}
 
 /**
  * Sends given file descriptior via given socket
@@ -2244,20 +2219,21 @@ void leakage_pin_pages_fork()
 
         finalize_cuda(g_dev_id);
 
-        print_dbg("Trying to rmmod gdrdrv. If the bug is there, it may cause kernel panic.\n");
-        status = std::system("/sbin/rmmod gdrdrv");
-        ASSERT_EQ(status, 0);
+        file = fopen(file_path, "rb");
+        ASSERT(file != NULL);
 
-        print_dbg("Calling modprobe gdrdrv. It may fail if gdrdrv is not properly installed.\n");
-        status = std::system("/sbin/modprobe gdrdrv");
-        if (status)
-            print_dbg("The unit test ran sucessfully. However, there is an error in calling /sbin/modprobe gdrdrv. We cannot automatically reload the driver.\n");
+        num_read_bytes = fread(file_data, sizeof(file_data[0]), sizeof(file_data), file);
+        ASSERT(num_read_bytes > 0);
+        file_data[sizeof(file_data) - 1] = '\0';
+        ngp_refcount = atoi(file_data);
+        ASSERT_EQ(ngp_refcount, 0);
+        fclose(file);
     }
 }
 
 GDRCOPY_EXTENDED_TEST(leakage_pin_pages_fork_cumemalloc)
 {
-    leakage_pin_pages_fork<gpu_mem_alloc, gpu_mem_free, cap_sys_admin_filter>();
+    leakage_pin_pages_fork<gpu_mem_alloc, gpu_mem_free, null_filter>();
 }
 
 GDRCOPY_TEST(attributes_sanity)
