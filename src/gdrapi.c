@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -58,6 +59,21 @@ enum gdrcopy_msg_level {
 
 static int gdr_msg_level = GDRCOPY_MSG_ERROR;
 static int gdr_enable_logging = -1;
+
+static int gdr_mapping_type_counters[GDR_NUM_MAPPING_TYPE];
+
+// We need a strong fence when mix mapping is active.
+static inline bool gdr_has_mix_mapping()
+{
+    int i;
+    int num_type_with_nonzero_counter = 0;
+    for (i = 0; i < GDR_NUM_MAPPING_TYPE; ++i) {
+        if (gdr_mapping_type_counters[i] != 0)
+            ++num_type_with_nonzero_counter;
+    }
+
+    return (num_type_with_nonzero_counter > 1);
+}
 
 static void gdr_msg(enum gdrcopy_msg_level lvl, const char* fmt, ...)
 {
@@ -480,6 +496,9 @@ int gdr_map_v2(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size, int flags)
     mh->mapping_type = info.mapping_type;
     gdr_dbg("mapping_type=%d\n", mh->mapping_type);
 
+    // GDRCopy is not thread-safe. We use normal increment instead of atomic.
+    ++gdr_mapping_type_counters[mh->mapping_type];
+
 out:
     if (status) {
         if (mmio)
@@ -514,6 +533,13 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
         ret = __errno;
         goto err;
     }
+
+    // gdr_mapping_type_counters may not reflect the number of mappings on this
+    // system. For example, users may rely on gdrdrv to automatically unmap
+    // when calling cudaFree (non-persistent mapping) or gdr_unpin_buffer. We
+    // treat those cases as a user error.
+    --gdr_mapping_type_counters[mh->mapping_type];
+
     mh->mapping_type = GDR_MAPPING_TYPE_NONE;
  err:
     return ret;
@@ -537,6 +563,7 @@ extern int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes
 extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes);
 static inline void wc_store_fence(void) { _mm_sfence(); }
+static inline void memory_fence(void) { _mm_mfence() ; }
 #define PREFERS_STORE_UNROLL4 0
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
@@ -550,6 +577,7 @@ static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes
 static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
 static inline void wc_store_fence(void) { asm volatile("sync") ; }
+static inline void memory_fence(void) { asm volatile("sync") ; }
 #define PREFERS_STORE_UNROLL4 1
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
@@ -562,7 +590,8 @@ static int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes) 
 static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
-static inline void wc_store_fence(void) { asm volatile("DMB ishld") ; }
+static inline void wc_store_fence(void) { asm volatile("DMB st") ; }
+static inline void memory_fence(void) { asm volatile("DMB sy") ; }
 #define PREFERS_STORE_UNROLL4 0
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
@@ -824,7 +853,13 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
     } while (0);
 
 do_fence:
-    if (wc_mapping) {
+    if (gdr_has_mix_mapping()) {
+        // All combinations of (ld, st) followed by (ld, st) targetting the
+        // same CUDA buffer is possible. When using multiple mapping types
+        // targeting the same buffer, we need memory fence to guarantee the
+        // program order.
+        memory_fence();
+    } else if (wc_mapping) {
         // fencing is needed even for plain memcpy(), due to performance
         // being hit by delayed flushing of WC buffers
         wc_store_fence();
@@ -881,6 +916,14 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
         // if (wc_mapping)
         //    wc_store_fence();
     } while (0);
+
+    if (gdr_has_mix_mapping()) {
+        // All combinations of (ld, st) followed by (ld, st) targetting the
+        // same CUDA buffer is possible. When using multiple mapping types
+        // targeting the same buffer, we need memory fence to guarantee the
+        // program order.
+        memory_fence();
+    }
     
     return 0;
 }
