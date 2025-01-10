@@ -144,6 +144,17 @@ int gdr_get_info_v2(gdr_t g, gdr_mh_t handle, gdr_info_v2_t *info);
 // offset.
 int gdr_map(gdr_t g, gdr_mh_t handle, void **va, size_t size);
 
+typedef enum gdr_map_flags {
+    GDR_MAP_FLAG_DEFAULT = 0,
+    GDR_MAP_FLAG_REQ_WC_MAPPING = 1,
+    GDR_MAP_FLAG_REQ_CACHE_MAPPING = 2,
+    GDR_MAP_FLAG_REQ_DEVICE_MAPPING = 3
+} gdr_map_flags_t;
+
+// Create a user-space mapping of the memory handle. Users can request the
+// mapping type by passing `gdr_map_flags_t` as `flags`.
+int gdr_map_v2(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size, int flags);
+
 // get rid of a user-space mapping.
 // First invoke gdr_unmap() then gdr_unpin_buffer().
 int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size);
