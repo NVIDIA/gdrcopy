@@ -162,6 +162,17 @@ struct GDRDRV_IOC_PIN_BUFFER_V2_PARAMS
 
 //-----------
 
+struct GDRDRV_IOC_REQ_MAPPING_TYPE_PARAMS
+{
+    // in
+    gdr_hnd_t handle;
+    __u32 mapping_type;
+};
+
+#define GDRDRV_IOC_REQ_MAPPING_TYPE _IOWR(GDRDRV_IOCTL, 8, struct GDRDRV_IOC_REQ_MAPPING_TYPE_PARAMS *)
+
+//-----------
+
 struct GDRDRV_IOC_GET_VERSION_PARAMS
 {
     // out

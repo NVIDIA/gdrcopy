@@ -59,6 +59,13 @@
 #define HAVE_UNLOCKED_IOCTL 1
 #endif 
 
+/**
+ * Old Linux kernel does not define this macro.
+ */
+#ifndef fallthrough
+# define fallthrough    do {} while (0)  /* fallthrough */
+#endif
+
 //-----------------------------------------------------------------------------
 
 static const unsigned int GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID = 0x15b3;
@@ -309,6 +316,7 @@ struct gdr_mr {
     u64 va;
     u64 mapped_size;
     gdr_mr_type_t cpu_mapping_type;
+    gdr_mr_type_t req_mapping_type;
     nvidia_p2p_page_table_t *page_table;
     int cb_flag;
     cycles_t tm_cycles;
@@ -1166,6 +1174,74 @@ static int gdrdrv_get_attr(gdr_info_t *info, void __user *_params)
 
 //-----------------------------------------------------------------------------
 
+static int gdrdrv_req_mapping_type(gdr_info_t *info, void __user *_params)
+{
+    struct GDRDRV_IOC_REQ_MAPPING_TYPE_PARAMS params = {0};
+    int ret = 0;
+
+    gdr_mr_t *mr = NULL;
+
+    if (copy_from_user(&params, _params, sizeof(params))) {
+        gdr_err("copy_from_user failed on user pointer 0x%px\n", _params);
+        ret = -EFAULT;
+        goto out;
+    }
+
+    if (GDR_MR_NONE > params.mapping_type || GDR_MR_DEVICE < params.mapping_type) {
+        gdr_err("Unknown request_mapping_type=%d\n", params.mapping_type);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    mr = gdr_get_mr_from_handle_write(info, params.handle);
+    if (NULL == mr) {
+        gdr_err("Unexpected handle %llx in req_mapping_type\n", params.handle);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    // Changing the mapping type after the mr is mapped is not allowed.
+    if (gdr_mr_is_mapped(mr)) {
+        ret = -EBUSY;
+        goto out;
+    }
+
+    switch (params.mapping_type) {
+        case GDR_MR_CACHING:
+            // All pages are either RAM or BAR1. We don't need to check every page.
+            // Just in case there is a bug that causes entries == 0, we also check that before accessing pages[0].
+            // In this case, we won't do mapping. So, it does not matter if we set req_mapping_type to GDR_MR_CACHING.
+            if (!gdrdrv_cpu_can_cache_gpu_mappings
+                || (mr->page_table->entries > 0 && !gdr_pfn_is_ram(mr->page_table->pages[0]->physical_address >> PAGE_SHIFT))
+            ) {
+                ret = -EOPNOTSUPP;
+                goto out;
+            }
+            fallthrough;
+        case GDR_MR_WC:
+            if (gdrdrv_cpu_must_use_device_mapping) {
+                ret = -EOPNOTSUPP;
+                goto out;
+            }
+            fallthrough;
+        case GDR_MR_DEVICE:
+        case GDR_MR_NONE:
+            mr->req_mapping_type = params.mapping_type;
+            break;
+        default:
+            gdr_err("Unknown request_mapping_type=%d\n", params.mapping_type);
+            ret = -EINVAL;
+            goto out;
+    }
+
+out:
+    if (mr)
+        gdr_put_mr_write(mr);
+    return ret;
+}
+
+//-----------------------------------------------------------------------------
+
 static int gdrdrv_get_version(gdr_info_t *info, void __user *_params)
 {
     struct GDRDRV_IOC_GET_VERSION_PARAMS params = {0};
@@ -1234,6 +1310,10 @@ static int gdrdrv_ioctl(struct inode *inode, struct file *filp, unsigned int cmd
 
     case GDRDRV_IOC_GET_ATTR:
         ret = gdrdrv_get_attr(info, argp);
+	break;
+
+    case GDRDRV_IOC_REQ_MAPPING_TYPE:
+        ret = gdrdrv_req_mapping_type(info, argp);
         break;
 
     case GDRDRV_IOC_GET_VERSION:
@@ -1476,15 +1556,18 @@ static int gdrdrv_mmap(struct file *filp, struct vm_area_struct *vma)
         // phys range is [paddr, paddr+len-1]
         gdr_dbg("mapping p=%u entries=%d offset=%llx len=%zu vaddr=%lx paddr=%lx\n", 
                 p, nentries, offset, len, vaddr, paddr);
-        if (gdr_pfn_is_ram(paddr >> PAGE_SHIFT)) {
-            WARN_ON_ONCE(!gdrdrv_cpu_can_cache_gpu_mappings);
-            chunk_mapping_type = GDR_MR_CACHING;
-        } else if (gdrdrv_cpu_must_use_device_mapping) {
-            chunk_mapping_type = GDR_MR_DEVICE;
-        } else {
-            // flagging the whole mr as a WC mapping if at least one chunk is WC
-            chunk_mapping_type = GDR_MR_WC;
-        }
+        if (mr->req_mapping_type == GDR_MR_NONE) {
+            if (gdr_pfn_is_ram(paddr >> PAGE_SHIFT)) {
+                WARN_ON_ONCE(!gdrdrv_cpu_can_cache_gpu_mappings);
+                chunk_mapping_type = GDR_MR_CACHING;
+            } else if (gdrdrv_cpu_must_use_device_mapping) {
+                chunk_mapping_type = GDR_MR_DEVICE;
+            } else {
+                // flagging the whole mr as a WC mapping if at least one chunk is WC
+                chunk_mapping_type = GDR_MR_WC;
+            }
+        } else
+            chunk_mapping_type = mr->req_mapping_type;
 
         if (cpu_mapping_type == GDR_MR_NONE)
             cpu_mapping_type = chunk_mapping_type;
