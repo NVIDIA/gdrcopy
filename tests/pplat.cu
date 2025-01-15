@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
+#include <cuda/atomic>
 
 using namespace std;
 
@@ -49,8 +50,9 @@ __device__ static inline uint64_t query_globaltimer() {
 __global__ void pp_cpu_produce_gpu_consume_kernel(uint32_t *gpu_flag_buf, uint32_t *cpu_flag_buf, uint32_t num_iters)
 {
     uint32_t i = 1;
-    WRITE_ONCE(*cpu_flag_buf, i);
-    __threadfence_system();
+    cuda::atomic_ref<uint32_t, cuda::thread_scope_system> cpu_flag_buf_aref(*cpu_flag_buf);
+
+    cpu_flag_buf_aref.store(i, cuda::std::memory_order_release);
     while (i <= num_iters) {
         uint32_t val;
         do {
@@ -70,16 +72,15 @@ __global__ void pp_gpu_produce_cpu_consume_kernel(uint32_t *gpu_flag_buf, uint32
     uint32_t val;
     uint32_t i = 1;
     uint64_t _beg, _end;
-    WRITE_ONCE(*cpu_flag_buf, i);
-    __threadfence_system();
+    cuda::atomic_ref<uint32_t, cuda::thread_scope_system> cpu_flag_buf_aref(*cpu_flag_buf);
+    cuda::atomic_ref<uint32_t, cuda::thread_scope_system> gpu_flag_buf_aref(*gpu_flag_buf);
 
-    do {
-        val = READ_ONCE(*gpu_flag_buf);
-    }
-    while (val != i);
-    __threadfence_system();
+    cpu_flag_buf_aref.store(i, cuda::std::memory_order_release);
+    while (gpu_flag_buf_aref.load(cuda::std::memory_order_acquire) != i)
+        continue;
 
-    i = val + 1;
+    ++i;
+    val = i;
     _beg = query_globaltimer();
     while (i <= num_iters + 1) {
         val = i;
@@ -110,27 +111,20 @@ __global__ void pp_data_cpu_produce_gpu_consume_kernel(uint32_t *gpu_flag_buf, u
     uint64_t num_elements = data_size / sizeof(*A);
     uint32_t flag_val;
     uint32_t i = 1;
+    cuda::atomic_ref<uint32_t, cuda::thread_scope_system> cpu_flag_buf_aref(cpu_flag_buf[blockIdx.x]);
+    cuda::atomic_ref<uint32_t, cuda::thread_scope_system> gpu_flag_buf_aref(gpu_flag_buf[blockIdx.x]);
 
     if (threadIdx.x == 0) {
-        WRITE_ONCE(cpu_flag_buf[blockIdx.x], i);
-        __threadfence_system();
+        cpu_flag_buf_aref.store(i, cuda::std::memory_order_release);
     }
     __syncthreads();
 
     for (; i <= num_iters; ++i) {
         if (threadIdx.x == 0) {
-#if __CUDA_ARCH__ >= 700
             do {
-                asm volatile("ld.acquire.sys.global.u32 %0, [%1];" : "=r"(flag_val) : "l"(gpu_flag_buf));
+                flag_val = gpu_flag_buf_aref.load(cuda::std::memory_order_acquire);
             }
             while (flag_val != i);
-#else
-            do {
-                flag_val = READ_ONCE(*gpu_flag_buf);
-            }
-            while (flag_val != i);
-            __threadfence_system();
-#endif
         }
         __syncthreads();
 
@@ -140,7 +134,7 @@ __global__ void pp_data_cpu_produce_gpu_consume_kernel(uint32_t *gpu_flag_buf, u
 
         if (threadIdx.x == 0) {
             ++flag_val;
-            WRITE_ONCE(cpu_flag_buf[blockIdx.x], flag_val);
+            cpu_flag_buf_aref.store(flag_val, cuda::std::memory_order_release);
         }
     }
 }
@@ -153,16 +147,16 @@ __global__ void pp_data_gpu_produce_cpu_consume_kernel(uint32_t *gpu_flag_buf, u
     uint32_t flag_val;
     uint32_t i = 1;
     uint64_t _beg, _end;
+    cuda::atomic_ref<uint32_t, cuda::thread_scope_system> cpu_flag_buf_aref(cpu_flag_buf[blockIdx.x]);
+    cuda::atomic_ref<uint32_t, cuda::thread_scope_system> gpu_flag_buf_aref(gpu_flag_buf[blockIdx.x]);
 
     if (threadIdx.x == 0) {
-        WRITE_ONCE(cpu_flag_buf[blockIdx.x], i);
-        __threadfence_system();
+        cpu_flag_buf_aref.store(i, cuda::std::memory_order_release);
 
         do {
-            flag_val = READ_ONCE(*gpu_flag_buf);
+            flag_val = gpu_flag_buf.load(cuda::std::memory_order_acquire);
         }
         while (flag_val != i);
-        __threadfence_system();
     }
     __syncthreads();
 
@@ -171,24 +165,17 @@ __global__ void pp_data_gpu_produce_cpu_consume_kernel(uint32_t *gpu_flag_buf, u
     for (i = 2; i <= num_iters + 1; ++i) {
         ++flag_val;
         for (uint64_t idx = my_tid; idx < num_elements; idx += num_threads) {
-            // We want to write 0. We do calculation just to create data dependency.
-            WRITE_ONCE(A[idx], 0);
+            A[idx] = 0;
         }
         __syncthreads();
 
         if (threadIdx.x == 0) {
-#if __CUDA_ARCH__ >= 700
-            // Data should be visible to CPU before the flag.
-            asm volatile("st.release.sys.global.u32 [%0], %1;" :: "l"(&cpu_flag_buf[blockIdx.x]), "r"(flag_val));
-#else
-            __threadfence_system();
-            WRITE_ONCE(cpu_flag_buf[blockIdx.x], flag_val);
-#endif
+            cpu_flag_buf_aref.store(flag_val, cuda::std::memory_order_release);
+
             do {
-                flag_val = READ_ONCE(*gpu_flag_buf);
+                flag_val = gpu_flag_buf_aref.load(cuda::std::memory_order_acquire);
             }
             while (flag_val != i);
-            __threadfence_system();
         }
         __syncthreads();
     }
