@@ -266,37 +266,42 @@ int main(int argc, char *argv[])
             int iter = 0;
             lat_us = 0;
             if (use_cold_cache) {
+                clock_gettime(MYCLOCK, &beg);
                 for (iter = 0; iter < num_write_iters; ++iter) {
                     // Simulate GPU reading the data written by CPU. When cache
                     // mapping is used, the cache lines will be moved to GPU.
                     // The next access by CPU will cause the cache lines to
                     // move back to CPU (cold cache). gdr_copy_to_mapping will
                     // pay this cost.
-                    ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
 
-                    MB();
-                    clock_gettime(MYCLOCK, &beg);
-                    MB();
+                    // We use sync memops. The copy is done when cuMemcpy
+                    // returns.
+                    cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size);
+
                     gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
-                    MB();
-                    clock_gettime(MYCLOCK, &end);
-                    MB();
-
-                    lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                    SB();
                 }
+                clock_gettime(MYCLOCK, &end);
+
+                lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+
+                // Measure the cost of cuMemcpy. Remove that from the total
+                // latency.
+                clock_gettime(MYCLOCK, &beg);
+                for (iter = 0; iter < num_write_iters; ++iter) {
+                    cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size);
+                }
+                clock_gettime(MYCLOCK, &end);
+
+                lat_us -= ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
             }
             else {
-                MB();
                 clock_gettime(MYCLOCK, &beg);
-                MB();
                 for (iter = 0; iter < num_write_iters; ++iter) {
-                    MB();
                     gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
-                    MB();
+                    SB();
                 }
-                MB();
                 clock_gettime(MYCLOCK, &end);
-                MB();
 
                 lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
             }
@@ -304,8 +309,6 @@ int main(int argc, char *argv[])
             printf("gdr_copy_to_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
             copy_size <<= 1;
         }
-
-        MB();
 
         // gdr_copy_from_mapping benchmark
         cout << endl;
@@ -316,37 +319,42 @@ int main(int argc, char *argv[])
             int iter = 0;
             lat_us = 0;
             if (use_cold_cache) {
+                clock_gettime(MYCLOCK, &beg);
                 for (iter = 0; iter < num_read_iters; ++iter) {
                     // Simulate GPU writing the data to the shared buffer. When
                     // cache mapping is used, the cache lines will be moved to
                     // GPU.  The next access by CPU will cause the cache lines
                     // to move back to CPU (cold cache). gdr_copy_from_mapping
                     // will pay this cost.
-                    ASSERTDRV(cuMemsetD8(d_A, 0, copy_size));
 
-                    MB();
-                    clock_gettime(MYCLOCK, &beg);
-                    MB();
+                    // We use sync memops. The memset is done when cuMemsetD8
+                    // returns.
+                    cuMemsetD8(d_A, 0, copy_size);
+
                     gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
-                    MB();
-                    clock_gettime(MYCLOCK, &end);
-                    MB();
-
-                    lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                    LB();
                 }
+                clock_gettime(MYCLOCK, &end);
+
+                lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+
+                // Measure the cost of cuMemsetD8 and remove that from the
+                // total latency.
+                clock_gettime(MYCLOCK, &beg);
+                for (iter = 0; iter < num_read_iters; ++iter) {
+                    cuMemsetD8(d_A, 0, copy_size);
+                }
+                clock_gettime(MYCLOCK, &end);
+
+                lat_us -= ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
             }
             else {
-                MB();
                 clock_gettime(MYCLOCK, &beg);
-                MB();
                 for (iter = 0; iter < num_read_iters; ++iter) {
-                    MB();
                     gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
-                    MB();
+                    LB();
                 }
-                MB();
                 clock_gettime(MYCLOCK, &end);
-                MB();
 
                 lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
             }
