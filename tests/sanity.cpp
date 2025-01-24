@@ -2102,7 +2102,10 @@ GDRCOPY_TEST(basic_child_thread_pins_buffer_vmmalloc)
 #endif
 
 /**
- * This unit test tests memory leakage in gdrdrv driver. A known method for triggering this bug is as follows:
+ * This unit test tests memory leakage in gdrdrv driver. See
+ * https://github.com/NVIDIA/gdrcopy/issues/313 for more information.
+ *
+ * A known method for triggering this bug is as follows:
  *
  * 1. Initialize GDRCopy and create a connection to gdrdrv.
  * 2. Fork without execv.
