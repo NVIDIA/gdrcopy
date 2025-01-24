@@ -825,6 +825,8 @@ GDRCOPY_TEST(invalidation_access_after_gdr_close_vmmalloc)
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
 void invalidation_access_after_free()
 {
+    int status = 0;
+
     expecting_exception_signal = false;
     MB();
 
@@ -855,7 +857,11 @@ void invalidation_access_after_free()
     gdr_t g = gdr_open_safe();
 
     int use_persistent_mapping;
-    ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_USE_PERSISTENT_MAPPING, &use_persistent_mapping), 0);
+    status = gdr_get_attribute(g, GDR_ATTR_USE_PERSISTENT_MAPPING, &use_persistent_mapping);
+    if (status == -EINVAL) {
+        print_dbg("Cannot query use_persistent_mapping. gdrdrv might be too old. Assume that this is non-persistent mapping.\n");
+        use_persistent_mapping = 0;
+    }
 
     gdr_mh_t mh;
     CUdeviceptr d_ptr = d_A;
@@ -2095,6 +2101,160 @@ GDRCOPY_TEST(basic_child_thread_pins_buffer_vmmalloc)
 }
 #endif
 
+/**
+ * This unit test tests memory leakage in gdrdrv driver. See
+ * https://github.com/NVIDIA/gdrcopy/issues/313 for more information.
+ *
+ * A known method for triggering this bug is as follows:
+ *
+ * 1. Initialize GDRCopy and create a connection to gdrdrv.
+ * 2. Fork without execv.
+ * 3. Parent: Allocate a CUDA buffer, pin with GDRCopy, and ungracefully close the gdrdrv fd.
+ * 4. Child: Wait for parent to finish Step 3. Then, it calls gdr_close.
+ *
+ * gdrdrv before 2.4.4 is known to have this bug.
+ *
+ * gdrdrv >= 2.5 has a detection mechanism, which is activated when rmmod
+ * gdrdrv. If this bug is triggered, gdrdrv may cause kernel panic. Thus, it is
+ * marked as an extended unit test and not run by default. Run it only if you
+ * know how to recover.
+ *
+ */
+template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
+void leakage_pin_pages_fork()
+{
+    int status = 0;
+
+    expecting_exception_signal = false;
+    MB();
+
+    int filedes_0[2];
+    int filedes_1[2];
+    int read_fd;
+    int write_fd;
+    ASSERT_NEQ(pipe(filedes_0), -1);
+    ASSERT_NEQ(pipe(filedes_1), -1);
+
+    srand(time(NULL));
+
+    const size_t _size = sizeof(int) * 16;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
+    const char *myname;
+
+    int send_msg = 1;
+    int recv_msg = 0;
+
+    const char *file_path = "/proc/driver/gdrdrv/nv_get_pages_refcount";
+    FILE *file = NULL;
+    file = fopen(file_path, "rb");
+    if (file == NULL) {
+        print_dbg("%s cannot be opened for read. Possible root causes:\n"
+            "1. gdrdrv is too old. Only gdrdrv v2.5 and later generate this file.\n"
+            "2. gdrdrv is loaded with dbg_enabled=0. This file will not be generated.\n"
+            "3. To read this file, users with CAP_SYS_ADMIN (e.g., root) is required.\n"
+            "We lack crucial information to perform this test. Waiving it.\n",
+            file_path
+        );
+        exit(EXIT_WAIVED);
+    }
+
+    char file_data[20];
+    size_t num_read_bytes = fread(file_data, sizeof(file_data[0]), sizeof(file_data), file);
+    ASSERT(num_read_bytes > 0);
+    file_data[sizeof(file_data) - 1] = '\0';
+    int ngp_refcount = atoi(file_data);
+    if (ngp_refcount != 0) {
+        print_dbg("nv_get_pages_refcount = %d, which is not 0. Some other processes might be using GDRCopy. We cannot accurately perform this test. Waiving it.\n");
+        exit(EXIT_WAIVED);
+    }
+    fclose(file);
+
+    init_cuda(g_dev_id, true);
+    filter_fn();
+
+    fflush(stdout);
+    fflush(stderr);
+
+    gdr_t g = gdr_open_safe();
+
+    pid_t pid = fork();
+    ASSERT(pid >= 0);
+
+    myname = pid == 0 ? "child" : "parent";
+
+    print_dbg("%s: Start\n", myname);
+
+    if (pid == 0) {
+        close(filedes_0[0]);
+        close(filedes_1[1]);
+
+        read_fd = filedes_1[0];
+        write_fd = filedes_0[1];
+
+        print_dbg("%s: waiting for cont signal from parent\n", myname);
+        do {
+            ASSERT_EQ(read(read_fd, &recv_msg, sizeof(int)), sizeof(int));
+            print_dbg("%s: receive cont signal %d from parent\n", myname, recv_msg);
+        } while (recv_msg != 1);
+
+        print_dbg("%s: calling gdr_close\n", myname);
+        ASSERT_EQ(gdr_close(g), 0);
+
+        send_msg = 2;
+        print_dbg("%s: telling parent what we are done\n", myname);
+        ASSERT_EQ(write(write_fd, &send_msg, sizeof(int)), sizeof(int));
+    }
+    else {
+        close(filedes_0[1]);
+        close(filedes_1[0]);
+
+        read_fd = filedes_0[0];
+        write_fd = filedes_1[1];
+
+        CUdeviceptr d_A;
+        gpu_mem_handle_t mhandle;
+        ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+        d_A = mhandle.ptr;
+
+        gdr_mh_t mh;
+        CUdeviceptr d_ptr = d_A;
+        ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh), 0);
+        ASSERT_NEQ(mh, null_mh);
+
+        print_dbg("%s: Closing g->fd\n", myname);
+        close(g->fd);
+
+        send_msg = 1;
+        print_dbg("%s: sending cont signal to child\n", myname);
+        ASSERT_EQ(write(write_fd, &send_msg, sizeof(int)), sizeof(int));
+
+        print_dbg("%s: waiting for cont signal from child\n", myname);
+        do {
+            ASSERT_EQ(read(read_fd, &recv_msg, sizeof(int)), sizeof(int));
+            print_dbg("%s: receive cont signal %d from child\n", myname, recv_msg);
+        } while (recv_msg != 2);
+
+        ASSERTDRV(gfree_fn(&mhandle));
+
+        finalize_cuda(g_dev_id);
+
+        file = fopen(file_path, "rb");
+        ASSERT(file != NULL);
+
+        num_read_bytes = fread(file_data, sizeof(file_data[0]), sizeof(file_data), file);
+        ASSERT(num_read_bytes > 0);
+        file_data[sizeof(file_data) - 1] = '\0';
+        ngp_refcount = atoi(file_data);
+        ASSERT_EQ(ngp_refcount, 0);
+        fclose(file);
+    }
+}
+
+GDRCOPY_EXTENDED_TEST(leakage_pin_pages_fork_cumemalloc)
+{
+    leakage_pin_pages_fork<gpu_mem_alloc, gpu_mem_free, null_filter>();
+}
+
 GDRCOPY_TEST(attributes_sanity)
 {
     gdr_t g = gdr_open_safe();
@@ -2110,7 +2270,7 @@ GDRCOPY_TEST(attributes_sanity)
 
 void print_usage(const char *path)
 {
-    cout << "Usage: " << path << " [-h][-v][-s][-l][-t <test>]" << endl;
+    cout << "Usage: " << path << " [-h][-v][-s][-l][-t <test>][-d <gpu>][-e]" << endl;
     cout << endl;
     cout << "Options:" << endl;
     cout << "   -h              Print this help text." << endl;
@@ -2119,6 +2279,7 @@ void print_usage(const char *path)
     cout << "   -l              List all available tests." << endl;
     cout << "   -t <test>       Run the specified test only." << endl;
     cout << "   -d <gpu>        GPU ID (default: " << g_dev_id << ")" << endl;
+    cout << "   -e              Enable extended unit tests." << endl;
 }
 
 void print_all_tests()
@@ -2128,16 +2289,25 @@ void print_all_tests()
     cout << "List of all available tests:" << endl;
     for (vector<string>::iterator it = tests.begin(); it != tests.end(); ++it)
         cout << "    " << *it << endl;
+
+    cout << endl;
+
+    vector<string> extended_tests;
+    gdrcopy::testsuite::get_all_extended_test_names(extended_tests);
+    cout << "List of all available extended tests:" << endl;
+    for (vector<string>::iterator it = extended_tests.begin(); it != extended_tests.end(); ++it)
+        cout << "    " << *it << endl;
 }
 
 int main(int argc, char *argv[])
 {
     int c;
     bool print_summary = true;
+    bool run_extended_test = false;
     int status;
     vector<string> tests;
 
-    while ((c = getopt(argc, argv, "hvslt:d:")) != -1) {
+    while ((c = getopt(argc, argv, "hvslt:d:e")) != -1) {
         switch (c) {
             case 'h':
                 print_usage(argv[0]);
@@ -2157,6 +2327,9 @@ int main(int argc, char *argv[])
             case 'd':
                 g_dev_id = strtol(optarg, NULL, 0);
                 break;
+            case 'e':
+                run_extended_test = true;
+                break;
             default:
                 cerr << "Invalid option" << endl;
                 return EXIT_FAILURE;
@@ -2166,7 +2339,7 @@ int main(int argc, char *argv[])
     if (tests.size() > 0)
         status = gdrcopy::testsuite::run_tests(print_summary, tests);
     else
-        status = gdrcopy::testsuite::run_all_tests(print_summary);
+        status = gdrcopy::testsuite::run_all_tests(print_summary, run_extended_test);
     if (status) {
         cerr << "Error: Encountered an error or a test failure with status=" << status << endl;
         return EXIT_FAILURE;
