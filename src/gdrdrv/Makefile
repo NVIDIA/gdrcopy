@@ -35,6 +35,10 @@ ifeq ($(HAVE_VM_FLAGS_SET),y)
 ccflags-y += -DGDRDRV_HAVE_VM_FLAGS_SET
 endif
 
+ifeq ($(HAVE_PROC_OPS),y)
+ccflags-y += -DGDRDRV_HAVE_PROC_OPS
+endif
+
 else
 
 KVER ?= $(shell uname -r)
@@ -49,6 +53,7 @@ export NVIDIA_IS_OPENSOURCE ?= $(shell grep -r "MODULE_LICENSE" $(NVIDIA_SRC_DIR
 
 CONF_SCRIPT_DIR ?= $(PWD)/../../scripts
 export HAVE_VM_FLAGS_SET ?= $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_VM_FLAGS_SET.sh -k $(KVER))
+export HAVE_PROC_OPS ?= $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_PROC_OPS.sh -k $(KVER))
 
 all: build
 
@@ -56,6 +61,7 @@ build:
 	@ echo "Picking NVIDIA driver sources from NVIDIA_SRC_DIR=$(NVIDIA_SRC_DIR). If that does not meet your expectation, you might have a stale driver still around and that might cause problems."
 	@ echo "Setting NVIDIA_IS_OPENSOURCE=$(NVIDIA_IS_OPENSOURCE)"
 	@ echo "Setting HAVE_VM_FLAGS_SET=$(HAVE_VM_FLAGS_SET)"
+	@ echo "Setting HAVE_PROC_OPS=$(HAVE_PROC_OPS)"
 	@ $(MAKE) -C $(KDIR) $(MAKE_PARAMS) M=$(PWD) modules
 
 install: build
