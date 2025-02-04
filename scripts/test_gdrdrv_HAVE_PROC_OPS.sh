@@ -43,10 +43,11 @@ makefile="${tmpfolder}/Makefile"
 
 cat >${testfile} <<EOF
 #include <linux/module.h>
-#include <linux/mm.h>
+#include <linux/proc_fs.h>
 static int __init test_dummy_init(void)
 {
     struct proc_ops pops;
+    memset(&pops, 0, sizeof(pops));
     return 0;
 }
 
