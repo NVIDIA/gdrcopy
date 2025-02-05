@@ -1568,12 +1568,21 @@ static int gdrdrv_proc_params_release(struct inode *inode, struct file *filp)
     return single_release(inode, filp);
 }
 
+#ifdef GDRDRV_HAVE_PROC_OPS
 static const struct proc_ops gdrdrv_proc_params_proc_ops = {
     .proc_open = gdrdrv_proc_params_open,
     .proc_read = seq_read,
     .proc_lseek = seq_lseek,
     .proc_release = gdrdrv_proc_params_release
 };
+#else
+static const struct file_operations gdrdrv_proc_params_proc_ops = {
+    .open = gdrdrv_proc_params_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = gdrdrv_proc_params_release
+};
+#endif
 
 static int gdrdrv_proc_ngp_refcount_read(struct seq_file *s, void *v)
 {
@@ -1591,12 +1600,21 @@ static int gdrdrv_proc_ngp_refcount_release(struct inode *inode, struct file *fi
     return single_release(inode, filp);
 }
 
+#ifdef GDRDRV_HAVE_PROC_OPS
 static const struct proc_ops gdrdrv_proc_ngp_refcount_proc_ops = {
     .proc_open = gdrdrv_proc_ngp_refcount_open,
     .proc_read = seq_read,
     .proc_lseek = seq_lseek,
     .proc_release = gdrdrv_proc_ngp_refcount_release
 };
+#else
+static const struct file_operations gdrdrv_proc_ngp_refcount_proc_ops = {
+    .open = gdrdrv_proc_ngp_refcount_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = gdrdrv_proc_ngp_refcount_release
+};
+#endif
 
 static int gdrdrv_procfs_init(void)
 {
