@@ -1,10 +1,40 @@
 libgdrapi (@FULL_VERSION@) stable; urgency=low
 
+  * See CHANGELOG.md.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 16 Dec 2024 11:59:59 -0700
+
+libgdrapi (2.4.4) stable; urgency=low
+
+  * No change.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 16 Dec 2024 11:59:59 -0700
+
+libgdrapi (2.4.3) stable; urgency=low
+
+  * No change.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 02 Dec 2024 11:59:59 -0700
+
+libgdrapi (2.4.2) stable; urgency=low
+
+  * Fix memory leak in gdr_pin_buffer.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Thu, 31 Oct 2024 11:59:59 -0700
+
+libgdrapi (2.4.1) stable; urgency=low
+
+  * No change
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 18 Dec 2023 11:59:59 -0700
+
+libgdrapi (2.4) stable; urgency=low
+
   * Introduce gdr_get_info_v2.
   * Introduce new copy algorithm for device mappings.
   * Add support for NVIDIA BLUEFIELD-3.
 
- -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Sep 2023 11:59:59 -0700
+ -- Pak Markthub <pmarkthub@nvidia.com>  Fri, 01 Sep 2023 11:59:59 -0700
 
 libgdrapi (2.3.1) stable; urgency=low
 

@@ -11,6 +11,10 @@
 - Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
 - Introduce /proc/driver/gdrdrv/params and /proc/driver/gdrdrv/nv\_get\_pages\_refcount.
 
+## [2.4.4] - 2024-12-16
+- Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
+- Fix the resource leakage bug in gdrdrv\_release.
+
 ## [2.4.3] - 2024-12-02
 - Fix NVIDIA\_IS\_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
 - Fix compile error in gdrdrv when compile on RHEL9.5.
@@ -101,7 +105,6 @@
   cudaMalloc'd memory via BAR1 mappings.
 - Add _validate_ unit test to ensure that gdrcopy functions as expected.
 - Add a script for packaging gdrcopy in the rpm format.
-
 
 [master]: https://github.com/NVIDIA/gdrcopy
 [2.4.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.3
