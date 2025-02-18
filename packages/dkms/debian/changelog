@@ -1,5 +1,39 @@
 gdrdrv-dkms (@FULL_VERSION@) stable; urgency=low
 
+  * See CHANGELOG.md.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 16 Dec 2024 11:59:59 -0700
+
+gdrdrv-dkms (2.4.4) stable; urgency=low
+
+  * Fix the use-after-free bug of mr objects in gdrdv_vma_close.
+  * Fix the resource leakage bug in gdrdrv_release.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 16 Dec 2024 11:59:59 -0700
+
+gdrdrv-dkms (2.4.3) stable; urgency=low
+
+  * Fix NVIDIA_IS_OPENSOURCE detection when compile with NVIDIA driver version 545 or newer.
+  * Fix compile error in gdrdrv when compile on RHEL9.5.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 02 Dec 2024 11:59:59 -0700
+
+gdrdrv-dkms (2.4.2) stable; urgency=low
+
+  * Fix the size alignment bug in gdrdrv.
+  * Add support for another flavor of BF3.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Thu, 31 Oct 2024 11:59:59 -0700
+
+gdrdrv-dkms (2.4.1) stable; urgency=low
+
+  * Add support for persistent mapping.
+  * Fix bug in src/gdrdrv/Makefile.
+
+ -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 18 Dec 2023 11:59:59 -0700
+
+gdrdrv-dkms (2.4) stable; urgency=low
+
   * Add support for NVIDIA BLUEFIELD-3.
   * Add support for Linux kernel >= 6.3.
   * Relicense gdrdrv to Dual MIT/GPL.
@@ -7,7 +41,7 @@ gdrdrv-dkms (@FULL_VERSION@) stable; urgency=low
   * Add support for coherent platforms such as Grace-Hopper.
   * Add support for Confidential Computing (CC).
 
- -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 01 Sep 2023 11:59:59 -0700
+ -- Pak Markthub <pmarkthub@nvidia.com>  Fri, 01 Sep 2023 11:59:59 -0700
 
 gdrdrv-dkms (2.3.1) stable; urgency=low
 
