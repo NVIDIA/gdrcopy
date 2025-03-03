@@ -154,7 +154,7 @@ __global__ void pp_data_gpu_produce_cpu_consume_kernel(uint32_t *gpu_flag_buf, u
         cpu_flag_buf_aref.store(i, cuda::std::memory_order_release);
 
         do {
-            flag_val = gpu_flag_buf.load(cuda::std::memory_order_acquire);
+            flag_val = gpu_flag_buf_aref.load(cuda::std::memory_order_acquire);
         }
         while (flag_val != i);
     }
