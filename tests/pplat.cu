@@ -377,6 +377,7 @@ int main(int argc, char *argv[])
     struct timespec beg, end;
     double lat_us;
     double timeout_us;
+    cudaError_t rc;
 
     while (1) {
         int c;
@@ -636,6 +637,13 @@ int main(int argc, char *argv[])
         // is running. We expect to see this status instead of CUDA_SUCCESS
         // because the kernel must wait for signal from CPU, which occurs after
         // this line.
+	rc = cudaGetLastError();
+        if (rc != cudaSuccess) {
+            fprintf(stderr, "pp_kernel launch failed with %s. Possible reasons include an incompatible PTX for a given GPU %d. Inspect NVCC_FLAGS in Makefile or "
+			    "refer to https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#options-for-steering-gpu-code-generation for more details.\n", cudaGetErrorName(rc), dev_id);
+	    ASSERT_EQ(rc, cudaSuccess);
+        }
+
         ASSERT_EQ(cuStreamQuery(0), CUDA_ERROR_NOT_READY);
 
         uint32_t i = 1;
