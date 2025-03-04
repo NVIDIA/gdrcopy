@@ -60,14 +60,14 @@ enum gdrcopy_msg_level {
 static int gdr_msg_level = GDRCOPY_MSG_ERROR;
 static int gdr_enable_logging = -1;
 
-static int gdr_mapping_type_counters[GDR_NUM_MAPPING_TYPE];
+static int gdr_mapping_type_counters[GDR_MAPPING_TYPE_MAX];
 
 // We need a strong fence when mix mapping is active.
 static inline bool gdr_has_mix_mapping()
 {
     int i;
     int num_type_with_nonzero_counter = 0;
-    for (i = 0; i < GDR_NUM_MAPPING_TYPE; ++i) {
+    for (i = 0; i < GDR_MAPPING_TYPE_MAX; ++i) {
         if (gdr_mapping_type_counters[i] != 0)
             ++num_type_with_nonzero_counter;
     }

@@ -67,8 +67,6 @@ struct gdr {
     uint32_t gdrdrv_version;
 };
 
-#define GDR_NUM_MAPPING_TYPE ((int)GDR_MAPPING_TYPE_DEVICE + 1)
-
 #ifdef __cplusplus
 }
 #endif

@@ -112,7 +112,8 @@ typedef enum gdr_mapping_type {
     GDR_MAPPING_TYPE_NONE = 0,
     GDR_MAPPING_TYPE_WC = 1,
     GDR_MAPPING_TYPE_CACHING = 2,
-    GDR_MAPPING_TYPE_DEVICE = 3
+    GDR_MAPPING_TYPE_DEVICE = 3,
+    GDR_MAPPING_TYPE_MAX  //< For internal use. Not an actual type.
 } gdr_mapping_type_t;
 
 // After pinning, info struct contains details of the mapped area.  
