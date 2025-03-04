@@ -349,14 +349,6 @@ static void print_usage(const char *path)
     cout << "                           Choices: gpumem, hostmem" << endl;
 }
 
-/**
- * Return time difference in us.
- */
-static inline double time_diff(struct timespec start, struct timespec end)
-{
-    return (double)((end.tv_nsec - start.tv_nsec) / 1000.0 + (end.tv_sec - start.tv_sec) * 1000000.0);
-}
-
 static inline void check_timeout(struct timespec start, double timeout_us)
 {
     CUresult status;
