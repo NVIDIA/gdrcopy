@@ -251,8 +251,10 @@ int main(int argc, char *argv[])
         cout << "user-space pointer: " << buf_ptr << endl;
 
         cout << "use cold cache: " << (use_cold_cache ? "yes" : "no") << endl;
-        if (use_cold_cache && info.mapping_type != GDR_MAPPING_TYPE_CACHING)
-            cout << "WARNING: Cold cache has no effect on other mappings except cache mapping" << endl;
+        if (use_cold_cache && info.mapping_type != GDR_MAPPING_TYPE_CACHING) {
+            cerr << "ERROR: Cold cache has no effect on other mappings except cache mapping" << endl;
+            exit(EXIT_FAILURE);
+        }
 
         // gdr_copy_to_mapping benchmark
         cout << endl;
