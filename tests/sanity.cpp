@@ -853,9 +853,6 @@ void data_validation_mix_mappings()
 
     ASSERTDRV(gfree_fn(&mhandle));
 
-    delete init_buf;
-    delete copy_buf;
-
     finalize_cuda(g_dev_id);
 }
 
