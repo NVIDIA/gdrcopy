@@ -45,15 +45,24 @@
 #endif
 
 /**
- * This is needed for pat_enabled()
+ * This is for PAT-awareness. pat_enabled is a GPL-only symbol. We can link only
+ * if all relevant licenses permit.
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,13,0) && defined(CONFIG_X86_64)
-#define GDRDRV_KERNEL_MAY_USE_PAT
+#define GDRDRV_KERNEL_MAY_USE_PAT 1
+
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+#define GDRDRV_CAN_CALL_PAT_ENABLED 1
+extern bool pat_enabled(void);
+#else
+#define GDRDRV_CAN_CALL_PAT_ENABLED 0
 #endif
 
-#if defined(GDRDRV_KERNEL_MAY_USE_PAT) && defined(GDRDRV_OPENSOURCE_NVIDIA)
-#include <arch/x86/include/asm/memtype.h>
+#else
+#define GDRDRV_KERNEL_MAY_USE_PAT 0
+#define GDRDRV_CAN_CALL_PAT_ENABLED 0
 #endif
+
 
 /**
  * This is needed for round_up()
@@ -119,21 +128,17 @@ void address_space_init_once(struct address_space *mapping)
 
 static inline bool gdrdrv_pat_enabled(void)
 {
-#ifdef GDRDRV_KERNEL_MAY_USE_PAT
-
-#ifdef GDRDRV_OPENSOURCE_NVIDIA
+#if GDRDRV_CAN_CALL_PAT_ENABLED
     // pat_enabled is GPL.
     return pat_enabled();
-#else
+#elif GDRDRV_KERNEL_MAY_USE_PAT
     // We cannot use pat_enabled here because it is GPL.
     // Assume that it is enabled to handle the worst case scenario.
     return true;
-#endif
-
 #else
-  // PAT is used on x86 only. It has been introduced in Linux v4.2. However, we
-  // check for PAT from Linux v5.13. See gdrdrv_io_remap_pfn_range for more info.
-  return false;
+    // PAT is used on x86 only. It has been introduced in Linux v4.2. However, we
+    // check for PAT from Linux v5.13. See gdrdrv_io_remap_pfn_range for more info.
+    return false;
 #endif
 }
 
@@ -1362,7 +1367,7 @@ static inline int __gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsign
 static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
 {
     int status = 0;
-#ifdef GDRDRV_KERNEL_MAY_USE_PAT
+#if GDRDRV_KERNEL_MAY_USE_PAT
     // Upstream Linux kernel has introduced track_pfn_remap in remap_pfn_range
     // since v5.13. On x86-64, PAT may be enabled. In that situation,
     // track_pfn_remap may fail if we do not call io_remap_pfn_range that
