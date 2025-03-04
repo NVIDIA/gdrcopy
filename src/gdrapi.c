@@ -1070,6 +1070,27 @@ out:
     return ret;
 }
 
+int gdr_get_mapping_type_string(gdr_mapping_type_t mapping_type, const char **pstr)
+{
+    switch (mapping_type) {
+        case GDR_MAPPING_TYPE_NONE:
+            *pstr = "None";
+            break;
+        case GDR_MAPPING_TYPE_WC:
+            *pstr = "Write Combining";
+            break;
+        case GDR_MAPPING_TYPE_CACHING:
+            *pstr = "Caching";
+            break;
+        case GDR_MAPPING_TYPE_DEVICE:
+            *pstr = "Device";
+            break;
+        default:
+            return EINVAL;
+    }
+    return 0;
+}
+
 
 /*
  * Local variables:

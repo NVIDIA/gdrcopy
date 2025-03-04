@@ -194,6 +194,9 @@ typedef enum gdr_attr {
 // To query an attribute associated with each memory handle, use gdr_get_info instead.
 int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v);
 
+// Get the string representing the mapping type.
+int gdr_get_mapping_type_string(gdr_mapping_type_t mapping_type, const char **pstr);
+
 #ifdef __cplusplus
 }
 #endif

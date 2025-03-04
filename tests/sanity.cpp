@@ -538,6 +538,8 @@ template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t fi
     bool use_v2 = false, uint32_t pin_flags = GDR_PIN_FLAG_DEFAULT>
 void data_validation()
 {
+    const char *mapping_type_str = NULL;
+
     expecting_exception_signal = false;
     MB();
 
@@ -587,7 +589,8 @@ void data_validation()
 
     ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
     ASSERT(info.mapped);
-    print_dbg("wc_mapping:%d mapping:%d mapped:%d\n", info.wc_mapping, (unsigned)info.mapping_type, info.mapped);
+    ASSERT_EQ(gdr_get_mapping_type_string(info.mapping_type, &mapping_type_str), 0);
+    print_dbg("mapping_type: %s, mapped: %d\n", mapping_type_str, info.mapped);
     int off = d_ptr - info.va;
     print_dbg("off: %d\n", off);
 
@@ -741,6 +744,8 @@ GDRCOPY_TEST(data_validation_vmmalloc)
 template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
 void data_validation_mix_mappings()
 {
+    const char *mapping_type_str = NULL;
+
     expecting_exception_signal = false;
     MB();
 
@@ -790,13 +795,15 @@ void data_validation_mix_mappings()
 
     ASSERT_EQ(gdr_get_info(g, mh_wc, &info_wc), 0);
     ASSERT(info_wc.mapped);
-    print_dbg("wc: mapping:%d mapped:%d\n", (unsigned)info_wc.mapping_type, info_wc.mapped);
+    ASSERT_EQ(gdr_get_mapping_type_string(info_wc.mapping_type, &mapping_type_str), 0);
+    print_dbg("wc: mapping_type: %s, mapped: %d\n", mapping_type_str, info_wc.mapped);
     int off_wc = d_ptr - info_wc.va;
     print_dbg("wc: off: %d\n", off_wc);
 
     ASSERT_EQ(gdr_get_info(g, mh_cache, &info_cache), 0);
     ASSERT(info_cache.mapped);
-    print_dbg("cache: mapping:%d mapped:%d\n", (unsigned)info_cache.mapping_type, info_cache.mapped);
+    ASSERT_EQ(gdr_get_mapping_type_string(info_cache.mapping_type, &mapping_type_str), 0);
+    print_dbg("cache: mapping_type: %s, mapped: %d\n", mapping_type_str, info_cache.mapped);
     int off_cache = d_ptr - info_cache.va;
     print_dbg("cache: off: %d\n", off_cache);
 
