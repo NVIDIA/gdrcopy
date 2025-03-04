@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
                     ASSERTDRV(cuMemcpy(d_A, (CUdeviceptr)init_buf, copy_size));
                 }
                 clock_gettime(MYCLOCK, &end);
-                lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
+                lat_us = time_diff(beg, end) / (double)iter;
                 printf("cuMemcpy_H2D \t %8zu \t %11.4f\n", copy_size, lat_us);
                 copy_size <<= 1;
             }
@@ -210,7 +210,7 @@ int main(int argc, char *argv[])
                     ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
                 }
                 clock_gettime(MYCLOCK, &end);
-                lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0) / (double)iter;
+                lat_us = time_diff(beg, end) / (double)iter;
                 printf("cuMemcpy_D2H \t %8zu \t %11.4f\n", copy_size, lat_us);
                 copy_size <<= 1;
             }
@@ -285,7 +285,7 @@ int main(int argc, char *argv[])
                 }
                 clock_gettime(MYCLOCK, &end);
 
-                lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                lat_us += time_diff(beg, end);
 
                 // Measure the cost of cuMemcpy. Remove that from the total
                 // latency.
@@ -295,7 +295,7 @@ int main(int argc, char *argv[])
                 }
                 clock_gettime(MYCLOCK, &end);
 
-                lat_us -= ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                lat_us -= time_diff(beg, end);
             }
             else {
                 clock_gettime(MYCLOCK, &beg);
@@ -305,7 +305,7 @@ int main(int argc, char *argv[])
                 }
                 clock_gettime(MYCLOCK, &end);
 
-                lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                lat_us += time_diff(beg, end);
             }
             lat_us = lat_us / (double)iter;
             printf("gdr_copy_to_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
@@ -338,7 +338,7 @@ int main(int argc, char *argv[])
                 }
                 clock_gettime(MYCLOCK, &end);
 
-                lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                lat_us += time_diff(beg, end);
 
                 // Measure the cost of cuMemsetD8 and remove that from the
                 // total latency.
@@ -348,7 +348,7 @@ int main(int argc, char *argv[])
                 }
                 clock_gettime(MYCLOCK, &end);
 
-                lat_us -= ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                lat_us -= time_diff(beg, end);
             }
             else {
                 clock_gettime(MYCLOCK, &beg);
@@ -358,7 +358,7 @@ int main(int argc, char *argv[])
                 }
                 clock_gettime(MYCLOCK, &end);
 
-                lat_us += ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+                lat_us += time_diff(beg, end);
             }
             lat_us = lat_us / (double)iter;
             printf("gdr_copy_from_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
