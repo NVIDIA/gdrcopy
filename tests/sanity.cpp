@@ -116,6 +116,25 @@ void vmm_filter()
 }
 #endif
 
+// This is the same as
+// CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES. However,
+// we may compile with an old CUDA toolkit such that this attribute is not
+// defined. In that case, we can still detect it with CUDA_ERROR_INVALID_VALUE.
+#define _CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES 100
+void coherent_platform_filter()
+{
+    int status = 0;
+    int attr;
+    CUdevice dev;
+    ASSERTDRV(cuCtxGetDevice(&dev));
+
+    status = cuDeviceGetAttribute(&attr, (CUdevice_attribute)_CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES, dev);
+    if (status == CUDA_ERROR_INVALID_VALUE || attr == 0)
+        exit(EXIT_WAIVED);
+
+    ASSERT(status == CUDA_SUCCESS && attr != 0);
+}
+
 /**
  * Sends given file descriptior via given socket
  *
@@ -519,6 +538,8 @@ template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t fi
     bool use_v2 = false, uint32_t pin_flags = GDR_PIN_FLAG_DEFAULT>
 void data_validation()
 {
+    const char *mapping_type_str = NULL;
+
     expecting_exception_signal = false;
     MB();
 
@@ -568,7 +589,8 @@ void data_validation()
 
     ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
     ASSERT(info.mapped);
-    print_dbg("wc_mapping:%d mapping:%d mapped:%d\n", info.wc_mapping, (unsigned)info.mapping_type, info.mapped);
+    ASSERT_EQ(gdr_get_mapping_type_string(info.mapping_type, &mapping_type_str), 0);
+    print_dbg("mapping_type: %s, mapped: %d\n", mapping_type_str, info.mapped);
     int off = d_ptr - info.va;
     print_dbg("off: %d\n", off);
 
@@ -718,6 +740,126 @@ GDRCOPY_TEST(data_validation_vmmalloc)
     data_validation<gpu_vmm_alloc, gpu_vmm_free, vmm_filter>();
 }
 #endif
+
+template <gpu_memalloc_fn_t galloc_fn, gpu_memfree_fn_t gfree_fn, filter_fn_t filter_fn>
+void data_validation_mix_mappings()
+{
+    const char *mapping_type_str = NULL;
+
+    expecting_exception_signal = false;
+    MB();
+
+    init_cuda(g_dev_id);
+    filter_fn();
+
+    const size_t _size = 256*1024+16;
+    const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
+
+    print_dbg("buffer size: %zu\n", size);
+    CUdeviceptr d_A;
+    gpu_mem_handle_t mhandle;
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    d_A = mhandle.ptr;
+
+    ASSERTDRV(cuMemsetD8(d_A, 0x7D, size));
+    ASSERTDRV(cuCtxSynchronize());
+
+    uint32_t *init_buf = new uint32_t[size / sizeof(uint32_t)];
+    uint32_t *copy_buf = new uint32_t[size / sizeof(uint32_t)];
+
+    init_hbuf_walking_bit(init_buf, size);
+    memset(copy_buf, 0x1F, size);
+
+    gdr_t g = gdr_open_safe();
+
+    gdr_mh_t mh_wc;
+    gdr_mh_t mh_cache;
+
+    CUdeviceptr d_ptr = d_A;
+
+    // tokens are optional in CUDA 6.0
+    // wave out the test if GPUDirectRDMA is not enabled
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh_wc), 0);
+    ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, 0, 0, &mh_cache), 0);
+
+    ASSERT_NEQ(mh_wc, null_mh);
+    ASSERT_NEQ(mh_cache, null_mh);
+
+    gdr_info_t info_wc;
+    gdr_info_t info_cache;
+
+    void *bar_ptr_wc  = NULL;
+    void *bar_ptr_cache  = NULL;
+    ASSERT_EQ(gdr_map_v2(g, mh_wc, &bar_ptr_wc, size, GDR_MAP_FLAG_REQ_WC_MAPPING), 0);
+    ASSERT_EQ(gdr_map_v2(g, mh_cache, &bar_ptr_cache, size, GDR_MAP_FLAG_REQ_CACHE_MAPPING), 0);
+
+    ASSERT_EQ(gdr_get_info(g, mh_wc, &info_wc), 0);
+    ASSERT(info_wc.mapped);
+    ASSERT_EQ(gdr_get_mapping_type_string(info_wc.mapping_type, &mapping_type_str), 0);
+    print_dbg("wc: mapping_type: %s, mapped: %d\n", mapping_type_str, info_wc.mapped);
+    int off_wc = d_ptr - info_wc.va;
+    print_dbg("wc: off: %d\n", off_wc);
+
+    ASSERT_EQ(gdr_get_info(g, mh_cache, &info_cache), 0);
+    ASSERT(info_cache.mapped);
+    ASSERT_EQ(gdr_get_mapping_type_string(info_cache.mapping_type, &mapping_type_str), 0);
+    print_dbg("cache: mapping_type: %s, mapped: %d\n", mapping_type_str, info_cache.mapped);
+    int off_cache = d_ptr - info_cache.va;
+    print_dbg("cache: off: %d\n", off_cache);
+
+    uint32_t *buf_ptr_wc = (uint32_t *)((char *)bar_ptr_wc + off_wc);
+    uint32_t *buf_ptr_cache = (uint32_t *)((char *)bar_ptr_cache + off_cache);
+
+    int errs = 0;
+
+    print_dbg("check 1: gdr_copy_to_bar() via wc + read back using gdr_copy_from_bar() via cache\n");
+    gdr_copy_to_mapping(mh_wc, buf_ptr_wc, init_buf, size);
+    gdr_copy_from_mapping(mh_cache, copy_buf, buf_ptr_cache, size);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
+    memset(copy_buf, 0x1F, size);
+    ASSERTDRV(cuMemsetD8(d_A, 0x7D, size));
+    ASSERTDRV(cuCtxSynchronize());
+
+    print_dbg("check 2: gdr_copy_to_bar() via cache + read back using gdr_copy_from_bar() via wc\n");
+    gdr_copy_to_mapping(mh_cache, buf_ptr_cache, init_buf, size);
+    gdr_copy_from_mapping(mh_wc, copy_buf, buf_ptr_wc, size);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
+    memset(copy_buf, 0x1F, size);
+    ASSERTDRV(cuMemsetD8(d_A, 0x7D, size));
+    ASSERTDRV(cuCtxSynchronize());
+
+    if (errs) {
+        print_dbg("%d failed checks\n", errs);
+        exit(EXIT_FAILURE);
+    }
+
+    print_dbg("unmapping\n");
+    ASSERT_EQ(gdr_unmap(g, mh_wc, bar_ptr_wc, size), 0);
+    ASSERT_EQ(gdr_unmap(g, mh_cache, bar_ptr_cache, size), 0);
+
+    print_dbg("unpinning\n");
+    ASSERT_EQ(gdr_unpin_buffer(g, mh_wc), 0);
+    ASSERT_EQ(gdr_unpin_buffer(g, mh_cache), 0);
+
+    ASSERT_EQ(gdr_close(g), 0);
+    if (copy_buf) {
+        delete [] copy_buf;
+        copy_buf = NULL;
+    }
+    if (init_buf) {
+        delete [] init_buf;
+        init_buf = NULL;
+    }
+
+    ASSERTDRV(gfree_fn(&mhandle));
+
+    finalize_cuda(g_dev_id);
+}
+
+GDRCOPY_TEST(data_validation_mix_mappings_cumemalloc)
+{
+    data_validation_mix_mappings<gpu_mem_alloc, gpu_mem_free, coherent_platform_filter>();
+}
 
 /**
  * This unit test ensures that accessing to gdr_map'ed region is not possible

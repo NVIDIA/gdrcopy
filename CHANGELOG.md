@@ -9,6 +9,7 @@
 - Fix nvidia\_p2p\_get\_pages\_persistent leakage in gdrdrv.
 - Introduce leakage\_pin\_pages\_fork\_cumemalloc unit test.
 - Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
+- Add support for mix mappings.
 - Introduce /proc/driver/gdrdrv/params and /proc/driver/gdrdrv/nv\_get\_pages\_refcount.
 
 ## [2.4.4] - 2024-12-16

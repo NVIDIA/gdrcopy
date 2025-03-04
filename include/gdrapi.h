@@ -112,7 +112,8 @@ typedef enum gdr_mapping_type {
     GDR_MAPPING_TYPE_NONE = 0,
     GDR_MAPPING_TYPE_WC = 1,
     GDR_MAPPING_TYPE_CACHING = 2,
-    GDR_MAPPING_TYPE_DEVICE = 3
+    GDR_MAPPING_TYPE_DEVICE = 3,
+    GDR_MAPPING_TYPE_MAX  //< For internal use. Not an actual type.
 } gdr_mapping_type_t;
 
 // After pinning, info struct contains details of the mapped area.  
@@ -143,6 +144,17 @@ int gdr_get_info_v2(gdr_t g, gdr_mh_t handle, gdr_info_v2_t *info);
 // affected by an offset. gdr_get_info can be used to calculate that
 // offset.
 int gdr_map(gdr_t g, gdr_mh_t handle, void **va, size_t size);
+
+typedef enum gdr_map_flags {
+    GDR_MAP_FLAG_DEFAULT = 0,
+    GDR_MAP_FLAG_REQ_WC_MAPPING = 1,
+    GDR_MAP_FLAG_REQ_CACHE_MAPPING = 2,
+    GDR_MAP_FLAG_REQ_DEVICE_MAPPING = 3
+} gdr_map_flags_t;
+
+// Create a user-space mapping of the memory handle. Users can request the
+// mapping type by passing `gdr_map_flags_t` as `flags`.
+int gdr_map_v2(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size, int flags);
 
 // get rid of a user-space mapping.
 // First invoke gdr_unmap() then gdr_unpin_buffer().
@@ -181,6 +193,9 @@ typedef enum gdr_attr {
 // This is for querying a system-wide attribute.
 // To query an attribute associated with each memory handle, use gdr_get_info instead.
 int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v);
+
+// Get the string representing the mapping type.
+int gdr_get_mapping_type_string(gdr_mapping_type_t mapping_type, const char **pstr);
 
 #ifdef __cplusplus
 }

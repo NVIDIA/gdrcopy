@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -58,6 +59,21 @@ enum gdrcopy_msg_level {
 
 static int gdr_msg_level = GDRCOPY_MSG_ERROR;
 static int gdr_enable_logging = -1;
+
+static int gdr_mapping_type_counters[GDR_MAPPING_TYPE_MAX] = {0,};
+
+// We need a strong fence when mix mapping is active.
+static inline bool gdr_has_mix_mapping()
+{
+    int i;
+    int num_type_with_nonzero_counter = 0;
+    for (i = 0; i < GDR_MAPPING_TYPE_MAX; ++i) {
+        if (gdr_mapping_type_counters[i] != 0)
+            ++num_type_with_nonzero_counter;
+    }
+
+    return (num_type_with_nonzero_counter > 1);
+}
 
 static void gdr_msg(enum gdrcopy_msg_level lvl, const char* fmt, ...)
 {
@@ -391,45 +407,109 @@ out:
     return ret;
 }
 
-int gdr_map(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size)
+int gdr_map_v2(gdr_t g, gdr_mh_t handle, void **ptr_va, size_t size, int flags)
 {
-    int ret = 0;
+    int status = 0;
+    int retcode;
     gdr_info_v2_t info = {0,};
     gdr_memh_t *mh = to_memh(handle);
+    size_t rounded_size;
+    off_t magic_off;
+    void *mmio = NULL;
+    struct GDRDRV_IOC_REQ_MAPPING_TYPE_PARAMS params;
 
     if (gdr_is_mapped(mh->mapping_type)) {
         gdr_err("mh is mapped already\n");
-        return EAGAIN;
+        status = EAGAIN;
+        goto out;
     }
-    size_t rounded_size = (size + g->page_size - 1) & g->page_mask;
-    off_t magic_off = (off_t)mh->handle << g->page_shift;
-    void *mmio = mmap(NULL, rounded_size, PROT_READ|PROT_WRITE, MAP_SHARED, g->fd, magic_off);
+
+    switch (flags) {
+        case GDR_MAP_FLAG_DEFAULT:
+            params.mapping_type = GDR_MR_NONE;
+            break;
+
+        case GDR_MAP_FLAG_REQ_WC_MAPPING:
+            params.mapping_type = GDR_MR_WC;
+            break;
+
+        case GDR_MAP_FLAG_REQ_CACHE_MAPPING:
+            params.mapping_type = GDR_MR_CACHING;
+            break;
+
+        case GDR_MAP_FLAG_REQ_DEVICE_MAPPING:
+            params.mapping_type = GDR_MR_DEVICE;
+            break;
+
+        default:
+            gdr_err("encounter unsupported gdr_map_flags\n");
+            status = EINVAL;
+            goto out;
+    }
+
+    // We might be using an old version of gdrdrv that does not support changing the mapping type.
+    // Still, the user might request the mapping type that gdrdrv provides by default.
+    // We check that the requested mapping type and what we get from gdrdrv match at the end.
+    if (g->gdrdrv_version >= GDRDRV_MINIMUM_VERSION_WITH_REQ_MAPPING_TYPE) {
+        params.handle = mh->handle;
+        retcode = ioctl(g->fd, GDRDRV_IOC_REQ_MAPPING_TYPE, &params);
+        if (0 != retcode) {
+            status = errno;
+            gdr_err("ioctl error (errno=%d)\n", status);
+            goto out;
+        }
+    }
+
+    rounded_size = (size + g->page_size - 1) & g->page_mask;
+    magic_off = (off_t)mh->handle << g->page_shift;
+    mmio = mmap(NULL, rounded_size, PROT_READ|PROT_WRITE, MAP_SHARED, g->fd, magic_off);
     if (mmio == MAP_FAILED) {
-        int __errno = errno;
+        status = errno;
         mmio = NULL;
         gdr_err("error %s(%d) while mapping handle %x, rounded_size=%zu offset=%llx\n",
-                strerror(__errno), __errno, handle, rounded_size, (long long unsigned)magic_off);
-        ret = __errno;
-        goto err;
+                strerror(status), status, handle, rounded_size, (long long unsigned)magic_off);
+        goto out;
     }
     *ptr_va = mmio;
-    ret = gdr_get_info_v2(g, handle, &info);
-    if (ret) {
-        gdr_err("error %d from get_info, munmapping before exiting\n", ret);
-        munmap(mmio, rounded_size);
-        goto err;
+
+    status = gdr_get_info_v2(g, handle, &info);
+    if (status) {
+        gdr_err("error %d from get_info, munmapping before exiting\n", status);
+        goto out;
     }
+
     if (!gdr_is_mapped(info.mapping_type)) {
         // Race could cause this issue.
         // E.g., gdr_map and cuMemFree are triggered concurrently.
         // The above mmap is successful but cuMemFree causes unmapping immediately.
         gdr_err("mh is not mapped\n");
-        ret = EAGAIN;
+        status = EAGAIN;
+        goto out;
     }
+
+    if (flags != GDR_MAP_FLAG_DEFAULT && info.mapping_type != params.mapping_type) {
+        gdr_err("gdrdrv cannot fulfill the reqeusted mapping type. It might be too old.\n");
+        status = EINVAL;
+        goto out;
+    }
+
     mh->mapping_type = info.mapping_type;
     gdr_dbg("mapping_type=%d\n", mh->mapping_type);
- err:
-    return ret;
+
+    // GDRCopy is not thread-safe. We use normal increment instead of atomic.
+    ++gdr_mapping_type_counters[mh->mapping_type];
+
+out:
+    if (status) {
+        if (mmio)
+            munmap(mmio, rounded_size);
+    }
+    return status;
+}
+
+int gdr_map(gdr_t g, gdr_mh_t handle, void **va, size_t size)
+{
+    return gdr_map_v2(g, handle, va, size, GDR_MAP_FLAG_DEFAULT);
 }
 
 int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
@@ -453,6 +533,13 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
         ret = __errno;
         goto err;
     }
+
+    // gdr_mapping_type_counters may not reflect the number of mappings on this
+    // system. For example, users may rely on gdrdrv to automatically unmap
+    // when calling cudaFree (non-persistent mapping) or gdr_unpin_buffer. We
+    // treat those cases as a user error.
+    --gdr_mapping_type_counters[mh->mapping_type];
+
     mh->mapping_type = GDR_MAPPING_TYPE_NONE;
  err:
     return ret;
@@ -476,6 +563,7 @@ extern int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes
 extern int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes);
 extern int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes);
 static inline void wc_store_fence(void) { _mm_sfence(); }
+static inline void memory_fence(void) { _mm_mfence() ; }
 #define PREFERS_STORE_UNROLL4 0
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
@@ -489,6 +577,7 @@ static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes
 static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
 static inline void wc_store_fence(void) { asm volatile("sync") ; }
+static inline void memory_fence(void) { asm volatile("sync") ; }
 #define PREFERS_STORE_UNROLL4 1
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
@@ -501,7 +590,8 @@ static int memcpy_cached_store_avx(void *dest, const void *src, size_t n_bytes) 
 static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
 static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
-static inline void wc_store_fence(void) { asm volatile("DMB ishld") ; }
+static inline void wc_store_fence(void) { asm volatile("DMB st") ; }
+static inline void memory_fence(void) { asm volatile("DMB sy") ; }
 #define PREFERS_STORE_UNROLL4 0
 #define PREFERS_STORE_UNROLL8 0
 #define PREFERS_LOAD_UNROLL4  0
@@ -763,7 +853,13 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
     } while (0);
 
 do_fence:
-    if (wc_mapping) {
+    if (gdr_has_mix_mapping()) {
+        // All combinations of (ld, st) followed by (ld, st) targetting the
+        // same CUDA buffer is possible. When using multiple mapping types
+        // targeting the same buffer, we need memory fence to guarantee the
+        // program order.
+        memory_fence();
+    } else if (wc_mapping) {
         // fencing is needed even for plain memcpy(), due to performance
         // being hit by delayed flushing of WC buffers
         wc_store_fence();
@@ -820,6 +916,14 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
         // if (wc_mapping)
         //    wc_store_fence();
     } while (0);
+
+    if (gdr_has_mix_mapping()) {
+        // All combinations of (ld, st) followed by (ld, st) targetting the
+        // same CUDA buffer is possible. When using multiple mapping types
+        // targeting the same buffer, we need memory fence to guarantee the
+        // program order.
+        memory_fence();
+    }
     
     return 0;
 }
@@ -964,6 +1068,27 @@ int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_v1_t *info)
 
 out:
     return ret;
+}
+
+int gdr_get_mapping_type_string(gdr_mapping_type_t mapping_type, const char **pstr)
+{
+    switch (mapping_type) {
+        case GDR_MAPPING_TYPE_NONE:
+            *pstr = "None";
+            break;
+        case GDR_MAPPING_TYPE_WC:
+            *pstr = "Write Combining";
+            break;
+        case GDR_MAPPING_TYPE_CACHING:
+            *pstr = "Caching";
+            break;
+        case GDR_MAPPING_TYPE_DEVICE:
+            *pstr = "Device";
+            break;
+        default:
+            return EINVAL;
+    }
+    return 0;
 }
 
 
