@@ -1217,22 +1217,27 @@ static int gdrdrv_req_mapping_type(gdr_info_t *info, void __user *_params)
                 ret = -EOPNOTSUPP;
                 goto out;
             }
-            fallthrough;
+            break;
         case GDR_MR_WC:
             if (gdrdrv_cpu_must_use_device_mapping) {
                 ret = -EOPNOTSUPP;
                 goto out;
             }
-            fallthrough;
+            break;
         case GDR_MR_DEVICE:
+            if (!gdrdrv_cpu_must_use_device_mapping) {
+                ret = -EOPNOTSUPP;
+                goto out;
+            }
+            break;
         case GDR_MR_NONE:
-            mr->req_mapping_type = params.mapping_type;
             break;
         default:
             gdr_err("Unknown request_mapping_type=%d\n", params.mapping_type);
             ret = -EINVAL;
             goto out;
     }
+    mr->req_mapping_type = params.mapping_type;
 
 out:
     if (mr)
