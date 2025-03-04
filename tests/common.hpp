@@ -167,5 +167,11 @@ namespace gdrcopy {
         bool check_gdr_support(CUdevice dev);
 
         void print_histogram(double *lat_arr, int count, int *bin_arr, int num_bins, double min, double max);
+
+        // Calculate the elapsed time in microseconds
+        static inline double time_diff(struct timespec beg, struct timespec end)
+        {
+            return ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
+        }
     }
 }

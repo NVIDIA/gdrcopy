@@ -108,8 +108,8 @@ void run_test(CUdeviceptr d_A, size_t size)
         double woMBps;
         {
             double byte_count = (double) copy_size * num_write_iters;
-            double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
-            double Bps = byte_count / dt_ms * 1e3;
+            double dt_us = time_diff(beg, end);
+            double Bps = byte_count / dt_us * 1e6;
             woMBps = Bps / 1024.0 / 1024.0;
             cout << "write BW: " << woMBps << "MB/s" << endl;
         }
@@ -126,8 +126,8 @@ void run_test(CUdeviceptr d_A, size_t size)
         double roMBps;
         {
             double byte_count = (double) copy_size * num_read_iters;
-            double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
-            double Bps = byte_count / dt_ms * 1e3;
+            double dt_ms = time_diff(beg, end);
+            double Bps = byte_count / dt_ms * 1e6;
             roMBps = Bps / 1024.0 / 1024.0;
             cout << "read BW: " << roMBps << "MB/s" << endl;
         }

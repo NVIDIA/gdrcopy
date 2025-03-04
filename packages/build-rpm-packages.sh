@@ -101,7 +101,7 @@ FULL_VERSION="${VERSION}"
 
 if [[ ${generate_kmod} == 1 ]]; then
     if [ -z "${NVIDIA_SRC_DIR}" ]; then
-	NVIDIA_SRC_DIR=$(find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.h" -print -quit 2>/dev/null)
+	NVIDIA_SRC_DIR=$(find /usr/src/kernel-modules/nvidia-* /usr/src/nvidia-* -name "nv-p2p.c" -print -quit 2>/dev/null)
         if [ ${#NVIDIA_SRC_DIR} -gt 0 ]; then
             NVIDIA_SRC_DIR=$(dirname ${NVIDIA_SRC_DIR})
         fi

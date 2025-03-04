@@ -83,7 +83,7 @@ int gdr_pin_buffer(gdr_t g, unsigned long addr, size_t size, uint64_t p2p_token,
 typedef enum gdr_pin_flags {
     GDR_PIN_FLAG_DEFAULT = 0,
     GDR_PIN_FLAG_FORCE_PCIE = 1
-} gdr_ping_flags_t;
+} gdr_pin_flags_t;
 
 // Create a peer-to-peer mapping of the device memory buffer, returning an opaque handle.
 // P2P tokens are deprecated, so dropping them here.

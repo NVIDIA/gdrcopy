@@ -37,10 +37,32 @@
 #include <linux/timex.h>
 #include <linux/timer.h>
 #include <linux/pci.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
 #include <linux/sched/signal.h>
 #endif
+
+/**
+ * This is for PAT-awareness. pat_enabled is a GPL-only symbol. We can link only
+ * if all relevant licenses permit.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,13,0) && defined(CONFIG_X86_64)
+#define GDRDRV_KERNEL_MAY_USE_PAT 1
+
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+#define GDRDRV_CAN_CALL_PAT_ENABLED 1
+extern bool pat_enabled(void);
+#else
+#define GDRDRV_CAN_CALL_PAT_ENABLED 0
+#endif
+
+#else
+#define GDRDRV_KERNEL_MAY_USE_PAT 0
+#define GDRDRV_CAN_CALL_PAT_ENABLED 0
+#endif
+
 
 /**
  * This is needed for round_up()
@@ -79,6 +101,10 @@ static int gdrdrv_cpu_must_use_device_mapping = 0;
 
 //-----------------------------------------------------------------------------
 
+static atomic64_t gdrdrv_nv_get_pages_refcount = ATOMIC_INIT(0);
+
+//-----------------------------------------------------------------------------
+
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
 /**
  * This API is available after Linux kernel 2.6.32
@@ -107,6 +133,21 @@ void address_space_init_once(struct address_space *mapping)
 }
 #endif
 
+static inline bool gdrdrv_pat_enabled(void)
+{
+#if GDRDRV_CAN_CALL_PAT_ENABLED
+    // pat_enabled is GPL.
+    return pat_enabled();
+#elif GDRDRV_KERNEL_MAY_USE_PAT
+    // We cannot use pat_enabled here because it is GPL.
+    // Assume that it is enabled to handle the worst case scenario.
+    return true;
+#else
+    // PAT is used on x86 only. It has been introduced in Linux v4.2. However, we
+    // check for PAT from Linux v5.13. See gdrdrv_io_remap_pfn_range for more info.
+    return false;
+#endif
+}
 
 #ifndef GDRDRV_HAVE_VM_FLAGS_SET
 /**
@@ -264,6 +305,8 @@ static int info_enabled = 0;
     gdr_msg(KERN_DEBUG, FMT, ## ARGS)
 
 static int use_persistent_mapping = 0;
+
+static struct proc_dir_entry *gdrdrv_proc_dir_entry = NULL;
 
 //-----------------------------------------------------------------------------
 
@@ -508,6 +551,10 @@ static void gdr_free_mr_unlocked(gdr_mr_t *mr)
             gdr_err("nvidia_p2p_put_pages error %d, async callback may have been fired\n", status);
         }
         #endif
+
+        if (!status) {
+            atomic64_fetch_dec(&gdrdrv_nv_get_pages_refcount);
+        }
     } else {
         gdr_dbg("invoking unpin_buffer while callback has already been fired\n");
 
@@ -535,11 +582,6 @@ static int gdrdrv_release(struct inode *inode, struct file *filp)
     if (!info) {
         gdr_err("filp contains no info\n");
         return -EIO;
-    }
-    // Check that the caller is the same process that did gdrdrv_open
-    if (!gdrdrv_check_same_process(info, current)) {
-        gdr_dbg("filp is not opened by the current process\n");
-        return -EACCES;
     }
 
     mutex_lock(&info->lock);
@@ -651,6 +693,8 @@ static void gdrdrv_get_pages_free_callback(void *data)
     page_table = mr->page_table;
     if (page_table) {
         nvidia_p2p_free_page_table(page_table);
+        // NVIDIA driver takes back those pages. Decrement the refcount here.
+        atomic64_fetch_dec(&gdrdrv_nv_get_pages_refcount);
         if (gdr_mr_is_mapped(mr))
             gdr_mr_destroy_all_mappings(mr);
     } else {
@@ -796,6 +840,10 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
     gdr_info("invoking nvidia_p2p_get_pages(va=0x%llx len=%lld p2p_tok=%llx va_tok=%x callback=%px)\n",
              mr->va, mr->mapped_size, mr->p2p_token, mr->va_space, free_callback_fn);
     #endif
+
+    if (!ret) {
+        atomic64_fetch_inc(&gdrdrv_nv_get_pages_refcount);
+    }
 
     #ifndef CONFIG_ARM64
     tb = get_cycles();
@@ -1385,7 +1433,7 @@ static const struct vm_operations_struct gdrdrv_vm_ops = {
  * reimplement io_remap_pfn_range according to the Linux kernel 5.17.15, which
  * predates support for Intel CC.
  */
-static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
+static inline int __gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
 {
 #if defined(GDRDRV_OPENSOURCE_NVIDIA) || !((defined(CONFIG_X86_64) || defined(CONFIG_X86_32)) && IS_ENABLED(CONFIG_ARCH_HAS_CC_PLATFORM))
     return io_remap_pfn_range(vma, vaddr, pfn, size, prot);
@@ -1397,6 +1445,46 @@ static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned
 
     return remap_pfn_range(vma, vaddr, pfn, size, __pgprot(__sme_clr(pgprot_val(prot))));
 #endif
+}
+
+/*----------------------------------------------------------------------------*/
+
+static inline int gdrdrv_io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr, unsigned long pfn, size_t size, pgprot_t prot)
+{
+    int status = 0;
+#if GDRDRV_KERNEL_MAY_USE_PAT
+    // Upstream Linux kernel has introduced track_pfn_remap in remap_pfn_range
+    // since v5.13. On x86-64, PAT may be enabled. In that situation,
+    // track_pfn_remap may fail if we do not call io_remap_pfn_range that
+    // covers the entire VMA -- see
+    // https://elixir.bootlin.com/linux/v5.13/source/arch/x86/mm/pat/memtype.c#L1047-L1055.
+    // As a WAR, we call io_remap_pfn_range for each host `PAGE_SIZE` one by
+    // one until we cover the entire `size`.
+    BUG_ON(!vma);
+    if (gdrdrv_pat_enabled() && !(vaddr == vma->vm_start && size == (vma->vm_end - vma->vm_start))) {
+        size_t remaining_size = size;
+        unsigned long chunk_pfn = pfn;
+        unsigned long chunk_vaddr = vaddr;
+        const unsigned long chunk_size = PAGE_SIZE;
+        BUG_ON(size % PAGE_SIZE != 0);
+        while (remaining_size > 0) {
+            status = __gdrdrv_io_remap_pfn_range(vma, chunk_vaddr, chunk_pfn, chunk_size, prot);
+            if (status) {
+                gdr_err("Error %d in __gdrdrv_io_remap_pfn_range chunk_vaddr=%#lx, chunk_pfn=%#lx, chunk_size=%zu\n", status, chunk_vaddr, chunk_pfn, chunk_size);
+                return status;
+            }
+            chunk_vaddr += chunk_size;
+            ++chunk_pfn;
+            remaining_size -= chunk_size;
+        }
+    }
+    else
+#endif
+    {
+        status = __gdrdrv_io_remap_pfn_range(vma, vaddr, pfn, size, prot);
+    }
+
+    return status;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1623,6 +1711,127 @@ out:
 
 //-----------------------------------------------------------------------------
 
+static int gdrdrv_proc_params_read(struct seq_file *s, void *v)
+{
+    seq_printf(s, "Version: %s\n", GDRDRV_VERSION_STRING);
+    seq_printf(s, "Built for NVIDIA driver flavor: %s\n", GDRDRV_BUILT_FOR_NVIDIA_FLAVOR_STRING);
+    seq_printf(s, "Use persistent mapping: %s\n", gdr_use_persistent_mapping() ? "yes" : "no");
+    seq_printf(s, "dbg_enabled: %d\n", dbg_enabled);
+    seq_printf(s, "info_enabled: %d\n", info_enabled);
+    return 0;
+}
+
+static int gdrdrv_proc_params_open(struct inode *inode, struct file *filp)
+{
+    return single_open(filp, gdrdrv_proc_params_read, NULL);
+}
+
+static int gdrdrv_proc_params_release(struct inode *inode, struct file *filp)
+{
+    return single_release(inode, filp);
+}
+
+#ifdef GDRDRV_HAVE_PROC_OPS
+static const struct proc_ops gdrdrv_proc_params_proc_ops = {
+    .proc_open = gdrdrv_proc_params_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = gdrdrv_proc_params_release
+};
+#else
+static const struct file_operations gdrdrv_proc_params_proc_ops = {
+    .open = gdrdrv_proc_params_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = gdrdrv_proc_params_release
+};
+#endif
+
+static int gdrdrv_proc_ngp_refcount_read(struct seq_file *s, void *v)
+{
+    seq_printf(s, "%lld\n", atomic64_read(&gdrdrv_nv_get_pages_refcount));
+    return 0;
+}
+
+static int gdrdrv_proc_ngp_refcount_open(struct inode *inode, struct file *filp)
+{
+    return single_open(filp, gdrdrv_proc_ngp_refcount_read, NULL);
+}
+
+static int gdrdrv_proc_ngp_refcount_release(struct inode *inode, struct file *filp)
+{
+    return single_release(inode, filp);
+}
+
+#ifdef GDRDRV_HAVE_PROC_OPS
+static const struct proc_ops gdrdrv_proc_ngp_refcount_proc_ops = {
+    .proc_open = gdrdrv_proc_ngp_refcount_open,
+    .proc_read = seq_read,
+    .proc_lseek = seq_lseek,
+    .proc_release = gdrdrv_proc_ngp_refcount_release
+};
+#else
+static const struct file_operations gdrdrv_proc_ngp_refcount_proc_ops = {
+    .open = gdrdrv_proc_ngp_refcount_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = gdrdrv_proc_ngp_refcount_release
+};
+#endif
+
+static int gdrdrv_procfs_init(void)
+{
+    int status = 0;
+    char gdrdrv_proc_dir_name[20];
+    int gdrdrv_proc_dir_mode = (S_IFDIR | S_IRUGO | S_IXUGO);
+
+    struct proc_dir_entry *entry;
+    int entry_mode = (S_IFREG | S_IRUGO);
+
+    snprintf(gdrdrv_proc_dir_name, sizeof(gdrdrv_proc_dir_name), "driver/%s", DEVNAME);
+    gdrdrv_proc_dir_name[sizeof(gdrdrv_proc_dir_name) - 1] = '\0';
+
+    gdrdrv_proc_dir_entry = proc_mkdir_mode(gdrdrv_proc_dir_name, gdrdrv_proc_dir_mode, NULL);
+    if (!gdrdrv_proc_dir_entry) {
+        status = EINVAL;
+        goto out;
+    }
+
+    entry = proc_create("params", entry_mode, gdrdrv_proc_dir_entry, &gdrdrv_proc_params_proc_ops);
+    if (!entry) {
+        status = EINVAL;
+        goto out;
+    }
+
+    if (dbg_enabled) {
+        entry_mode = (S_IFREG | S_IRUSR | S_IRGRP);
+        entry = proc_create("nv_get_pages_refcount", entry_mode, gdrdrv_proc_dir_entry, &gdrdrv_proc_ngp_refcount_proc_ops);
+        if (!entry) {
+            status = EINVAL;
+            goto out;
+        }
+    }
+
+out:
+    if (status) {
+        if (gdrdrv_proc_dir_entry) {
+            proc_remove(gdrdrv_proc_dir_entry);
+            gdrdrv_proc_dir_entry = NULL;
+        }
+    }
+    return status;
+}
+
+static void gdrdrv_procfs_cleanup(void)
+{
+    if (gdrdrv_proc_dir_entry)
+        proc_remove(gdrdrv_proc_dir_entry);
+
+    gdrdrv_proc_dir_entry = NULL;
+}
+
+//-----------------------------------------------------------------------------
+
 struct file_operations gdrdrv_fops = {
     .owner    = THIS_MODULE,
 
@@ -1693,6 +1902,8 @@ static int __init gdrdrv_init(void)
     if (gdr_use_persistent_mapping())
         gdr_msg(KERN_INFO, "Persistent mapping will be used\n");
 
+    gdrdrv_procfs_init();
+
     return 0;
 }
 
@@ -1700,10 +1911,19 @@ static int __init gdrdrv_init(void)
 
 static void __exit gdrdrv_cleanup(void)
 {
+    int64_t last_nv_get_pages_refcount;
     gdr_msg(KERN_INFO, "unregistering major number %d\n", gdrdrv_major);
+
+    gdrdrv_procfs_cleanup();
 
     /* cleanup_module is never called if registering failed */
     unregister_chrdev(gdrdrv_major, DEVNAME);
+
+    last_nv_get_pages_refcount = atomic64_read(&gdrdrv_nv_get_pages_refcount);
+    if (dbg_enabled)
+        WARN_ON(0 != last_nv_get_pages_refcount);
+    else
+        BUG_ON(0 != last_nv_get_pages_refcount);
 }
 
 //-----------------------------------------------------------------------------

@@ -38,11 +38,24 @@ namespace gdrcopy {
             return _test_map;
         }
 
+        TestMap *get_extended_test_map()
+        {
+            static TestMap *_extended_test_map = NULL;
+            if (!_extended_test_map)
+                _extended_test_map = new TestMap();
+            return _extended_test_map;
+        }
+
         void get_all_test_names(std::vector<std::string>& names)
         {
             TestMap *test_map = get_test_map();
-            
-            names.clear();
+            for (TestMap::iterator it = test_map->begin(); it != test_map->end(); ++it)
+                names.emplace_back(it->first);
+        }
+
+        void get_all_extended_test_names(std::vector<std::string>& names)
+        {
+            TestMap *test_map = get_extended_test_map();
             for (TestMap::iterator it = test_map->begin(); it != test_map->end(); ++it)
                 names.emplace_back(it->first);
         }
@@ -50,20 +63,25 @@ namespace gdrcopy {
         int run_tests(bool print_summary, std::vector<std::string> tests)
         {
             TestMap *test_map = get_test_map();
+            TestMap *extended_test_map = get_extended_test_map();
 
             std::vector<std::string> success_tests;
             std::vector<std::string> failed_tests;
             std::vector<std::string> waived_tests;
 
             for (std::vector<std::string>::iterator it = tests.begin(); it != tests.end(); ++it) {
-                if (test_map->find(*it) == test_map->end()) {
+                if ((test_map->find(*it) == test_map->end()) && (extended_test_map->find(*it) == extended_test_map->end())) {
                     gdrcopy::test::print_dbg("Error: Encountered unknown test %s\n", *it);
                     return EINVAL;
                 }
             }
 
             for (std::vector<std::string>::iterator it = tests.begin(); it != tests.end(); ++it) {
-                test_status_t status = (*test_map)[*it]->run();
+                test_status_t status;
+                if (test_map->find(*it) != test_map->end())
+                    status = (*test_map)[*it]->run();
+                else
+                    status = (*extended_test_map)[*it]->run();
                 switch (status) {
                     case TEST_STATUS_SUCCESS:
                         success_tests.push_back(*it);
@@ -108,14 +126,16 @@ namespace gdrcopy {
             return TEST_STATUS_SUCCESS;
         }
 
-        int run_all_tests(bool print_summary)
+        int run_all_tests(bool print_summary, bool enable_extended_tests = false)
         {
             std::vector<std::string> tests;
             get_all_test_names(tests);
+            if (enable_extended_tests)
+                get_all_extended_test_names(tests);
             return run_tests(print_summary, tests);
         }
 
-        Test::Test(std::string name) : t_name(name)
+        Test::Test(std::string name, bool is_extended_test) : t_name(name), is_extended_test(is_extended_test)
         {
             register_test();
         }
@@ -230,7 +250,7 @@ out:
 
         void Test::register_test()
         {
-            TestMap *test_map = get_test_map();
+            TestMap *test_map = (this->is_extended_test ? get_extended_test_map() : get_test_map());
             ASSERT(test_map->find(t_name) == test_map->end());
             (*test_map)[t_name] = this;
         }
