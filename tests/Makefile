@@ -13,7 +13,7 @@ LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64 -L $(GDRAPI_SRC)
 COMMONCFLAGS := -O2
 CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
-NVCCFLAGS ?= -arch compute_60 -code compute_60,sm_60
+NVCCFLAGS ?= -arch compute_75 -code compute_75,sm_75
 LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
 CPP_SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
