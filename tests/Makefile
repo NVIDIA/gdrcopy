@@ -1,6 +1,7 @@
 DESTBIN ?= 
 CUDA ?= /usr/local/cuda
 NVCC ?= $(CUDA)/bin/nvcc
+GET_CUDA_GENCODE ?= ../scripts/get_cuda_gencode.sh
 
 GDRAPI_INC := ../include
 GDRAPI_SRC := ../src
@@ -13,7 +14,10 @@ LDFLAGS  := $(CUDA_LIB) -L $(CUDA)/lib64 -L $(GDRAPI_SRC)
 COMMONCFLAGS := -O2
 CFLAGS   += $(COMMONCFLAGS)
 CXXFLAGS += $(COMMONCFLAGS)
-NVCCFLAGS ?= -arch compute_60 -code compute_60,sm_60
+
+# Get NVCC flags for compute capabilities from shell script
+NVCCFLAGS ?= $(shell $(GET_CUDA_GENCODE) $(NVCC))
+
 LIBS     := -lcuda -lpthread -ldl -lgdrapi
 
 CPP_SRCS := copybw.cpp sanity.cpp copylat.cpp apiperf.cpp
