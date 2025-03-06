@@ -97,7 +97,7 @@ void run_test(CUdeviceptr d_A, size_t size)
 
             for (iter = 0; iter < num_warmup_iters; ++iter) {
 
-                BREAK_IF_NEQ(gdr_pin_buffer(g, d_A, actual_pin_size, 0, 0, &mh), 0);
+                ASSERT_EQ(gdr_pin_buffer(g, d_A, actual_pin_size, 0, 0, &mh), 0);
                 ASSERT_NEQ(mh, null_mh);
 
                 void *map_d_ptr  = NULL;
@@ -112,7 +112,7 @@ void run_test(CUdeviceptr d_A, size_t size)
             for (iter = 0; iter < num_iters; ++iter) {
 
                 clock_gettime(MYCLOCK, &beg);
-                BREAK_IF_NEQ(gdr_pin_buffer(g, d_A, actual_pin_size, 0, 0, &mh), 0);
+                ASSERT_EQ(gdr_pin_buffer(g, d_A, actual_pin_size, 0, 0, &mh), 0);
                 clock_gettime(MYCLOCK, &end);
                 delta_lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
                 pin_lat_us += delta_lat_us;
