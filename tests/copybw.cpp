@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2021, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2014-2025, NVIDIA CORPORATION. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,6 +28,8 @@
 #include <iostream>
 #include <iomanip>
 #include <cuda.h>
+#include <vector>
+#include <cstdbool>
 
 using namespace std;
 
@@ -40,9 +42,9 @@ using namespace gdrcopy::test;
 int num_write_iters = 10000;
 int num_read_iters  = 100;
 size_t _size = 128*1024;
-size_t copy_size = 0;
 size_t copy_offset = 0;
 int dev_id = 0;
+std::vector<size_t> copy_size;
 
 void print_usage(const char *path)
 {
@@ -51,8 +53,9 @@ void print_usage(const char *path)
     cout << "Options:" << endl;
     cout << "   -h              Print this help text" << endl;
     cout << "   -s <size>       Buffer allocation size (default: " << _size << ")" << endl;
-    cout << "   -c <size>       Copy size (default: " << copy_size << ")" << endl;
+    cout << "   -c <size>       Copy size (default: " << _size << ", if -l is not set. if -l option is set, -c is used to dictate upper bound for run copy size.)" << endl;
     cout << "   -o <offset>     Copy offset (default: " << copy_offset << ")" << endl;
+    cout << "   -l              Run copy sizes from 1B to ROUND_DOWN_POW_2(copy_size), where copy_size is dictated by -c option" << endl;
     cout << "   -d <gpu>        GPU ID (default: " << dev_id << ")" << endl;
     cout << "   -w <iters>      Number of write iterations (default: " << num_write_iters << ")" << endl;
     cout << "   -r <iters>      Number of read iterations (default: " << num_read_iters << ")" << endl;
@@ -97,40 +100,42 @@ void run_test(CUdeviceptr d_A, size_t size)
         uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
         cout << "user-space pointer:" << buf_ptr << endl;
 
-        // copy to GPU benchmark
-        cout << "writing test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_write_iters << endl;
-        struct timespec beg, end;
-        clock_gettime(MYCLOCK, &beg);
-        for (int iter=0; iter<num_write_iters; ++iter)
-            gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);
-        clock_gettime(MYCLOCK, &end);
+	for (int i = 0; i < copy_size.size(); i++) {
+		// copy to GPU benchmark
+		cout << "writing test, size=" << copy_size[i] << " offset=" << copy_offset << " num_iters=" << num_write_iters << endl;
+		struct timespec beg, end;
+		clock_gettime(MYCLOCK, &beg);
+		for (int iter=0; iter<num_write_iters; ++iter)
+		    gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size[i]);
+		clock_gettime(MYCLOCK, &end);
 
-        double woMBps;
-        {
-            double byte_count = (double) copy_size * num_write_iters;
-            double dt_us = time_diff(beg, end);
-            double Bps = byte_count / dt_us * 1e6;
-            woMBps = Bps / 1024.0 / 1024.0;
-            cout << "write BW: " << woMBps << "MB/s" << endl;
-        }
+		double woMBps;
+		{
+		    double byte_count = (double) copy_size[i] * num_write_iters;
+		    double dt_us = time_diff(beg, end);
+		    double Bps = byte_count / dt_us * 1e6;
+		    woMBps = Bps / 1024.0 / 1024.0;
+		    cout << "write BW: " << woMBps << "MB/s" << endl;
+		}
 
-        compare_buf(init_buf, buf_ptr + copy_offset/4, copy_size);
+		compare_buf(init_buf, buf_ptr + copy_offset/4, copy_size[i]);
 
-        // copy from GPU benchmark
-        cout << "reading test, size=" << copy_size << " offset=" << copy_offset << " num_iters=" << num_read_iters << endl;
-        clock_gettime(MYCLOCK, &beg);
-        for (int iter=0; iter<num_read_iters; ++iter)
-            gdr_copy_from_mapping(mh, init_buf, buf_ptr + copy_offset/4, copy_size);
-        clock_gettime(MYCLOCK, &end);
+		// copy from GPU benchmark
+		cout << "reading test, size=" << copy_size[i] << " offset=" << copy_offset << " num_iters=" << num_read_iters << endl;
+		clock_gettime(MYCLOCK, &beg);
+		for (int iter=0; iter<num_read_iters; ++iter)
+		    gdr_copy_from_mapping(mh, init_buf, buf_ptr + copy_offset/4, copy_size[i]);
+		clock_gettime(MYCLOCK, &end);
 
-        double roMBps;
-        {
-            double byte_count = (double) copy_size * num_read_iters;
-            double dt_ms = time_diff(beg, end);
-            double Bps = byte_count / dt_ms * 1e6;
-            roMBps = Bps / 1024.0 / 1024.0;
-            cout << "read BW: " << roMBps << "MB/s" << endl;
-        }
+		double roMBps;
+		{
+		    double byte_count = (double) copy_size[i] * num_read_iters;
+		    double dt_us = time_diff(beg, end); 
+		    double Bps = byte_count / dt_us * 1e6;
+		    roMBps = Bps / 1024.0 / 1024.0;
+		    cout << "read BW: " << roMBps << "MB/s" << endl;
+		}
+	}
 
         cout << "unmapping buffer" << endl;
         ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, size), 0);
@@ -147,10 +152,12 @@ int main(int argc, char *argv[])
 {
     gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
     gpu_memfree_fn_t gfree_fn = gpu_mem_free;
+    size_t copy_size_upper_bound = 0;
+    bool copy_size_range = false;
 
     while(1) {        
         int c;
-        c = getopt(argc, argv, "s:d:o:c:w:r:a:h");
+        c = getopt(argc, argv, "s:d:o:c:w:r:a:hl");
         if (c == -1)
             break;
 
@@ -159,8 +166,11 @@ int main(int argc, char *argv[])
             _size = strtol(optarg, NULL, 0);
             break;
         case 'c':
-            copy_size = strtol(optarg, NULL, 0);
+	    copy_size_upper_bound = strtol(optarg, NULL, 0);
             break;
+	case 'l':
+	    copy_size_range = true;
+	    break;
         case 'o':
             copy_offset = strtol(optarg, NULL, 0);
             break;
@@ -195,18 +205,33 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
     }
-    
-    if (!copy_size)
-        copy_size = _size;
+
+    copy_size.clear();
+    if (!copy_size_range) {
+        /* if -l option is not passed */
+	if (copy_size_upper_bound == 0) {
+		copy_size.push_back(_size);
+	} else {
+		copy_size.push_back(copy_size_upper_bound);
+	}
+    } else {
+        /* if -l option is passed */
+	size_t upper = (copy_size_upper_bound == 0) ? _size : std::min(copy_size_upper_bound, static_cast<size_t>(_size));
+	for (size_t i = 1; i < (ROUND_DOWN_POW_2(upper)); i <<= 1) {
+	    copy_size.push_back(i);
+        }
+    }
 
     if (copy_offset % sizeof(uint32_t) != 0) {
         fprintf(stderr, "ERROR: offset must be multiple of 4 bytes\n");
         exit(EXIT_FAILURE);
     }
 
-    if (copy_offset + copy_size > _size) {
-        fprintf(stderr, "ERROR: offset + copy size run past the end of the buffer\n");
-        exit(EXIT_FAILURE);
+    for (int i = 0; i < copy_size.size(); i++) {
+        if (copy_offset + copy_size[i] > _size) {
+            fprintf(stderr, "ERROR: offset + copy size run past the end of the buffer\n");
+            exit(EXIT_FAILURE);
+        }
     }
 
     size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);

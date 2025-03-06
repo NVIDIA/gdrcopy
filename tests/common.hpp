@@ -112,6 +112,21 @@
 
 #define PAGE_ROUND_UP(x, n)     (((x) + ((n) - 1)) & ~((n) - 1))
 
+static uint64_t round_down_pow_2(uint64_t x) {
+    if (x == 0) {
+        return 0;
+    }
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    if (x > UINT32_MAX) x |= x >> 32;
+    return x - (x >> 1);
+}
+
+#define ROUND_DOWN_POW_2(x) round_down_pow_2(x)
+
 namespace gdrcopy {
     namespace test {
         typedef struct gpuMemHandle 
