@@ -2,7 +2,18 @@ gdrdrv-dkms (@FULL_VERSION@) stable; urgency=low
 
   * See CHANGELOG.md.
 
- -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 16 Dec 2024 11:59:59 -0700
+ -- GPUDirect Team <gpudirect@nvidia.com>  Fri, 21 Mar 2025 11:59:59 -0700
+
+gdrdrv-dkms (2.5) stable; urgency=low
+
+  * Introduce gdr_pin_buffer_v2 API, GDR_PIN_FLAG_FORCE_PCIE pin flag and the GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE attribute.
+  * Introduce gdr_get_attribute API and GDR_ATTR_USE_PERSISTENT_MAPPING.
+  * Fix nvidia_p2p_get_pages_persistent leakage in gdrdrv.
+  * Add support for mix mappings.
+  * Introduce /proc/driver/gdrdrv/params and /proc/driver/gdrdrv/nv_get_pages_refcount.
+  * Fix errors in gdr_map due to PAT.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Fri, 21 Mar 2025 11:59:59 -0700
 
 gdrdrv-dkms (2.4.4) stable; urgency=low
 

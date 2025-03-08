@@ -2,7 +2,15 @@ libgdrapi (@FULL_VERSION@) stable; urgency=low
 
   * See CHANGELOG.md.
 
- -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 16 Dec 2024 11:59:59 -0700
+ -- GPUDirect Team <gpudirect@nvidia.com>  Fri, 21 Mar 2025 11:59:59 -0700
+
+libgdrapi (2.5) stable; urgency=low
+
+  * Introduce gdr_pin_buffer_v2 API, GDR_PIN_FLAG_FORCE_PCIE pin flag and the GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE attribute. 
+  * Introduce gdr_get_attribute API and GDR_ATTR_USE_PERSISTENT_MAPPING.
+  * Add support for mix mappings.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Fri, 21 Mar 2025 11:59:59 -0700
 
 libgdrapi (2.4.4) stable; urgency=low
 
