@@ -6,7 +6,7 @@
 - Introduce gdr\_pin\_buffer\_v2 API, GDR\_PIN\_FLAG\_FORCE\_PCIE pin flag and the GDR\_ATTR\_SUPPORT\_PIN\_FLAG\_FORCE\_PCIE attribute. Extend gdrcopy\_sanity coverage to those new APIs.
 - Waive some unit tests in gdrcopy\_sanity if the GPU compute mode is not set as default.
 - Introduce gdr\_get\_attribute API and GDR\_ATTR\_USE\_PERSISTENT\_MAPPING.
-- Add persistent mapping coverage in gdrcopy\_sanity.
+- Add persistent mapping coverage to gdrcopy\_sanity.
 - Support setting GPU ID in gdrcopy\_sanity.
 - Fix nvidia\_p2p\_get\_pages\_persistent leakage in gdrdrv.
 - Introduce leakage\_pin\_pages\_fork\_cumemalloc unit test.
@@ -14,11 +14,12 @@
 - Introduce /proc/driver/gdrdrv/params and /proc/driver/gdrdrv/nv\_get\_pages\_refcount.
 - Fix silent failure in gdrcopy\_copybw and gdrcopy\_apiperf.
 - Add -l to shmoo sizes in gdrcopy\_copybw.
-- Set the default NVCC\_FLAGS to generate all supported architectures from compute/sm\_60.
+- Set the default NVCC\_FLAGS to generate PTX and SASS for all supported architectures.
 - Improve the error reporting in gdrcopy\_pplat due to PTX loading errors.
 - Add cold cache testing to gdrcopy\_copylat.
 - Fix errors in gdr\_map due to PAT.
 - Improve the gdrcopy\_pplat algorithm and add more test cases.
+- Improve vm\_flags\_set detection mechanism.
 
 ## [2.4.4] - 2024-12-16
 - Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
