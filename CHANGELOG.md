@@ -11,6 +11,7 @@
 - Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
 - Add support for mix mappings.
 - Introduce /proc/driver/gdrdrv/params and /proc/driver/gdrdrv/nv\_get\_pages\_refcount.
+- Change the default to set use\_persistent\_mapping=1.
 
 ## [2.4.4] - 2024-12-16
 - Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
