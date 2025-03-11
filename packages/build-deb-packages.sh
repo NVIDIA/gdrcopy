@@ -117,7 +117,7 @@ ex cd ${TOP_DIR_PATH}
 
 ex mkdir -p ${tmpdir}/gdrcopy
 ex rm -rf ${tmpdir}/gdrcopy/*
-ex cp -r Makefile README.md include src tests LICENSE config_arch ${tmpdir}/gdrcopy/
+ex cp -r * ${tmpdir}/gdrcopy/
 ex cp -r packages/debian-lib ${tmpdir}/gdrcopy/
 ex cp -r packages/debian-tests ${tmpdir}/gdrcopy/
 ex cp README.md ${tmpdir}/gdrcopy/debian-lib/README.Debian
