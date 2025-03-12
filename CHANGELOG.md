@@ -20,6 +20,7 @@
 - Fix errors in gdr\_map due to PAT.
 - Improve the gdrcopy\_pplat algorithm and add more test cases.
 - Improve vm\_flags\_set detection mechanism.
+- Change the default to set use\_persistent\_mapping=1.
 
 ## [2.4.4] - 2024-12-16
 - Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.

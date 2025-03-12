@@ -106,7 +106,6 @@
 #define ASSERT_EQ(P, V) ASSERT((P) == (V))
 #define CHECK_EQ(P, V) CHECK((P) == (V))
 #define ASSERT_NEQ(P, V) ASSERT(!((P) == (V)))
-#define BREAK_IF_NEQ(P, V) if((P) != (V)) break
 #define BEGIN_CHECK do
 #define END_CHECK while(0)
 

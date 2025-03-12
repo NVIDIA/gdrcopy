@@ -13,6 +13,7 @@ gdrdrv-dkms (2.5) stable; urgency=low
   * Introduce /proc/driver/gdrdrv/params and /proc/driver/gdrdrv/nv_get_pages_refcount.
   * Fix errors in gdr_map due to PAT.
   * Improve vm_flags_set detection mechanism.
+  * Change the default to set use_persistent_mapping=1.
 
  -- GPUDirect Team <gpudirect@nvidia.com>  Fri, 21 Mar 2025 11:59:59 -0700
 
