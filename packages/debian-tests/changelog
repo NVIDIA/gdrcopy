@@ -2,7 +2,23 @@ gdrcopy-tests (@FULL_VERSION@) stable; urgency=low
 
   * See CHANGELOG.md.
 
- -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 16 Dec 2024 11:59:59 -0700
+ -- GPUDirect Team <gpudirect@nvidia.com>  Fri, 21 Mar 2025 11:59:59 -0700
+
+libgdrapi (2.5) stable; urgency=low
+
+  * Extend gdrcopy_sanity coverage to gdr_pin_buffer_v2.
+  * Waive some unit tests in gdrcopy_sanity if the GPU compute mode is not set as default.
+  * Add persistent mapping coverage in gdrcopy_sanity.
+  * Support setting GPU ID in gdrcopy_sanity.
+  * Introduce leakage_pin_pages_fork_cumemalloc unit test.
+  * Fix silent failure in gdrcopy_copybw and gdrcopy_apiperf.
+  * Add -l to shmoo sizes in gdrcopy_copybw.
+  * Set the default NVCC_FLAGS to generate all supported architectures from compute/sm_60.
+  * Improve the error reporting in gdrcopy_pplat due to PTX loading errors.
+  * Add cold cache testing to gdrcopy_copylat.
+  * Improve the gdrcopy_pplat algorithm and add more test cases.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Fri, 21 Mar 2025 11:59:59 -0700
 
 gdrcopy-tests (2.4.4) stable; urgency=low
 

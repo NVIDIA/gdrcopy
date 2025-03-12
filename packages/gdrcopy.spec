@@ -363,8 +363,27 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Mon Dec 16 2024 GPUDirect Team <gpudirect@nvidia.com> %{GDR_VERSION}-%{_release}
+* Fri Mar 21 2025 GPUDirect Team <gpudirect@nvidia.com> %{GDR_VERSION}-%{_release}
 - See CHANGELOG.md.
+* Fri Mar 21 2025 GPUDirect Team <gpudirect@nvidia.com> 2.5-%{_release}
+- Introduce gdr_pin_buffer_v2 API, GDR_PIN_FLAG_FORCE_PCIE pin flag and the GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE attribute. Extend gdrcopy_sanity coverage to those new APIs.
+- Waive some unit tests in gdrcopy_sanity if the GPU compute mode is not set as default.
+- Introduce gdr_get_attribute API and GDR_ATTR_USE_PERSISTENT_MAPPING.
+- Add persistent mapping coverage to gdrcopy_sanity.
+- Support setting GPU ID in gdrcopy_sanity.
+- Fix nvidia_p2p_get_pages_persistent leakage in gdrdrv.
+- Introduce leakage_pin_pages_fork_cumemalloc unit test.
+- Add support for mix mappings.
+- Introduce /proc/driver/gdrdrv/params and /proc/driver/gdrdrv/nv_get_pages_refcount.
+- Fix silent failure in gdrcopy_copybw and gdrcopy_apiperf.
+- Add -l to shmoo sizes in gdrcopy_copybw.
+- Set the default NVCC_FLAGS to generate PTX and SASS for all supported architectures.
+- Improve the error reporting in gdrcopy_pplat due to PTX loading errors.
+- Add cold cache testing to gdrcopy_copylat.
+- Fix errors in gdr_map due to PAT.
+- Improve the gdrcopy_pplat algorithm and add more test cases.
+- Improve vm_flags_set detection mechanism.
+- Change the default to set use_persistent_mapping=1.
 * Mon Dec 16 2024 Pak Markthub <pmarkthub@nvidia.com> 2.4.4-%{_release}
 - Fix the use-after-free bug of mr objects in gdrdv_vma_close.
 - Fix the resource leakage bug in gdrdrv_release.

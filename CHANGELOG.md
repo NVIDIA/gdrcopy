@@ -1,16 +1,25 @@
 # Changelog
 
 ## [master]
-- Introduce gdr\_pin\_buffer\_v2 API, GDR\_PIN\_FLAG\_FORCE\_PCIE pin flag and the  GDR\_ATTR\_SUPPORT\_PIN\_FLAG\_FORCE\_PCIE attribute. Extend gdrcopy\_sanity coverage to those new APIs.
+
+## [2.5] - 2025-03-21
+- Introduce gdr\_pin\_buffer\_v2 API, GDR\_PIN\_FLAG\_FORCE\_PCIE pin flag and the GDR\_ATTR\_SUPPORT\_PIN\_FLAG\_FORCE\_PCIE attribute. Extend gdrcopy\_sanity coverage to those new APIs.
 - Waive some unit tests in gdrcopy\_sanity if the GPU compute mode is not set as default.
 - Introduce gdr\_get\_attribute API and GDR\_ATTR\_USE\_PERSISTENT\_MAPPING.
-- Add persistent mapping support in gdrcopy\_sanity.
+- Add persistent mapping coverage to gdrcopy\_sanity.
 - Support setting GPU ID in gdrcopy\_sanity.
 - Fix nvidia\_p2p\_get\_pages\_persistent leakage in gdrdrv.
 - Introduce leakage\_pin\_pages\_fork\_cumemalloc unit test.
-- Fix the use-after-free bug of mr objects in gdrdv\_vma\_close.
 - Add support for mix mappings.
 - Introduce /proc/driver/gdrdrv/params and /proc/driver/gdrdrv/nv\_get\_pages\_refcount.
+- Fix silent failure in gdrcopy\_copybw and gdrcopy\_apiperf.
+- Add -l to shmoo sizes in gdrcopy\_copybw.
+- Set the default NVCC\_FLAGS to generate PTX and SASS for all supported architectures.
+- Improve the error reporting in gdrcopy\_pplat due to PTX loading errors.
+- Add cold cache testing to gdrcopy\_copylat.
+- Fix errors in gdr\_map due to PAT.
+- Improve the gdrcopy\_pplat algorithm and add more test cases.
+- Improve vm\_flags\_set detection mechanism.
 - Change the default to set use\_persistent\_mapping=1.
 
 ## [2.4.4] - 2024-12-16
@@ -109,6 +118,8 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 [master]: https://github.com/NVIDIA/gdrcopy
+[2.5]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.5
+[2.4.4]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.4
 [2.4.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.3
 [2.4.2]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.2
 [2.4.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.1
