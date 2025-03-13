@@ -344,6 +344,14 @@ GDRCOPY_TEST(basic_with_tokens)
     gdr_mh_t mh = null_mh;
     CUdeviceptr d_ptr = d_A;
 
+    int use_persistent_mapping;
+    ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_USE_PERSISTENT_MAPPING, &use_persistent_mapping), 0);
+
+    if (use_persistent_mapping) {
+        print_dbg("Waiving this test because persistent mapping is enabled.\n");
+        exit(EXIT_WAIVED);
+    }
+
     ASSERT_EQ(gdr_pin_buffer(g, d_ptr, size, tokens.p2pToken, tokens.vaSpaceToken, &mh), 0);
     ASSERT_NEQ(mh, null_mh);
     ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
