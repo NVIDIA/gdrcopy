@@ -237,10 +237,10 @@ static int pin_buffer_v2_helper(int dev_id, gdr_t g, unsigned long addr, size_t 
         int is_coherent;
         ASSERTDRV(cuDeviceGetAttribute(&is_coherent, CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES, dev));
         int major;
-        ASSERTDRV(cuDeviceGetAttribute(&is_coherent, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev));
+        ASSERTDRV(cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev));
         
-        if (!attr || !is_coherent || major < 100) {
-            print_dbg("waiving this test because it is unsupported\n");
+        if (!attr || !is_coherent || major < 10) {
+            print_dbg("waiving this test because it is unsupported: force_pcie_attr=%d, is_coherent=%d, major=%d\n", attr, is_coherent, major);
             exit(EXIT_WAIVED);
         }
     }
