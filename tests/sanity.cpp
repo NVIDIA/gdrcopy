@@ -229,8 +229,8 @@ static int pin_buffer_v2_helper(int dev_id, gdr_t g, unsigned long addr, size_t 
 {
     if (flags & GDR_PIN_FLAG_FORCE_PCIE) {
         // waive the test if not supported on the platform under test or the flag is not supported
-        int attr = 0;
-        ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE, &attr), 0);
+        int is_force_pcie_flag_support = 0;
+        ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE, &is_force_pcie_flag_support), 0);
 
         CUdevice dev;
         ASSERTDRV(cuDeviceGet(&dev, dev_id));
@@ -239,8 +239,8 @@ static int pin_buffer_v2_helper(int dev_id, gdr_t g, unsigned long addr, size_t 
         int major;
         ASSERTDRV(cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev));
         
-        if (!attr || !is_coherent || major < 10) {
-            print_dbg("waiving this test because it is unsupported: force_pcie_attr=%d, is_coherent=%d, major=%d\n", attr, is_coherent, major);
+        if (!is_force_pcie_flag_support || !is_coherent || major < 10) {
+            print_dbg("waiving this test because it is unsupported: force_pcie_attr=%d, is_coherent=%d, major=%d\n", is_force_pcie_flag_support, is_coherent, major);
             exit(EXIT_WAIVED);
         }
     }
