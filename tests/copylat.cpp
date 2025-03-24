@@ -270,15 +270,15 @@ int main(int argc, char *argv[])
             if (use_cold_cache) {
                 clock_gettime(MYCLOCK, &beg);
                 for (iter = 0; iter < num_write_iters; ++iter) {
-                    // Simulate GPU reading the data written by CPU. When cache
+                    // Simulate GPU writing the data written by CPU. When cache
                     // mapping is used, the cache lines will be moved to GPU.
                     // The next access by CPU will cause the cache lines to
                     // move back to CPU (cold cache). gdr_copy_to_mapping will
                     // pay this cost.
 
-                    // We use sync memops. The copy is done when cuMemcpy
+                    // We use sync memops. The memset is done when cuMemsetD8
                     // returns.
-                    cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size);
+                    cuMemsetD8(d_A, 0, copy_size);
 
                     gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
                     SB();
@@ -287,11 +287,11 @@ int main(int argc, char *argv[])
 
                 lat_us += time_diff(beg, end);
 
-                // Measure the cost of cuMemcpy. Remove that from the total
-                // latency.
+                // Measure the cost of cuMemsetD8 and remove that from the
+                // total latency.
                 clock_gettime(MYCLOCK, &beg);
                 for (iter = 0; iter < num_write_iters; ++iter) {
-                    cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size);
+                    cuMemsetD8(d_A, 0, copy_size);
                 }
                 clock_gettime(MYCLOCK, &end);
 
