@@ -460,6 +460,17 @@ static inline int gdr_use_persistent_mapping(void)
 
 //-----------------------------------------------------------------------------
 
+static inline int gdr_support_force_pcie(void)
+{
+#ifdef NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING
+    return gdr_use_persistent_mapping();
+#else
+    return 0;
+#endif
+}
+
+//-----------------------------------------------------------------------------
+
 static int gdrdrv_open(struct inode *inode, struct file *filp)
 {
     unsigned int minor = MINOR(inode->i_rdev);
@@ -1201,11 +1212,7 @@ static int gdrdrv_get_attr(gdr_info_t *info, void __user *_params)
         params.val = gdr_use_persistent_mapping();
         break;
     case GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE:
-#ifdef NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING
-        params.val = 1;
-#else
-        params.val = 0;
-#endif
+        params.val = gdr_support_force_pcie();
         break;
     default:
         ret = -EINVAL;
