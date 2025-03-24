@@ -301,7 +301,6 @@ int main(int argc, char *argv[])
                 clock_gettime(MYCLOCK, &beg);
                 for (iter = 0; iter < num_write_iters; ++iter) {
                     gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
-                    SB();
                 }
                 clock_gettime(MYCLOCK, &end);
 
@@ -354,7 +353,6 @@ int main(int argc, char *argv[])
                 clock_gettime(MYCLOCK, &beg);
                 for (iter = 0; iter < num_read_iters; ++iter) {
                     gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
-                    LB();
                 }
                 clock_gettime(MYCLOCK, &end);
 
