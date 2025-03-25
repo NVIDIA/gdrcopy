@@ -276,8 +276,8 @@ int main(int argc, char *argv[])
                     // move back to CPU (cold cache). gdr_copy_to_mapping will
                     // pay this cost.
 
-                    // We use sync memops. The memset is done when cuMemsetD8
-                    // returns.
+                    // We use sync memops. The memset is considered done by the
+                    // time cuMemsetD8 returns.
                     cuMemsetD8(d_A, 0, copy_size);
 
                     gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
@@ -328,8 +328,8 @@ int main(int argc, char *argv[])
                     // to move back to CPU (cold cache). gdr_copy_from_mapping
                     // will pay this cost.
 
-                    // We use sync memops. The memset is done when cuMemsetD8
-                    // returns.
+                    // We use sync memops. The memset is considered done by the
+                    // time cuMemsetD8 returns.
                     cuMemsetD8(d_A, 0, copy_size);
 
                     gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
