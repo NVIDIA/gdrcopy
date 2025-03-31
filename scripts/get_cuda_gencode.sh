@@ -19,68 +19,53 @@ fi
 
 # Get the list of supported SM architectures (sm_XX) from nvcc
 # Filter to only include SM >= 60 (Pascal)
-SUPPORTED_SM_LIST=$("$NVCC" --list-gpu-code 2>/dev/null | sed 's/sm_//' | awk '$1 >= 60')
+ARCH_LIST=$("$NVCC" --list-gpu-code 2>/dev/null | sed 's/sm_//' | awk '$1 >= 60')
 
-# Initialize empty lists
-COMPUTE_LIST=""
-SM_LIST=""
-
-if [ -n "$SUPPORTED_SM_LIST" ]; then
-    # Use the list of architectures supported by nvcc
-    SM_LIST=$SUPPORTED_SM_LIST
-    COMPUTE_LIST=$SUPPORTED_SM_LIST
-else
+if [ -z "$ARCH_LIST" ]; then
     echo "Warning: Could not determine supported architectures from nvcc, falling back to version-based detection" >&2
 
     # Initialize with Pascal architecture
-    COMPUTE_LIST="60 61 62"
-    SM_LIST="60 61 62"
+    ARCH_LIST="60 61 62"
 
     # Add Volta (7.0) if CUDA >= 9.0
     if [ "$CUDA_VERSION_MAJOR" -ge 9 ]; then
-        COMPUTE_LIST="$COMPUTE_LIST 70 72"
-        SM_LIST="$SM_LIST 70 72"
+        ARCH_LIST="$ARCH_LIST 70 72"
     fi
 
     # Add Turing (7.5) if CUDA >= 10.0
     if [ "$CUDA_VERSION_MAJOR" -ge 10 ]; then
-        COMPUTE_LIST="$COMPUTE_LIST 75"
-        SM_LIST="$SM_LIST 75"
+        ARCH_LIST="$ARCH_LIST 75"
     fi
 
     # Add Ampere (8.0, 8.6, 8.7) if CUDA >= 11.1
     if [ "$CUDA_VERSION_MAJOR" -ge 11 ] && [ "$CUDA_VERSION_MINOR" -ge 1 ]; then
-        COMPUTE_LIST="$COMPUTE_LIST 80 86 87"
-        SM_LIST="$SM_LIST 80 86 87"
+        ARCH_LIST="$ARCH_LIST 80 86 87"
     fi
 
     # Add Ada Lovelace (8.9) if CUDA >= 11.8
     if [ "$CUDA_VERSION_MAJOR" -ge 11 ] && [ "$CUDA_VERSION_MINOR" -ge 8 ]; then
-        COMPUTE_LIST="$COMPUTE_LIST 89"
-        SM_LIST="$SM_LIST 89"
+        ARCH_LIST="$ARCH_LIST 89"
     fi
 
     # Add Hopper (9.0) if CUDA >= 12.0
     if [ "$CUDA_VERSION_MAJOR" -ge 12 ]; then
-        COMPUTE_LIST="$COMPUTE_LIST 90"
-        SM_LIST="$SM_LIST 90"
+        ARCH_LIST="$ARCH_LIST 90"
     fi
 
     # Add Blackwell (10.0, 10.1, 12.0) if CUDA >= 12.8
-    if [ "$CUDA_VERSION_MAJOR" -ge 12 ] && [ "$CUDA_VERSION_MINOR" -ge 6 ]; then
-        COMPUTE_LIST="$COMPUTE_LIST 100 101 120"
-        SM_LIST="$SM_LIST 100 101 120"
+    if [ "$CUDA_VERSION_MAJOR" -ge 12 ] && [ "$CUDA_VERSION_MINOR" -ge 8 ]; then
+        ARCH_LIST="$ARCH_LIST 100 101 120"
     fi
 fi
 
 # Generate NVCC flags
 GENCODE_FLAGS=""
-for compute in $COMPUTE_LIST; do
-    GENCODE_FLAGS="$GENCODE_FLAGS -gencode arch=compute_$compute,code=compute_$compute"
+for arch in $ARCH_LIST; do
+    GENCODE_FLAGS="$GENCODE_FLAGS -gencode arch=compute_$arch,code=compute_$arch"
 done
 
-for sm in $SM_LIST; do
-    GENCODE_FLAGS="$GENCODE_FLAGS -gencode arch=compute_$sm,code=sm_$sm"
+for arch in $ARCH_LIST; do
+    GENCODE_FLAGS="$GENCODE_FLAGS -gencode arch=compute_$arch,code=sm_$arch"
 done
 
 echo "$GENCODE_FLAGS"
