@@ -60,12 +60,14 @@ fi
 
 # Generate NVCC flags
 GENCODE_FLAGS=""
-for arch in $ARCH_LIST; do
-    GENCODE_FLAGS="$GENCODE_FLAGS -gencode arch=compute_$arch,code=compute_$arch"
-done
 
+# Generate SM-specific code for all architectures
 for arch in $ARCH_LIST; do
     GENCODE_FLAGS="$GENCODE_FLAGS -gencode arch=compute_$arch,code=sm_$arch"
 done
+
+# Generate PTX code only for the latest architecture
+LATEST_ARCH=$(echo "$ARCH_LIST" | tr ' ' '\n' | sort -n | tail -1)
+GENCODE_FLAGS="$GENCODE_FLAGS -gencode arch=compute_$LATEST_ARCH,code=compute_$LATEST_ARCH"
 
 echo "$GENCODE_FLAGS"
