@@ -1145,6 +1145,7 @@ static int gdrdrv_get_info(gdr_info_t *info, void __user *_params)
     params.tsc_khz      = mr->tsc_khz;
     params.mapped       = gdr_mr_is_mapped(mr);
     params.wc_mapping   = (mr->cpu_mapping_type == GDR_MR_WC);
+    params.paddr        = mr->page_table->pages[0]->physical_address;
 
     gdr_put_mr_read(mr);
 
@@ -1183,6 +1184,7 @@ static int gdrdrv_get_info_v2(gdr_info_t *info, void __user *_params)
     params.tm_cycles    = mr->tm_cycles;
     params.tsc_khz      = mr->tsc_khz;
     params.mapping_type = mr->cpu_mapping_type;
+    params.paddr        = mr->page_table->pages[0]->physical_address;
 
     gdr_put_mr_read(mr);
 

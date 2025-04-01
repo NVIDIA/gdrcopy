@@ -379,6 +379,7 @@ int gdr_get_info_v2(gdr_t g, gdr_mh_t handle, gdr_info_v2_t *info)
             info->mapped        = gdr_is_mapped(params.mapping_type);
             info->wc_mapping    = (params.mapping_type == GDR_MAPPING_TYPE_WC);
             info->mapping_type  = params.mapping_type;
+            info->paddr         = params.paddr;
         }
     }
     else
@@ -400,6 +401,7 @@ int gdr_get_info_v2(gdr_t g, gdr_mh_t handle, gdr_info_v2_t *info)
             info->mapped        = params.mapped;
             info->wc_mapping    = params.wc_mapping;
             info->mapping_type  = params.mapped ? (params.wc_mapping ? GDR_MAPPING_TYPE_WC : GDR_MAPPING_TYPE_CACHING) : GDR_MAPPING_TYPE_NONE;
+            info->paddr         = params.paddr;
         }
     }
 
@@ -1040,6 +1042,7 @@ typedef struct gdr_info_v1 {
     uint32_t cycles_per_ms;
     unsigned mapped:1;
     unsigned wc_mapping:1;
+    uint64_t paddr;
 } gdr_info_v1_t;
 
 int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_v1_t *info)
@@ -1064,6 +1067,7 @@ int gdr_get_info(gdr_t g, gdr_mh_t handle, gdr_info_v1_t *info)
         info->cycles_per_ms = params.tsc_khz;
         info->mapped        = params.mapped;
         info->wc_mapping    = params.wc_mapping;
+        info->paddr         = params.paddr;
     }
 
 out:

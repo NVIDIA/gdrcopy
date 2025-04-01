@@ -131,6 +131,7 @@ typedef struct gdr_info_v2 {
     unsigned mapped:1;
     unsigned wc_mapping:1;
     gdr_mapping_type_t mapping_type;
+    uint64_t paddr;
 } gdr_info_v2_t;
 typedef gdr_info_v2_t gdr_info_t;
 int gdr_get_info_v2(gdr_t g, gdr_mh_t handle, gdr_info_v2_t *info);
