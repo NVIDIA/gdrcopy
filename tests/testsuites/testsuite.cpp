@@ -71,7 +71,7 @@ namespace gdrcopy {
 
             for (std::vector<std::string>::iterator it = tests.begin(); it != tests.end(); ++it) {
                 if ((test_map->find(*it) == test_map->end()) && (extended_test_map->find(*it) == extended_test_map->end())) {
-                    gdrcopy::test::print_dbg("Error: Encountered unknown test %s\n", *it);
+                    gdrcopy::test::print_dbg("Error: Encountered unknown test %s\n", it->c_str());
                     return EINVAL;
                 }
             }
