@@ -48,7 +48,7 @@ gdrcopy_apiperf: apiperf.o common.o
 	$(LINK.cc)  -o $@ $^ $(LIBS) -lrt
 
 gdrcopy_pplat: pplat.o common.o
-	$(LINK.cc)  -o $@ $^ $(LDFLAGS) -lgdrapi -lcuda -lcudart
+	$(LINK.cc)  -o $@ $^ $(LDFLAGS) -lgdrapi -lcuda -lcudart_static
 
 %.o: %.cu
 	$(NVCC) -o $@ -c $^ $(LIBS) $(CPPFLAGS) $(NVCCFLAGS)
