@@ -388,6 +388,7 @@ struct gdr_mr {
     struct address_space *mapping;
     struct rw_semaphore sem;
     unsigned force_pci:1;
+    refcount_t refcnt;
 };
 typedef struct gdr_mr gdr_mr_t;
 
@@ -553,6 +554,17 @@ out:
 
 //-----------------------------------------------------------------------------
 
+static inline void get_mr(gdr_mr_t *mr)
+{
+    refcount_inc(&mr->refcnt);
+}
+
+static inline void put_mr(gdr_mr_t *mr)
+{
+    if (refcount_dec_and_test(&mr->refcnt))
+        kfree(mr);
+}
+
 /**
  * Clean up and free all resources (e.g., page_table) associated with this mr.
  *
@@ -613,7 +625,7 @@ static void gdr_free_mr_unlocked(gdr_mr_t *mr)
     }
 
     memset(mr, 0, sizeof(*mr));
-    kfree(mr);
+    put_mr(mr);
 }
 
 
@@ -751,6 +763,7 @@ static void gdrdrv_get_pages_free_callback(void *data)
     }
     mr->page_table = NULL;
     up_write(&mr->sem);
+    put_mr(mr);
 }
 
 //-----------------------------------------------------------------------------
@@ -816,6 +829,7 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
         goto out;
     }
     memset(mr, 0, sizeof(*mr));
+    refcount_set(&mr->refcnt, 1);
 
     // do proper alignment, as required by NVIDIA driver.
     // align both size and addr as it is a requirement of nvidia_p2p_get_pages* API
@@ -826,6 +840,8 @@ static int __gdrdrv_pin_buffer(gdr_info_t *info, u64 addr, u64 size, u64 p2p_tok
     init_rwsem(&mr->sem);
 
     free_callback_fn = gdr_use_persistent_mapping() ? NULL : gdrdrv_get_pages_free_callback;
+    if (free_callback_fn)
+        get_mr(mr);
 
     get_pages_flags = 0;
     mr->offset       = addr & GPU_PAGE_OFFSET;
