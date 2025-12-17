@@ -56,7 +56,7 @@ static void __exit test_dummy_fini(void)
 }
 
 MODULE_AUTHOR("gpudirect@nvidia.com");
-MODULE_LICENSE("MIT");
+MODULE_LICENSE("Dual MIT/GPL");
 MODULE_VERSION("1.0");
 
 module_init(test_dummy_init);
