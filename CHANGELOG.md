@@ -2,6 +2,9 @@
 
 ## [master]
 
+## [2.5.2] - 2026-02-24
+- Fix build errors on recent kernels (v6.15+): mark test-dummy.ko with Dual MIT/GPL so it may use GPL-only symbol __vma_start_write (vm_flags_set).
+
 ## [2.5.1] - 2025-08-04
 - Support RHEL 10.0.
 - Support CUDA 13.0.
