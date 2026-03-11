@@ -363,8 +363,10 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Mon Aug 04 2025 GPUDirect Team <gpudirect@nvidia.com> %{GDR_VERSION}-%{_release}
+* Tue Feb 24 2026 GPUDirect Team <gpudirect@nvidia.com> %{GDR_VERSION}-%{_release}
 - See CHANGELOG.md.
+* Tue Feb 24 2026 GPUDirect Team <gpudirect@nvidia.com> 2.5.2-%{_release}
+- Fix build errors on recent kernels (v6.15+): mark test-dummy.ko with Dual MIT/GPL so it may use GPL-only symbol __vma_start_write (vm_flags_set).
 * Mon Aug 04 2025 GPUDirect Team <gpudirect@nvidia.com> 2.5.1-%{_release}
 - Support RHEL 10.0.
 - Support CUDA 13.0.
