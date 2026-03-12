@@ -2,7 +2,13 @@ gdrcopy (@FULL_VERSION@) stable; urgency=low
 
   * See CHANGELOG.md.
 
- -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 04 Aug 2025 11:59:59 -0700
+ -- GPUDirect Team <gpudirect@nvidia.com>  Tue, 24 Feb 2026 10:00:00 -0700
+
+gdrcopy (2.5.2) stable; urgency=low
+
+  * Fix build errors on recent kernels (v6.15+): mark test-dummy.ko with Dual MIT/GPL so it may use GPL-only symbol __vma_start_write (vm_flags_set).
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Tue, 24 Feb 2026 10:00:00 -0700
 
 gdrcopy (2.5.1) stable; urgency=low
 
