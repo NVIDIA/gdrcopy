@@ -109,6 +109,7 @@ struct GDRDRV_IOC_GET_INFO_PARAMS
     __u64 tm_cycles;
     __u32 mapped;
     __u32 wc_mapping;
+    __u64 paddr;
 };
 
 #define GDRDRV_IOC_GET_INFO _IOWR(GDRDRV_IOCTL, 4, struct GDRDRV_IOC_GET_INFO_PARAMS *)
@@ -126,6 +127,7 @@ struct GDRDRV_IOC_GET_INFO_V2_PARAMS
     __u32 tsc_khz;
     __u64 tm_cycles;
     __u32 mapping_type;
+    __u64 paddr;
 };
 
 #define GDRDRV_IOC_GET_INFO_V2 _IOWR(GDRDRV_IOCTL, 5, struct GDRDRV_IOC_GET_INFO_V2_PARAMS *)
