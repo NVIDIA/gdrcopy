@@ -135,6 +135,19 @@ void coherent_platform_filter()
     ASSERT(status == CUDA_SUCCESS && attr != 0);
 }
 
+void waive_if_dma_buf_mmap_backend()
+{
+    gdr_t g = gdr_open_safe();
+    int using_dma_buf_mmap = 0, status = 0;
+    status = gdr_get_attribute(g, GDR_ATTR_USING_DMA_BUF_MMAP, &using_dma_buf_mmap);
+    gdr_close(g);
+    ASSERT_EQ(status, 0);
+    if (using_dma_buf_mmap) {
+        print_dbg("Using dma-buf mmap backend, waiving this test\n");
+        exit(EXIT_WAIVED);
+    }
+}
+
 /**
  * Sends given file descriptior via given socket
  *
@@ -757,6 +770,9 @@ void data_validation_mix_mappings()
     expecting_exception_signal = false;
     MB();
 
+    // User-requested mapping types are not supported by the dma-buf backend
+    waive_if_dma_buf_mmap_backend();
+
     init_cuda(g_dev_id);
     filter_fn();
 
@@ -890,6 +906,7 @@ void invalidation_access_after_gdr_close()
     sigemptyset(&act.sa_mask);
     act.sa_flags = 0;
     sigaction(SIGBUS, &act, 0);
+    sigaction(SIGSEGV, &act, 0);
 
     srand(time(NULL));
 
@@ -1385,6 +1402,7 @@ void invalidation_fork_after_gdr_map()
 {
     expecting_exception_signal = false;
     MB();
+    waive_if_dma_buf_mmap_backend();
 
     int filedes_0[2];
     int filedes_1[2];
@@ -1549,6 +1567,7 @@ void invalidation_fork_child_gdr_map_parent()
 {
     expecting_exception_signal = false;
     MB();
+    waive_if_dma_buf_mmap_backend();
 
     const size_t _size = sizeof(int) * 16;
     const size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
@@ -1787,6 +1806,7 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
 {
     expecting_exception_signal = false;
     MB();
+    waive_if_dma_buf_mmap_backend();
 
     pid_t pid;
     int pair[2];
@@ -1896,6 +1916,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
 {
     expecting_exception_signal = false;
     MB();
+    waive_if_dma_buf_mmap_backend();
 
     int filedes_0[2];
     int filedes_1[2];
@@ -1968,7 +1989,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
         print_dbg("%s: Receiving gdr_memh_t from parent\n", myname);
         gdr_memh_t memh;
         ASSERT_EQ(read(read_fd, &memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
-        print_dbg("%s: Got handle 0x%lx\n", myname, memh.handle);
+        print_dbg("%s: Got handle 0x%lx\n", myname, memh.backend.gdrdrv_memh.handle);
 
         print_dbg("%s: Converting gdr_memh_t to gdr_mh_t\n", myname);
         gdr_mh_t mh;
@@ -1997,7 +2018,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
         ASSERT(sendfd(pair[1], fd) >= 0);
 
         gdr_memh_t *memh = (gdr_memh_t *)mh.h;
-        print_dbg("%s: Extracted gdr_memh_t from gdr_mh_t got handle 0x%lx\n", myname, memh->handle);
+        print_dbg("%s: Extracted gdr_memh_t from gdr_mh_t got handle 0x%lx\n", myname, memh->backend.gdrdrv_memh.handle);
 
         print_dbg("%s: Sending gdr_memh_t to child\n", myname);
         ASSERT_EQ(write(write_fd, memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
@@ -2044,6 +2065,7 @@ GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
 {
     expecting_exception_signal = false;
     MB();
+    waive_if_dma_buf_mmap_backend();
 
     int filedes_0[2];
     int filedes_1[2];

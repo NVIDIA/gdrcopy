@@ -37,9 +37,27 @@ LIB_DYNAMIC=$(LIB_BASENAME).$(LIB_VER)
 LIB_SONAME=$(LIB_BASENAME).$(LIB_MAJOR_VER)
 LIB:=$(LIB_DYNAMIC)
 
-LIBSRCS := gdrapi.c
+LIBSRCS := gdrapi.c cuda_wrapper.c
 ifeq ($(GDRAPI_ARCH),X86)
-LIBSRCS += memcpy_avx.c memcpy_sse.c memcpy_sse41.c
+LIBSRCS += memcpy_avx.c memcpy_sse.c memcpy_sse41.c memcpy_avx2.c memcpy_avx512.c
+MOVDIR64B_CPPFLAG := -DCOMPILED_MOVDIR64B=0
+HAS_MOVDIR64B := $(shell $(CC) -mmovdir64b -E - < /dev/null > /dev/null 2>&1 && echo "yes" || echo "no")
+ifeq ($(HAS_MOVDIR64B),yes)
+$(info [INFO] Compiler supports MOVDIR64B)
+LIBSRCS += memcpy_movdir64b.c
+MOVDIR64B_CPPFLAG := -DCOMPILED_MOVDIR64B=1
+endif
+CPPFLAGS += $(MOVDIR64B_CPPFLAG)
+else ifeq ($(GDRAPI_ARCH),ARM64)
+LIBSRCS += memcpy_neon.c
+LS64_CPPFLAG := -DCOMPILED_LS64=0
+HAS_LS64 := $(shell $(CC) -march=armv9-a+ls64 -E - < /dev/null > /dev/null 2>&1 && echo "yes" || echo "no")
+ifeq ($(HAS_LS64),yes)
+$(info [INFO] Compiler supports LS64)
+LIBSRCS += memcpy_ls64.c
+LS64_CPPFLAG := -DCOMPILED_LS64=1
+endif
+CPPFLAGS += $(LS64_CPPFLAG)
 endif
 
 LIBOBJS := $(LIBSRCS:.c=.o)
@@ -56,7 +74,7 @@ lib: $(LIB)
 #dynamic
 $(LIBOBJS): CFLAGS+=-fPIC
 $(LIB): $(LIBOBJS)
-	$(CC) -shared -Wl,-soname,$(LIB_SONAME) -o $@ $^
+	$(CC) -shared -Wl,-soname,$(LIB_SONAME) -Wl,-z,defs -o $@ $^ $(LDFLAGS) $(LIBS)
 	PATH=/sbin:/usr/sbin:$$PATH; ldconfig -n $(PWD)
 	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME)
 	ln -sf $(LIB_SONAME) $(LIB_BASENAME)
@@ -70,6 +88,18 @@ memcpy_sse.o: memcpy_sse.c
 
 memcpy_sse41.o: memcpy_sse41.c
 	$(COMPILE.c) -msse4.1 -o $@ $^
+
+memcpy_avx2.o: memcpy_avx2.c
+	$(COMPILE.c) -mavx2 -o $@ $^
+
+memcpy_avx512.o: memcpy_avx512.c
+	$(COMPILE.c) -mavx512f -o $@ $^
+
+memcpy_movdir64b.o: memcpy_movdir64b.c
+	$(COMPILE.c) -mmovdir64b -o $@ $^
+
+memcpy_ls64.o: memcpy_ls64.c
+	$(COMPILE.c) -march=armv9-a+ls64 -o $@ $^
 
 gdrapi.o: gdrapi.c $(GDRAPI_INC)/gdrapi.h gdrapi_internal.h gdrdrv/gdrdrv.h
 

@@ -44,6 +44,7 @@ int num_read_iters  = 100;
 size_t _size = 128*1024;
 size_t copy_offset = 0;
 int dev_id = 0;
+gdr_map_flags_t map_type_flag = GDR_MAP_FLAG_DEFAULT;
 std::vector<size_t> copy_size;
 
 void print_usage(const char *path)
@@ -61,6 +62,7 @@ void print_usage(const char *path)
     cout << "   -r <iters>      Number of read iterations (default: " << num_read_iters << ")" << endl;
     cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
     cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
+    cout << "   -M <mapping_type>   Request mapping type (choices: default, wc, cache, device)" << endl;
 }
 
 void run_test(CUdeviceptr d_A, size_t size)
@@ -80,7 +82,7 @@ void run_test(CUdeviceptr d_A, size_t size)
         ASSERT_NEQ(mh, null_mh);
 
         void *map_d_ptr  = NULL;
-        ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, size), 0);
+        ASSERT_EQ(gdr_map_v2(g, mh, &map_d_ptr, size, map_type_flag), 0);
         cout << "map_d_ptr: " << map_d_ptr << endl;
 
         gdr_info_t info;
@@ -158,7 +160,7 @@ int main(int argc, char *argv[])
 
     while(1) {        
         int c;
-        c = getopt(argc, argv, "s:d:o:c:w:r:a:hl");
+        c = getopt(argc, argv, "s:d:o:c:w:r:a:M:hl");
         if (c == -1)
             break;
 
@@ -195,6 +197,21 @@ int main(int argc, char *argv[])
             }
             else {
                 cerr << "Unrecognized fn argument" << endl;
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'M':
+            if (strcmp(optarg, "default") == 0) {
+                map_type_flag = GDR_MAP_FLAG_DEFAULT;
+            } else if (strcmp(optarg, "wc") == 0) {
+                map_type_flag = GDR_MAP_FLAG_REQ_WC_MAPPING;
+            } else if (strcmp(optarg, "cache") == 0) {
+                map_type_flag = GDR_MAP_FLAG_REQ_CACHE_MAPPING;
+            } else if (strcmp(optarg, "device") == 0) {
+                map_type_flag = GDR_MAP_FLAG_REQ_DEVICE_MAPPING;
+            } else {
+                cerr << "ERROR: invalid mapping_type '" << optarg
+                     << "'. Valid options: default, wc, cache, device." << endl;
                 exit(EXIT_FAILURE);
             }
             break;

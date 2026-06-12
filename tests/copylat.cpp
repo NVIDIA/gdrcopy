@@ -28,6 +28,7 @@
 #include <iostream>
 #include <iomanip>
 #include <cuda.h>
+#include <algorithm>
 
 using namespace std;
 
@@ -39,9 +40,13 @@ using namespace gdrcopy::test;
 // manually tuned...
 int num_write_iters = 10000;
 int num_read_iters = 100;
+const int max_num_buckets = 100;
+int num_write_buckets = max_num_buckets;
+int num_read_buckets = max_num_buckets;
 int dev_id = 0;
 bool do_cumemcpy = false;
 bool use_cold_cache = false;
+gdr_map_flags_t map_type_flag = GDR_MAP_FLAG_DEFAULT;
 size_t _size = (size_t)1 << 24;
 
 void print_usage(const char *path)
@@ -57,6 +62,7 @@ void print_usage(const char *path)
     cout << "   -r <iters>      Number of read iterations (default: " << num_read_iters << ")" << endl;
     cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
     cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
+    cout << "   -M <mapping_type>   Request mapping type (choices: default, wc, cache, device)" << endl;
     cout << "   -C              Use cold cache (default: no)" << endl;
     cout << "                       This option takes effect when cache mapping is used such as on Grace-Hopper." << endl;
 }
@@ -65,14 +71,14 @@ int main(int argc, char *argv[])
 {
     size_t copy_size = 1;
     struct timespec beg, end;
-    double lat_us;
+    double lat_us[max_num_buckets];
 
     gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
     gpu_memfree_fn_t gfree_fn = gpu_mem_free;
 
     while(1) {        
         int c;
-        c = getopt(argc, argv, "s:d:w:r:a:cCh");
+        c = getopt(argc, argv, "s:d:w:r:a:M:cCh");
         if (c == -1)
             break;
 
@@ -103,6 +109,21 @@ int main(int argc, char *argv[])
                     exit(EXIT_FAILURE);
                 }
                 break;
+            case 'M':
+                if (strcmp(optarg, "default") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_DEFAULT;
+                } else if (strcmp(optarg, "wc") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_REQ_WC_MAPPING;
+                } else if (strcmp(optarg, "cache") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_REQ_CACHE_MAPPING;
+                } else if (strcmp(optarg, "device") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_REQ_DEVICE_MAPPING;
+                } else {
+                    cerr << "ERROR: invalid mapping_type '" << optarg
+                         << "'. Valid options: default, wc, cache, device." << endl;
+                    exit(EXIT_FAILURE);
+                }
+                break;
             case 'c':
                 do_cumemcpy = true;
                 break;
@@ -119,6 +140,22 @@ int main(int argc, char *argv[])
     }
     
     size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
+    if(num_write_iters > max_num_buckets && num_write_iters % max_num_buckets != 0){
+        int old_num_write_iters = num_write_iters;
+        num_write_iters += max_num_buckets - (num_write_iters % max_num_buckets);
+        cerr << "WARNING: num_write_iters is not a multiple of " << max_num_buckets
+             << ". Increasing num_write_iters from " << old_num_write_iters
+             << " to " << num_write_iters << "." << endl;
+    }
+    if(num_read_iters > max_num_buckets && num_read_iters % max_num_buckets != 0){
+        int old_num_read_iters = num_read_iters;
+        num_read_iters += max_num_buckets - (num_read_iters % max_num_buckets);
+        cerr << "WARNING: num_read_iters is not a multiple of " << max_num_buckets
+             << ". Increasing num_read_iters from " << old_num_read_iters
+             << " to " << num_read_iters << "." << endl;
+    }
+    num_write_buckets = (num_write_iters > max_num_buckets) ? max_num_buckets : num_write_iters;
+    num_read_buckets = (num_read_iters > max_num_buckets) ? max_num_buckets : num_read_iters;
 
     ASSERTDRV(cuInit(0));
 
@@ -180,38 +217,44 @@ int main(int argc, char *argv[])
     if (do_cumemcpy) {
         cout << endl;
         cout << "cuMemcpy_H2D num iters for each size: " << num_write_iters << endl;
-        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
+        printf("Test \t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
         BEGIN_CHECK {
             // cuMemcpy H2D benchmark
             copy_size = 1;
             while (copy_size <= size) {
                 int iter = 0;
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_write_iters; ++iter) {
-                    ASSERTDRV(cuMemcpy(d_A, (CUdeviceptr)init_buf, copy_size));
+                for(int bucket = 0; bucket < num_write_buckets; bucket++){
+                    clock_gettime(MYCLOCK, &beg);
+                    for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
+                        ASSERTDRV(cuMemcpy(d_A, (CUdeviceptr)init_buf, copy_size));
+                    }
+                    clock_gettime(MYCLOCK, &end);
+                    lat_us[bucket] = time_diff(beg, end) / (double)iter;
                 }
-                clock_gettime(MYCLOCK, &end);
-                lat_us = time_diff(beg, end) / (double)iter;
-                printf("cuMemcpy_H2D \t %8zu \t %11.4f\n", copy_size, lat_us);
+                sort(lat_us, lat_us+num_write_buckets);
+                printf("cuMemcpy_H2D \t %8zu \t %11.4f \t %11.4f\n", copy_size, lat_us[num_write_buckets/2], lat_us[0]);
                 copy_size <<= 1;
             }
         } END_CHECK;
 
         cout << endl;
         cout << "cuMemcpy_D2H num iters for each size: " << num_read_iters << endl;
-        printf("Test \t\t Size(B) \t Avg.Time(us)\n");
+        printf("Test \t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
         BEGIN_CHECK {
             // cuMemcpy D2H benchmark
             copy_size = 1;
             while (copy_size <= size) {
                 int iter = 0;
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_read_iters; ++iter) {
-                    ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
+                for(int bucket = 0; bucket < num_read_buckets; bucket++){
+                    clock_gettime(MYCLOCK, &beg);
+                    for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
+                        ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
+                    }
+                    clock_gettime(MYCLOCK, &end);
+                    lat_us[bucket] = time_diff(beg, end) / (double)iter;
                 }
-                clock_gettime(MYCLOCK, &end);
-                lat_us = time_diff(beg, end) / (double)iter;
-                printf("cuMemcpy_D2H \t %8zu \t %11.4f\n", copy_size, lat_us);
+                sort(lat_us, lat_us+num_read_buckets);
+                printf("cuMemcpy_D2H \t %8zu \t %11.4f \t %11.4f\n", copy_size, lat_us[num_read_buckets/2], lat_us[0]);
                 copy_size <<= 1;
             }
         } END_CHECK;
@@ -230,7 +273,7 @@ int main(int argc, char *argv[])
         ASSERT_NEQ(mh, null_mh);
 
         void *map_d_ptr  = NULL;
-        ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, size), 0);
+        ASSERT_EQ(gdr_map_v2(g, mh, &map_d_ptr, size, map_type_flag), 0);
         cout << "map_d_ptr: " << map_d_ptr << endl;
 
         gdr_info_t info;
@@ -262,104 +305,102 @@ int main(int argc, char *argv[])
         cout << "WARNING: Measuring the API invocation overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility." << endl;
         // For more information, see
         // https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#sync-behavior
-        printf("Test \t\t\t Size(B) \t Avg.Time(us)\n");
+        printf("Test \t\t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
-            lat_us = 0;
-            if (use_cold_cache) {
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_write_iters; ++iter) {
-                    // Simulate GPU writing the data written by CPU. When cache
-                    // mapping is used, the cache lines will be moved to GPU.
-                    // The next access by CPU will cause the cache lines to
-                    // move back to CPU (cold cache). gdr_copy_to_mapping will
-                    // pay this cost.
+            for(int bucket = 0; bucket < num_write_buckets; bucket++){
+                if (use_cold_cache) {
+                    clock_gettime(MYCLOCK, &beg);
+                    for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
+                        // Simulate GPU writing the data written by CPU. When cache
+                        // mapping is used, the cache lines will be moved to GPU.
+                        // The next access by CPU will cause the cache lines to
+                        // move back to CPU (cold cache). gdr_copy_to_mapping will
+                        // pay this cost.
 
-                    // We use sync memops. The memset is considered done by the
-                    // time cuMemsetD8 returns.
-                    cuMemsetD8(d_A, 0, copy_size);
+                        // We use sync memops. The memset is considered done by the
+                        // time cuMemsetD8 returns.
+                        cuMemsetD8(d_A, 0, copy_size);
 
-                    gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
-                    SB();
+                        gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
+                        SB();
+                    }
+                    clock_gettime(MYCLOCK, &end);
+                    lat_us[bucket] = time_diff(beg, end);
+
+                    // Measure the cost of cuMemsetD8 and remove that from the
+                    // total latency.
+                    clock_gettime(MYCLOCK, &beg);
+                    for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
+                        cuMemsetD8(d_A, 0, copy_size);
+                    }
+                    clock_gettime(MYCLOCK, &end);
+                    lat_us[bucket] -= time_diff(beg, end);
                 }
-                clock_gettime(MYCLOCK, &end);
-
-                lat_us += time_diff(beg, end);
-
-                // Measure the cost of cuMemsetD8 and remove that from the
-                // total latency.
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_write_iters; ++iter) {
-                    cuMemsetD8(d_A, 0, copy_size);
+                else {
+                    clock_gettime(MYCLOCK, &beg);
+                    for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
+                        gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
+                    }
+                    clock_gettime(MYCLOCK, &end);
+                    lat_us[bucket] = time_diff(beg, end);
                 }
-                clock_gettime(MYCLOCK, &end);
-
-                lat_us -= time_diff(beg, end);
+                lat_us[bucket] /= (double)iter;
             }
-            else {
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_write_iters; ++iter) {
-                    gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
-                }
-                clock_gettime(MYCLOCK, &end);
-
-                lat_us += time_diff(beg, end);
-            }
-            lat_us = lat_us / (double)iter;
-            printf("gdr_copy_to_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
+            sort(lat_us, lat_us+num_write_buckets);
+            printf("gdr_copy_to_mapping \t %8zu \t %11.4f \t %11.4f\n", copy_size, lat_us[num_write_buckets/2], lat_us[0]);
             copy_size <<= 1;
         }
 
         // gdr_copy_from_mapping benchmark
         cout << endl;
         cout << "gdr_copy_from_mapping num iters for each size: " << num_read_iters << endl;
-        printf("Test \t\t\t Size(B) \t Avg.Time(us)\n");
+        printf("Test \t\t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
         copy_size = 1;
         while (copy_size <= size) {
             int iter = 0;
-            lat_us = 0;
-            if (use_cold_cache) {
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_read_iters; ++iter) {
-                    // Simulate GPU writing the data to the shared buffer. When
-                    // cache mapping is used, the cache lines will be moved to
-                    // GPU.  The next access by CPU will cause the cache lines
-                    // to move back to CPU (cold cache). gdr_copy_from_mapping
-                    // will pay this cost.
+            for(int bucket = 0; bucket < num_read_buckets; bucket++){
+                if (use_cold_cache) {
+                    clock_gettime(MYCLOCK, &beg);
+                    for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
+                        // Simulate GPU writing the data to the shared buffer. When
+                        // cache mapping is used, the cache lines will be moved to
+                        // GPU.  The next access by CPU will cause the cache lines
+                        // to move back to CPU (cold cache). gdr_copy_from_mapping
+                        // will pay this cost.
 
-                    // We use sync memops. The memset is considered done by the
-                    // time cuMemsetD8 returns.
-                    cuMemsetD8(d_A, 0, copy_size);
+                        // We use sync memops. The memset is considered done by the
+                        // time cuMemsetD8 returns.
+                        cuMemsetD8(d_A, 0, copy_size);
 
-                    gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
-                    LB();
+                        gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
+                        LB();
+                    }
+                    clock_gettime(MYCLOCK, &end);
+                    lat_us[bucket] = time_diff(beg, end);
+
+                    // Measure the cost of cuMemsetD8 and remove that from the
+                    // total latency.
+                    clock_gettime(MYCLOCK, &beg);
+                    for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
+                        cuMemsetD8(d_A, 0, copy_size);
+                    }
+                    clock_gettime(MYCLOCK, &end);
+                    lat_us[bucket] -= time_diff(beg, end);
                 }
-                clock_gettime(MYCLOCK, &end);
-
-                lat_us += time_diff(beg, end);
-
-                // Measure the cost of cuMemsetD8 and remove that from the
-                // total latency.
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_read_iters; ++iter) {
-                    cuMemsetD8(d_A, 0, copy_size);
+                else {
+                    clock_gettime(MYCLOCK, &beg);
+                    for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
+                        gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
+                    }
+                    clock_gettime(MYCLOCK, &end);
+                    lat_us[bucket] = time_diff(beg, end);
                 }
-                clock_gettime(MYCLOCK, &end);
-
-                lat_us -= time_diff(beg, end);
+                lat_us[bucket] /= (double)iter;
             }
-            else {
-                clock_gettime(MYCLOCK, &beg);
-                for (iter = 0; iter < num_read_iters; ++iter) {
-                    gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
-                }
-                clock_gettime(MYCLOCK, &end);
-
-                lat_us += time_diff(beg, end);
-            }
-            lat_us = lat_us / (double)iter;
-            printf("gdr_copy_from_mapping \t %8zu \t %11.4f\n", copy_size, lat_us);
+            sort(lat_us, lat_us+num_read_buckets);
+            printf("gdr_copy_from_mapping \t %8zu \t %11.4f \t %11.4f\n", copy_size, lat_us[num_read_buckets/2], lat_us[0]);
             copy_size <<= 1;
         }
 

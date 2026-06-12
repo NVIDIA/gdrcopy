@@ -72,7 +72,7 @@ build:
 install: build
 	[ -d $(DESTDIR)/$(MODULE_DESTDIR) ] || mkdir -p $(DESTDIR)/$(MODULE_DESTDIR)
 	cp gdrdrv.ko $(DESTDIR)/$(MODULE_DESTDIR)
-	if [ ! -n "$(DESTDIR)" ]; then $(DEPMOD) -r -ae $(KVER); fi
+	if [ ! -n "$(DESTDIR)" ]; then $(DEPMOD) -ae $(KVER); fi
 
 help:
 	$(MAKE) -C $(KDIR) M=$$PWD help

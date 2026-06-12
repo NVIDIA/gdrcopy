@@ -85,6 +85,58 @@ SLE-15 (any SP) and Leap 15.x.
 Root privileges are necessary to load/install the kernel-mode device
 driver.
 
+### DMA-BUF mmap backend
+
+GDRCopy can export GPU memory as a Linux dma-buf via the CUDA driver and map
+it into user space with a plain `mmap()` on the dma-buf file descriptor. This
+backend does not require the GDRCopy kernel module (`gdrdrv`) and is intended
+for environments where `gdrdrv` is not installed or loaded.
+
+**Requirements**
+
+- CUDA driver **13.3 or newer**
+
+**Backend selection**
+
+On `gdr_open()`, GDRCopy tries `gdrdrv` first. If `gdrdrv` is not installed or
+fails to open, it falls back to the dma-buf mmap backend (provided the driver supports). To force the dma-buf
+backend even when `gdrdrv` is available, set environment variable `GDRCOPY_USE_DMABUF_MMAP=1` before
+calling `gdr_open()`. To check at runtime which backend is active:
+
+```c
+int using_dmabuf;
+gdr_get_attribute(g, GDR_ATTR_USING_DMA_BUF_MMAP, &using_dmabuf);
+// using_dmabuf != 0  -> dma-buf mmap backend is in use
+```
+
+**Mapping type**
+
+CPU cacheability is decided by the CUDA driver at pin time and cannot be
+changed afterwards. The mapping type depends on the pin flag and if the platform is coherent.
+
+| Pin flag                  | Coherent platform           | Non-coherent platform |
+|---------------------------|-----------------------------|-----------------------|
+| Default                   | `GDR_MAPPING_TYPE_CACHING`  | `GDR_MAPPING_TYPE_WC` |
+| `GDR_PIN_FLAG_FORCE_PCIE` | `GDR_MAPPING_TYPE_WC`       | `GDR_MAPPING_TYPE_WC` |
+
+The dmabuf backend does not support user-requested mapping types: the type
+the pin produces is the only type `gdr_map_v2` will accept. Passing an
+explicit cache flag (`GDR_MAP_FLAG_REQ_CACHE_MAPPING`,
+`GDR_MAP_FLAG_REQ_WC_MAPPING`, …) that asks for anything other than the
+default returns `EINVAL`.
+
+**Behavior differences vs. the gdrdrv backend**
+
+- **Persistent mappings.** All dma-buf mappings are persistent;
+  `GDR_ATTR_USE_PERSISTENT_MAPPING` always returns 1.
+- **One fd per pinned buffer.** Each `gdr_pin_buffer` consumes one dma-buf
+  file descriptor until `gdr_unpin_buffer`. Applications that pin many
+  buffers should account for the process FD limit.
+- **No timing fields.** `gdr_get_info_v2` returns `tm_cycles = 0` and
+  `cycles_per_ms = 0`.
+- **No invalidation callback.** `gdr_get_callback_flag` always returns 0.
+- **GDR API compatibility** — Standard GDRCopy APIs remain unchanged
+
 
 ## Build and installation
 

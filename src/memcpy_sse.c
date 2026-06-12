@@ -24,11 +24,84 @@
 #include <stdlib.h>
 #include <string.h>
 #include <immintrin.h>
+#include <assert.h>
 
 #ifndef min
 #define min(A,B) ((A)<(B)?(A):(B))
 #endif
 
+// src is WC MMIO of GPU BAR
+// dest is host memory
+int memcpy_uncached_load_sse(void *dest, const void *src, size_t n_bytes)
+{
+    int ret = 0;
+#ifdef __SSE__
+    char *d = (char*)dest;
+    uintptr_t d_int = (uintptr_t)d;
+    const char *s = (const char *)src;
+    uintptr_t s_int = (uintptr_t)s;
+    size_t n = n_bytes;
+
+    assert((s_int & (sizeof(__m128)-1)) == 0);
+    assert(n >= sizeof(__m128) && n % sizeof(__m128) == 0);
+
+    if (d_int & (sizeof(__m128)-1)) { // dest is not aligned to 128-bits
+        __m128 r0,r1,r2,r3;
+        // unroll 4
+        while (n >= 4*4*sizeof(float)) {
+            r0 = _mm_load_ps((float *)(s+0*4*sizeof(float)));
+            r1 = _mm_load_ps((float *)(s+1*4*sizeof(float)));
+            r2 = _mm_load_ps((float *)(s+2*4*sizeof(float)));
+            r3 = _mm_load_ps((float *)(s+3*4*sizeof(float)));
+            _mm_storeu_ps((float *)(d+0*4*sizeof(float)), r0);
+            _mm_storeu_ps((float *)(d+1*4*sizeof(float)), r1);
+            _mm_storeu_ps((float *)(d+2*4*sizeof(float)), r2);
+            _mm_storeu_ps((float *)(d+3*4*sizeof(float)), r3);
+            s += 4*4*sizeof(float);
+            d += 4*4*sizeof(float);
+            n -= 4*4*sizeof(float);
+        }
+        while (n >= 4*sizeof(float)) {
+            r0 = _mm_load_ps((float *)(s));
+            _mm_storeu_ps((float *)(d), r0);
+            s += 4*sizeof(float);
+            d += 4*sizeof(float);
+            n -= 4*sizeof(float);
+        }
+    } else { // or it IS aligned
+        __m128 r0,r1,r2,r3;
+        // unroll 4
+        while (n >= 4*4*sizeof(float)) {
+            r0 = _mm_load_ps((float *)(s+0*4*sizeof(float)));
+            r1 = _mm_load_ps((float *)(s+1*4*sizeof(float)));
+            r2 = _mm_load_ps((float *)(s+2*4*sizeof(float)));
+            r3 = _mm_load_ps((float *)(s+3*4*sizeof(float)));
+            _mm_store_ps((float *)(d+0*4*sizeof(float)), r0);
+            _mm_store_ps((float *)(d+1*4*sizeof(float)), r1);
+            _mm_store_ps((float *)(d+2*4*sizeof(float)), r2);
+            _mm_store_ps((float *)(d+3*4*sizeof(float)), r3);
+            s += 4*4*sizeof(float);
+            d += 4*4*sizeof(float);
+            n -= 4*4*sizeof(float);
+        }
+        while (n >= 4*sizeof(float)) {
+            r0 = _mm_load_ps((float *)(s));
+            _mm_store_ps((float *)(d), r0);
+            s += 4*sizeof(float);
+            d += 4*sizeof(float);
+            n -= 4*sizeof(float);
+        }            
+    }
+
+    assert(n == 0);
+#else
+#error "this file should be compiled with -msse"
+#endif
+    return ret;
+}
+
+// dest is WC MMIO of GPU BAR
+// src is host memory
 int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)
 {
     int ret = 0;
@@ -39,16 +112,10 @@ int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)
     uintptr_t s_int = (uintptr_t)s;
     size_t n = n_bytes;
 
-    // align dest to 128-bits
-    if (d_int & 0xf) {
-        size_t nh = min(0x10 - (d_int & 0x0f), n);
-        memcpy(d, s, nh);
-        d += nh; d_int += nh;
-        s += nh; s_int += nh;
-        n -= nh;
-    }
+    assert((d_int & (sizeof(__m128)-1)) == 0);
+    assert(n >= sizeof(__m128) && n % sizeof(__m128) == 0);
 
-    if (s_int & 0xf) { // src is not aligned to 128-bits
+    if (s_int & (sizeof(__m128)-1)) { // src is not aligned to 128-bits
         __m128 r0,r1,r2,r3;
         // unroll 4
         while (n >= 4*4*sizeof(float)) {
@@ -95,92 +162,9 @@ int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)
             n -= 4*sizeof(float);
         }            
     }
+    // fences are taken care of in the main gdr_copy_to_mapping_internal function
 
-    if (n)
-        memcpy(d, s, n);
-
-    // fencing is needed even for plain memcpy(), due to performance
-    // being hit by delayed flushing of WC buffers
-    _mm_sfence();
-#else
-#error "this file should be compiled with -msse"
-#endif
-    return ret;
-}
-
-int memcpy_cached_store_sse(void *dest, const void *src, size_t n_bytes)
-{
-    int ret = 0;
-#ifdef __SSE__
-    char *d = (char*)dest;
-    uintptr_t d_int = (uintptr_t)d;
-    const char *s = (const char *)src;
-    uintptr_t s_int = (uintptr_t)s;
-    size_t n = n_bytes;
-
-    // align dest to 128-bits
-    if (d_int & 0xf) {
-        size_t nh = min(0x10 - (d_int & 0x0f), n);
-        memcpy(d, s, nh);
-        d += nh; d_int += nh;
-        s += nh; s_int += nh;
-        n -= nh;
-    }
-
-    if (s_int & 0xf) { // src is not aligned to 128-bits
-        __m128 r0,r1,r2,r3;
-        // unroll 4
-        while (n >= 4*4*sizeof(float)) {
-            r0 = _mm_loadu_ps((float *)(s+0*4*sizeof(float)));
-            r1 = _mm_loadu_ps((float *)(s+1*4*sizeof(float)));
-            r2 = _mm_loadu_ps((float *)(s+2*4*sizeof(float)));
-            r3 = _mm_loadu_ps((float *)(s+3*4*sizeof(float)));
-            _mm_store_ps((float *)(d+0*4*sizeof(float)), r0);
-            _mm_store_ps((float *)(d+1*4*sizeof(float)), r1);
-            _mm_store_ps((float *)(d+2*4*sizeof(float)), r2);
-            _mm_store_ps((float *)(d+3*4*sizeof(float)), r3);
-            s += 4*4*sizeof(float);
-            d += 4*4*sizeof(float);
-            n -= 4*4*sizeof(float);
-        }
-        while (n >= 4*sizeof(float)) {
-            r0 = _mm_loadu_ps((float *)(s));
-            _mm_store_ps((float *)(d), r0);
-            s += 4*sizeof(float);
-            d += 4*sizeof(float);
-            n -= 4*sizeof(float);
-        }
-    } else { // or it IS aligned
-        __m128 r0,r1,r2,r3;
-        // unroll 4
-        while (n >= 4*4*sizeof(float)) {
-            r0 = _mm_load_ps((float *)(s+0*4*sizeof(float)));
-            r1 = _mm_load_ps((float *)(s+1*4*sizeof(float)));
-            r2 = _mm_load_ps((float *)(s+2*4*sizeof(float)));
-            r3 = _mm_load_ps((float *)(s+3*4*sizeof(float)));
-            _mm_store_ps((float *)(d+0*4*sizeof(float)), r0);
-            _mm_store_ps((float *)(d+1*4*sizeof(float)), r1);
-            _mm_store_ps((float *)(d+2*4*sizeof(float)), r2);
-            _mm_store_ps((float *)(d+3*4*sizeof(float)), r3);
-            s += 4*4*sizeof(float);
-            d += 4*4*sizeof(float);
-            n -= 4*4*sizeof(float);
-        }
-        while (n >= 4*sizeof(float)) {
-            r0 = _mm_load_ps((float *)(s));
-            _mm_store_ps((float *)(d), r0);
-            s += 4*sizeof(float);
-            d += 4*sizeof(float);
-            n -= 4*sizeof(float);
-        }            
-    }
-
-    if (n)
-        memcpy(d, s, n);
-
-    // fencing because of NT stores
-    // potential optimization: issue only when NT stores are actually emitted
-    _mm_sfence();
+    assert(n == 0);
 
 #else
 #error "this file should be compiled with -msse"

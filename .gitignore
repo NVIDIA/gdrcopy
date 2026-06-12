@@ -23,3 +23,7 @@
 # Editor files
 *~
 *.swp
+
+# P4 related files
+.p4ignore
+*dvsbuild*

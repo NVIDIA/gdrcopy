@@ -25,6 +25,7 @@
 
 #include <stdint.h> // for standard [u]intX_t types
 #include <stddef.h>
+#include <stdarg.h>
 
 #define MAJOR_VERSION_SHIFT     16
 #define MINOR_VERSION_MASK      (((uint32_t)1 << MAJOR_VERSION_SHIFT) - 1)
@@ -54,6 +55,9 @@
  *
  * - GDRCOPY_LOG_LEVEL, overrides log threshold, default is to print errors
  *   only.
+ *
+ * - GDRCOPY_USE_DMABUF_MMAP, if set to "1", forces the use of DMABUF backend
+ *   instead of gdrdrv backend, even if gdrdrv is available.
  */
 
 #ifdef __cplusplus
@@ -184,6 +188,7 @@ typedef enum gdr_attr {
                                               // support the GDR_PIN_FLAG_FORCE_PCIE feature.
                                               // Note that passing the flag may still lead to a run-time error,
                                               // for example when running on unsupported platforms.
+    GDR_ATTR_USING_DMA_BUF_MMAP = 3, // Return non-zero if gdrcopy is using dma-buf mmap backend.
     // For internal use only
     GDR_ATTR_MAX
 } gdr_attr_t;
