@@ -68,11 +68,11 @@ clean:
 install: exes
 	@ echo "installing exes in $(DESTBIN)..." && \
 	mkdir -p $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_copybw -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_copylat -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_apiperf -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_sanity -t $(DESTBIN) && \
-	install -D -v -m u=rwx,g=rx,o=rx gdrcopy_pplat -t $(DESTBIN)
+	install -D -v -m 755 gdrcopy_copybw -t $(DESTBIN) && \
+	install -D -v -m 755 gdrcopy_copylat -t $(DESTBIN) && \
+	install -D -v -m 755 gdrcopy_apiperf -t $(DESTBIN) && \
+	install -D -v -m 755 gdrcopy_sanity -t $(DESTBIN) && \
+	install -D -v -m 755 gdrcopy_pplat -t $(DESTBIN)
 	cd $(DESTBIN) && \
 	ln -sf gdrcopy_copybw copybw && \
 	ln -sf gdrcopy_copylat copylat && \

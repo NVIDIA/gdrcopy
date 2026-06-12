@@ -72,9 +72,9 @@ install: lib_install exes_install
 lib_install: lib
 	@ echo "installing in $(DESTLIB) $(DESTINC)..." && \
 	mkdir -p $(DESTLIB) && \
-	install -D -v -m u=rwx,g=rx,o=rx src/$(LIB_DYNAMIC) -t $(DESTLIB) && \
+	install -D -v -m 755 src/$(LIB_DYNAMIC) -t $(DESTLIB) && \
 	mkdir -p $(DESTINC) && \
-	install -D -v -m u=rw,g=rw,o=r include/* -t $(DESTINC); \
+	install -D -v -m 664 include/* -t $(DESTINC); \
 	cd $(DESTLIB); \
 	ln -sf $(LIB_DYNAMIC) $(LIB_SONAME); \
 	ln -sf $(LIB_SONAME) $(LIB_BASENAME);

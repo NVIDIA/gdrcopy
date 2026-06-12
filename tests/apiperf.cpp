@@ -42,6 +42,7 @@ int num_bins         = 10;
 int num_warmup_iters = 10;
 size_t _size = (size_t)1 << 24;
 int dev_id = 0;
+gdr_map_flags_t map_type_flag = GDR_MAP_FLAG_DEFAULT;
 
 void print_usage(const char *path)
 {
@@ -55,6 +56,7 @@ void print_usage(const char *path)
     cout << "   -w <iters>      Number of warm-up iterations (default: " << num_warmup_iters << ")" << endl;
     cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
     cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
+    cout << "   -M <mapping_type>   Request mapping type (choices: default, wc, cache, device)" << endl;
 }
 
 void run_test(CUdeviceptr d_A, size_t size)
@@ -101,7 +103,7 @@ void run_test(CUdeviceptr d_A, size_t size)
                 ASSERT_NEQ(mh, null_mh);
 
                 void *map_d_ptr  = NULL;
-                ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, actual_pin_size), 0);
+                ASSERT_EQ(gdr_map_v2(g, mh, &map_d_ptr, actual_pin_size, map_type_flag), 0);
 
                 gdr_info_t info;
                 ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
@@ -123,7 +125,7 @@ void run_test(CUdeviceptr d_A, size_t size)
 
                 void *map_d_ptr  = NULL;
                 clock_gettime(MYCLOCK, &beg);
-                ASSERT_EQ(gdr_map(g, mh, &map_d_ptr, actual_pin_size), 0);
+                ASSERT_EQ(gdr_map_v2(g, mh, &map_d_ptr, actual_pin_size, map_type_flag), 0);
                 clock_gettime(MYCLOCK, &end);
                 delta_lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
                 map_lat_us += delta_lat_us;
@@ -180,7 +182,7 @@ int main(int argc, char *argv[])
 
     while(1) {
         int c;
-        c = getopt(argc, argv, "s:d:n:w:a:h");
+        c = getopt(argc, argv, "s:d:n:w:a:M:h");
         if (c == -1)
             break;
 
@@ -208,6 +210,21 @@ int main(int argc, char *argv[])
                 }
                 else {
                     cerr << "Unrecognized fn argument" << endl;
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 'M':
+                if (strcmp(optarg, "default") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_DEFAULT;
+                } else if (strcmp(optarg, "wc") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_REQ_WC_MAPPING;
+                } else if (strcmp(optarg, "cache") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_REQ_CACHE_MAPPING;
+                } else if (strcmp(optarg, "device") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_REQ_DEVICE_MAPPING;
+                } else {
+                    cerr << "ERROR: invalid mapping_type '" << optarg
+                         << "'. Valid options: default, wc, cache, device." << endl;
                     exit(EXIT_FAILURE);
                 }
                 break;

@@ -211,8 +211,10 @@ typedef struct {
 } gh_mem_handle_t;
 
 static int dev_id = 0;
+static gdr_map_flags_t map_type_flag = GDR_MAP_FLAG_DEFAULT;
 static uint32_t num_iters = 1000;
 static size_t data_size = 0;
+const int max_num_buckets = 100;
 
 static unsigned int num_blocks = 8;
 static unsigned int num_threads_per_block = 1024;
@@ -277,7 +279,7 @@ static void gh_mem_alloc(gh_mem_handle_t *mhandle, size_t size, mem_loc_t loc, g
         ASSERT_EQ(gdr_pin_buffer(g, gpu_ptr, size, 0, 0, &mh), 0);
         ASSERT_NEQ(mh, null_mh);
 
-        ASSERT_EQ(gdr_map(g, mh, &map_ptr, size), 0);
+        ASSERT_EQ(gdr_map_v2(g, mh, &map_ptr, size, map_type_flag), 0);
 
         ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
         off = info.va - gpu_ptr;
@@ -347,6 +349,7 @@ static void print_usage(const char *path)
     cout << "                           This flag is used by GPU to notify CPU." << endl;
     cout << "   -D <data-buf-loc>   The location of data buffer (default: " << mem_loc_to_str(data_buf_loc) << ")" << endl;
     cout << "                           Choices: gpumem, hostmem" << endl;
+    cout << "   -M <mapping_type>   Request mapping type (choices: default, wc, cache, device)" << endl;
 }
 
 static inline void check_timeout(struct timespec start, double timeout_us)
@@ -375,13 +378,14 @@ static inline void check_timeout(struct timespec start, double timeout_us)
 int main(int argc, char *argv[])
 {
     struct timespec beg, end;
-    double lat_us;
+    double lat_us[max_num_buckets];
+    int num_buckets = max_num_buckets;
     double timeout_us;
     cudaError_t rc;
 
     while (1) {
         int c;
-        c = getopt(argc, argv, "d:t:u:a:s:B:T:m:G:C:D:h");
+        c = getopt(argc, argv, "d:t:u:a:s:B:T:m:G:C:D:M:h");
         if (c == -1)
             break;
 
@@ -450,6 +454,21 @@ int main(int argc, char *argv[])
                 }
                 break;
             }
+            case 'M':
+                if (strcmp(optarg, "default") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_DEFAULT;
+                } else if (strcmp(optarg, "wc") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_REQ_WC_MAPPING;
+                } else if (strcmp(optarg, "cache") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_REQ_CACHE_MAPPING;
+                } else if (strcmp(optarg, "device") == 0) {
+                    map_type_flag = GDR_MAP_FLAG_REQ_DEVICE_MAPPING;
+                } else {
+                    cerr << "ERROR: invalid mapping_type '" << optarg
+                         << "'. Valid options: default, wc, cache, device." << endl;
+                    exit(EXIT_FAILURE);
+                }
+                break;
             case 'h':
                 print_usage(argv[0]);
                 exit(EXIT_SUCCESS);
@@ -482,6 +501,14 @@ int main(int argc, char *argv[])
     }
 
     timeout_us = timeout * 1000000.0;
+    if(num_iters > max_num_buckets && num_iters % max_num_buckets != 0){
+        int old_num_iters = num_iters;
+        num_iters += max_num_buckets - (num_iters % max_num_buckets);
+        cerr << "WARNING: num_iters is not a multiple of " << max_num_buckets
+             << ". Increasing num_iters from " << old_num_iters
+             << " to " << num_iters << "." << endl;
+    }
+    num_buckets = (num_iters > max_num_buckets) ? max_num_buckets : num_iters;
 
     ASSERTDRV(cuInit(0));
 
@@ -667,42 +694,44 @@ int main(int argc, char *argv[])
         switch (benchmark_mode) {
             case BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME: {
                 // Restart the timer for measurement.
-                clock_gettime(MYCLOCK, &beg);
-                while (i <= num_iters) {
-                    if (process_data) {
-                        if (data_buf_loc == MEM_LOC_GPU)
-                            gdr_copy_to_mapping(data_buf_mhandle.mh, data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
+                for(int bucket = 0; bucket < num_buckets; bucket++){
+                    clock_gettime(MYCLOCK, &beg);
+                    while (i <= (bucket+1)*(num_iters/num_buckets)) {
+                        if (process_data) {
+                            if (data_buf_loc == MEM_LOC_GPU)
+                                gdr_copy_to_mapping(data_buf_mhandle.mh, data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
+                            else
+                                memcpy(data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
+                            SB();
+                        }
+                        if (gpu_flag_loc == MEM_LOC_GPU)
+                            gdr_copy_to_mapping(gpu_flag_mhandle.mh, gpu_flag_mhandle.host_ptr, &val, sizeof(gpu_flag_mhandle.size));
                         else
-                            memcpy(data_buf_mhandle.host_ptr, init_buf_mhandle.host_ptr, data_size);
+                            WRITE_ONCE(*(uint32_t *)gpu_flag_mhandle.host_ptr, val);
                         SB();
-                    }
-                    if (gpu_flag_loc == MEM_LOC_GPU)
-                        gdr_copy_to_mapping(gpu_flag_mhandle.mh, gpu_flag_mhandle.host_ptr, &val, sizeof(gpu_flag_mhandle.size));
-                    else
-                        WRITE_ONCE(*(uint32_t *)gpu_flag_mhandle.host_ptr, val);
-                    SB();
 
-                    cpu_flag_idx = 0;
-                    do {
-                        if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
-                            gdr_copy_from_mapping(cpu_flag_mhandle.mh, &val, &((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx], sizeof(uint32_t));
-                        else
-                            val = READ_ONCE(((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx]);
-                        if (val == i + 1)
-                            ++cpu_flag_idx;
-                        else
-                            check_timeout(beg, timeout_us);
-                    }
-                    while (cpu_flag_idx < num_blocks);
-                    LB();
+                        cpu_flag_idx = 0;
+                        do {
+                            if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
+                                gdr_copy_from_mapping(cpu_flag_mhandle.mh, &val, &((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx], sizeof(uint32_t));
+                            else
+                                val = READ_ONCE(((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx]);
+                            if (val == i + 1)
+                                ++cpu_flag_idx;
+                            else
+                                check_timeout(beg, timeout_us);
+                        }
+                        while (cpu_flag_idx < num_blocks);
+                        LB();
 
-                    i = val;
+                        i = val;
+                    }
+                    clock_gettime(MYCLOCK, &end);
+                    lat_us[bucket] = time_diff(beg, end) / (double)(num_iters/num_buckets);
                 }
-                clock_gettime(MYCLOCK, &end);
+                sort(lat_us, lat_us+num_buckets);
 
                 ASSERTDRV(cuStreamSynchronize(0));
-
-                lat_us = time_diff(beg, end) / (double)num_iters;
                 break;
             }
             case BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME: {
@@ -758,7 +787,8 @@ int main(int argc, char *argv[])
                 gpu_time_beg = *std::min_element(gpu_time_beg_array, gpu_time_beg_array + num_blocks);
                 gpu_time_end = *std::max_element(gpu_time_end_array, gpu_time_end_array + num_blocks);
 
-                lat_us = ((gpu_time_end - gpu_time_beg) / 1000.0) / (double)num_iters;
+                lat_us[0] = ((gpu_time_end - gpu_time_beg) / 1000.0) / (double)num_iters;
+                num_buckets = 1;  // We only have one data point. So, we set num_buckets to 1 to avoid confusion in the output.
                 break;
             }
             default:
@@ -768,7 +798,7 @@ int main(int argc, char *argv[])
 
         ASSERTDRV(cuStreamSynchronize(0));
 
-        cout << "Round-trip latency per iteration is " << lat_us << " us" << endl;
+        cout << "Round-trip latency per iteration is (min) " << lat_us[0] << ", (median) " << lat_us[num_buckets/2] << " us" << endl;
 
         gh_mem_free(&gpu_flag_mhandle);
         gh_mem_free(&cpu_flag_mhandle);
