@@ -2,7 +2,21 @@ gdrcopy-tests (@FULL_VERSION@) stable; urgency=low
 
   * See CHANGELOG.md.
 
- -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 04 Aug 2025 11:59:59 -0700
+ -- GPUDirect Team <gpudirect@nvidia.com>  Thu, 21 May 2026 14:00:00 -0700
+
+gdrcopy-tests (2.6) stable; urgency=low
+
+  * Improve gdr_copy_to_mapping and gdr_copy_from_mapping performance with runtime-selected CPU copy implementations for AVX2, AVX-512, MOVDIR64B, NEON, and LS64-capable systems.
+  * Add -M to gdrcopy_apiperf, gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_pplat to request default, WC, cache, or device mappings.
+  * Change gdrcopy_copylat and gdrcopy_pplat to report P0 and P50 latency metrics instead of average latency.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Thu, 21 May 2026 14:00:00 -0700
+
+gdrcopy-tests (2.5.2) stable; urgency=low
+
+  * No change.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Tue, 24 Feb 2026 10:00:00 -0700
 
 gdrcopy-tests (2.5.1) stable; urgency=low
 
