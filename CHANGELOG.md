@@ -1,6 +1,16 @@
 # Changelog
 
-## [master]
+## [master] - 2026-05-21
+
+- No change
+
+## [2.6] - 2026-05-21
+- Introduce a DMA-BUF mmap backend for mapping GPU memory without the GDRCopy kernel module. GDRCopy still prefers gdrdrv when available, can fall back to DMA-BUF mmap with CUDA driver 13.3+, and can force the new backend with GDRCOPY_USE_DMABUF_MMAP.
+- Introduce GDR_ATTR_USING_DMA_BUF_MMAP so applications can query whether GDRCopy is using the DMA-BUF mmap backend.
+- Improve gdr_copy_to_mapping and gdr_copy_from_mapping performance with runtime-selected CPU copy implementations for AVX2, AVX-512, MOVDIR64B, NEON, and LS64-capable systems.
+- Add -M to gdrcopy_apiperf, gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_pplat to request default, WC, cache, or device mappings.
+- Change gdrcopy_copylat and gdrcopy_pplat to report P0 and P50 latency metrics instead of average latency.
+- Fix build and install errors on Ubuntu 25.10 by using numeric install modes and dropping deprecated depmod -r usage.
 
 ## [2.5.2] - 2026-02-24
 - Fix build errors on recent kernels (v6.15+): mark test-dummy.ko with Dual MIT/GPL so it may use GPL-only symbol __vma_start_write (vm_flags_set).
@@ -129,6 +139,8 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 [master]: https://github.com/NVIDIA/gdrcopy
+[2.6]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.6
+[2.5.2]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.5.2
 [2.5.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.5.1
 [2.5]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.5
 [2.4.4]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.4.4
@@ -142,4 +154,3 @@
 [2.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.1
 [2.0]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.0
 [1.3]: https://github.com/NVIDIA/gdrcopy/releases/tag/v1.3
-
