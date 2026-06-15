@@ -1849,7 +1849,10 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
         print_dbg("%s: Got fd %d\n", myname, fd);
 
         print_dbg("%s: Converting fd to gdr_t\n", myname);
+        gdr_t g_template = gdr_open_safe();
+
         struct gdr _g;
+        memcpy(&_g, g_template, sizeof(struct gdr));
         _g.fd = fd;
         gdr_t g = &_g;
 
@@ -1982,7 +1985,10 @@ void invalidation_unix_sock_shared_fd_gdr_map()
         print_dbg("%s: Got fd %d\n", myname, fd);
 
         print_dbg("%s: Converting fd to gdr_t\n", myname);
+        gdr_t g_template = gdr_open_safe();
+
         struct gdr _g;
+        memcpy(&_g, g_template, sizeof(struct gdr));
         _g.fd = fd;
         gdr_t g = &_g;
 

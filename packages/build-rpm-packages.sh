@@ -23,7 +23,7 @@
 # Restart this number at 1 if MAJOR_VERSION or MINOR_VERSION changes
 # See https://rpm-packaging-guide.github.io/#preamble-items
 RPM_VERSION=1
-PATCH_VERSION=2
+PATCH_VERSION=
 
 SCRIPT_DIR_PATH="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 TOP_DIR_PATH="${SCRIPT_DIR_PATH}/.."

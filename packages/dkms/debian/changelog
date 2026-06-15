@@ -2,7 +2,13 @@ gdrdrv-dkms (@FULL_VERSION@) stable; urgency=low
 
   * See CHANGELOG.md.
 
- -- GPUDirect Team <gpudirect@nvidia.com>  Tue, 24 Feb 2026 10:00:00 -0700
+ -- GPUDirect Team <gpudirect@nvidia.com>  Thu, 21 May 2026 14:00:00 -0700
+
+gdrdrv-dkms (2.6) stable; urgency=low
+
+  * Fix build and install errors on Ubuntu 25.10 by using numeric install modes and dropping deprecated depmod -r usage.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Thu, 21 May 2026 14:00:00 -0700
 
 gdrdrv-dkms (2.5.2) stable; urgency=low
 

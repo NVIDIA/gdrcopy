@@ -1014,12 +1014,13 @@ static void gdr_init_cpu_flags(void)
     }
 
     // AMD AVX-512 implementation is not as performant, so we avoid it
-    if (has_avx512 && use_intel_avx512) {
-        memcpy_uncached_store_64B = memcpy_uncached_store_avx512;
-        memcpy_uncached_store_64B_name = "AVX512";
-        memcpy_uncached_load_64B = memcpy_uncached_load_avx512;
-        memcpy_uncached_load_64B_name = "AVX512";
-    }
+    // On many Intel CPUs, SSE4.1 outperforms AVX512, disabling for now 
+    // if (has_avx512 && use_intel_avx512) {
+    //     memcpy_uncached_store_64B = memcpy_uncached_store_avx512;
+    //     memcpy_uncached_store_64B_name = "AVX512";
+    //     memcpy_uncached_load_64B = memcpy_uncached_load_avx512;
+    //     memcpy_uncached_load_64B_name = "AVX512";
+    // }
     if (has_movdir64b) {
         memcpy_uncached_store_64B = memcpy_uncached_store_movdir64b;
         memcpy_uncached_store_64B_name = "MOVDIR64B";
