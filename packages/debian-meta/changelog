@@ -2,7 +2,18 @@ gdrcopy (@FULL_VERSION@) stable; urgency=low
 
   * See CHANGELOG.md.
 
- -- GPUDirect Team <gpudirect@nvidia.com>  Tue, 24 Feb 2026 10:00:00 -0700
+ -- GPUDirect Team <gpudirect@nvidia.com>  Thu, 21 May 2026 14:00:00 -0700
+
+gdrcopy (2.6) stable; urgency=low
+
+  * Introduce a DMA-BUF mmap backend for mapping GPU memory without the GDRCopy kernel module. GDRCopy still prefers gdrdrv when available, can fall back to DMA-BUF mmap with CUDA driver 13.3+, and can force the new backend with GDRCOPY_USE_DMABUF_MMAP.
+  * Introduce GDR_ATTR_USING_DMA_BUF_MMAP so applications can query whether GDRCopy is using the DMA-BUF mmap backend.
+  * Improve gdr_copy_to_mapping and gdr_copy_from_mapping performance with runtime-selected CPU copy implementations for AVX2, AVX-512, MOVDIR64B, NEON, and LS64-capable systems.
+  * Add -M to gdrcopy_apiperf, gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_pplat to request default, WC, cache, or device mappings.
+  * Change gdrcopy_copylat and gdrcopy_pplat to report P0 and P50 latency metrics instead of average latency.
+  * Fix build and install errors on Ubuntu 25.10 by using numeric install modes and dropping deprecated depmod -r usage.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Thu, 21 May 2026 14:00:00 -0700
 
 gdrcopy (2.5.2) stable; urgency=low
 

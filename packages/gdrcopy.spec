@@ -363,8 +363,15 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 
 %changelog
-* Tue Feb 24 2026 GPUDirect Team <gpudirect@nvidia.com> %{GDR_VERSION}-%{_release}
+* Thu May 21 2026 GPUDirect Team <gpudirect@nvidia.com> %{GDR_VERSION}-%{_release}
 - See CHANGELOG.md.
+* Thu May 21 2026 GPUDirect Team <gpudirect@nvidia.com> 2.6-%{_release}
+- Introduce a DMA-BUF mmap backend for mapping GPU memory without the GDRCopy kernel module. GDRCopy still prefers gdrdrv when available, can fall back to DMA-BUF mmap with CUDA driver 13.3+, and can force the new backend with GDRCOPY_USE_DMABUF_MMAP.
+- Introduce GDR_ATTR_USING_DMA_BUF_MMAP so applications can query whether GDRCopy is using the DMA-BUF mmap backend.
+- Improve gdr_copy_to_mapping and gdr_copy_from_mapping performance with runtime-selected CPU copy implementations for AVX2, AVX-512, MOVDIR64B, NEON, and LS64-capable systems.
+- Add -M to gdrcopy_apiperf, gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_pplat to request default, WC, cache, or device mappings.
+- Change gdrcopy_copylat and gdrcopy_pplat to report P0 and P50 latency metrics instead of average latency.
+- Fix build and install errors on Ubuntu 25.10 by using numeric install modes and dropping deprecated depmod -r usage.
 * Tue Feb 24 2026 GPUDirect Team <gpudirect@nvidia.com> 2.5.2-%{_release}
 - Fix build errors on recent kernels (v6.15+): mark test-dummy.ko with Dual MIT/GPL so it may use GPL-only symbol __vma_start_write (vm_flags_set).
 * Mon Aug 04 2025 GPUDirect Team <gpudirect@nvidia.com> 2.5.1-%{_release}
