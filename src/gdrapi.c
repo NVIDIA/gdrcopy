@@ -764,19 +764,6 @@ int gdr_unmap(gdr_t g, gdr_mh_t handle, void *va, size_t size)
 }
 
 typedef int (*gdr_copy_fn_t)(void *dest, const void *src, size_t n_bytes);
-static gdr_copy_fn_t memcpy_uncached_store_16B = NULL;
-static gdr_copy_fn_t memcpy_uncached_store_32B = NULL;
-static gdr_copy_fn_t memcpy_uncached_store_64B = NULL;
-static gdr_copy_fn_t memcpy_uncached_load_16B = NULL;
-static gdr_copy_fn_t memcpy_uncached_load_32B = NULL;
-static gdr_copy_fn_t memcpy_uncached_load_64B = NULL;
-
-static const char *memcpy_uncached_store_16B_name = NULL;
-static const char *memcpy_uncached_store_32B_name = NULL;
-static const char *memcpy_uncached_store_64B_name = NULL;
-static const char *memcpy_uncached_load_16B_name = NULL;
-static const char *memcpy_uncached_load_32B_name = NULL;
-static const char *memcpy_uncached_load_64B_name = NULL;
 
 #ifdef GDRAPI_X86
 #include <cpuid.h>
@@ -823,37 +810,10 @@ static int memcpy_uncached_store_neon(void *dest, const void *src, size_t n_byte
 static int memcpy_uncached_load_neon(void *dest, const void *src, size_t n_bytes) { return 1; }
 static int memcpy_uncached_store_ls64(void *dest, const void *src, size_t n_bytes) { return 1; }
 static int memcpy_uncached_load_ls64(void *dest, const void *src, size_t n_bytes) { return 1; }
-static inline void wc_store_fence(void) { _mm_sfence(); }
-static inline void memory_fence(void) { _mm_mfence() ; }
-#define PREFERS_STORE_UNROLL4 0
-#define PREFERS_STORE_UNROLL8 0
-#define PREFERS_LOAD_UNROLL4  0
-#define PREFERS_LOAD_UNROLL8  0
+static inline void mapping_store_fence(void) { asm volatile("sfence" ::: "memory"); }
+static inline void mapping_load_fence(void) { asm volatile("lfence" ::: "memory"); }
+static inline void memory_fence(void) { asm volatile("mfence" ::: "memory"); }
 // GDRAPI_X86
-
-#elif defined(GDRAPI_POWER)
-static int memcpy_uncached_store_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
-static int memcpy_uncached_load_avx(void *dest, const void *src, size_t n_bytes)  { return 1; }
-static int memcpy_uncached_store_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
-static int memcpy_uncached_load_sse(void *dest, const void *src, size_t n_bytes)    { return 1; }
-static int memcpy_uncached_store_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_load_sse41(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_store_avx2(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_load_avx2(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_store_avx512(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_load_avx512(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_store_movdir64b(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_store_neon(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_load_neon(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_store_ls64(void *dest, const void *src, size_t n_bytes) { return 1; }
-static int memcpy_uncached_load_ls64(void *dest, const void *src, size_t n_bytes) { return 1; }
-static inline void wc_store_fence(void) { asm volatile("sync") ; }
-static inline void memory_fence(void) { asm volatile("sync") ; }
-#define PREFERS_STORE_UNROLL4 1
-#define PREFERS_STORE_UNROLL8 0
-#define PREFERS_LOAD_UNROLL4  0
-#define PREFERS_LOAD_UNROLL8  1
-// GDRAPI_POWER
 
 #elif defined(GDRAPI_ARM64)
 #ifndef HWCAP_ASIMD
@@ -894,13 +854,10 @@ extern int memcpy_uncached_load_ls64(void *dest, const void *src, size_t n_bytes
 static int memcpy_uncached_store_ls64(void *dest, const void *src, size_t n_bytes) { return 1; }
 static int memcpy_uncached_load_ls64(void *dest, const void *src, size_t n_bytes) { return 1; }
 #endif
-static inline void wc_store_fence(void) { asm volatile("DMB st") ; }
-static inline void memory_fence(void) { asm volatile("DMB sy") ; }
+static inline void mapping_store_fence(void) { asm volatile("DMB st" ::: "memory") ; }
+static inline void mapping_load_fence(void) { asm volatile("DMB ld" ::: "memory") ; }
+static inline void memory_fence(void) { asm volatile("DMB sy" ::: "memory") ; }
 typedef unsigned __int128 uint128_t;
-#define PREFERS_STORE_UNROLL4 0
-#define PREFERS_STORE_UNROLL8 0
-#define PREFERS_LOAD_UNROLL4  0
-#define PREFERS_LOAD_UNROLL8  0
 
 static int memcpy_uncached_store_arm64(void *dest, const void *src, size_t n_bytes)
 {
@@ -970,7 +927,7 @@ static void gdr_init_cpu_flags(void)
     info_type = 0x7;
     if (__get_cpuid_count(info_type, 0, &ax, &bx, &cx, &dx) == 1){
         has_avx2 = ((bx & bit_AVX2) != 0) & ((xcr0 & 0x6) != 0);
-        has_avx512 = ((bx & bit_AVX512F) != 0) & ((xcr0 & 0xE6) != 0);
+        has_avx512 = ((bx & bit_AVX512F) != 0) & ((xcr0 & 0xE6) == 0xE6);
         has_movdiri = ((cx & bit_MOVDIRI) != 0);
         has_movdir64b = ((cx & bit_MOVDIR64B) != 0);
         if(has_movdir64b && COMPILED_MOVDIR64B == 0){
@@ -988,43 +945,6 @@ static void gdr_init_cpu_flags(void)
         use_intel_avx512 = (strcmp(vendor, "GenuineIntel") == 0);
     }
     gdr_dbg("vendor_intel=%d movdir64b=%d movdiri=%d avx512=%d avx2=%d sse4_1=%d avx=%d sse=%d sse2=%d\n", use_intel_avx512, has_movdir64b, has_movdiri, has_avx512, has_avx2, has_sse4_1, has_avx, has_sse, has_sse2);
-
-    if (has_sse4_1) {
-        memcpy_uncached_store_16B = memcpy_uncached_store_sse41;
-        memcpy_uncached_store_16B_name = "SSE41";
-        memcpy_uncached_load_16B = memcpy_uncached_load_sse41;
-        memcpy_uncached_load_16B_name = "SSE41";
-    } else if (has_sse) {
-        memcpy_uncached_store_16B = memcpy_uncached_store_sse;
-        memcpy_uncached_store_16B_name = "SSE";
-        memcpy_uncached_load_16B = memcpy_uncached_load_sse;
-        memcpy_uncached_load_16B_name = "SSE";
-    }
-
-    if (has_avx2) {
-        memcpy_uncached_store_32B = memcpy_uncached_store_avx2;
-        memcpy_uncached_store_32B_name = "AVX2";
-        memcpy_uncached_load_32B = memcpy_uncached_load_avx2;
-        memcpy_uncached_load_32B_name = "AVX2";
-    } else if (has_avx) {
-        memcpy_uncached_store_32B = memcpy_uncached_store_avx;
-        memcpy_uncached_store_32B_name = "AVX";
-        memcpy_uncached_load_32B = memcpy_uncached_load_avx;
-        memcpy_uncached_load_32B_name = "AVX";
-    }
-
-    // AMD AVX-512 implementation is not as performant, so we avoid it
-    // On many Intel CPUs, SSE4.1 outperforms AVX512, disabling for now 
-    // if (has_avx512 && use_intel_avx512) {
-    //     memcpy_uncached_store_64B = memcpy_uncached_store_avx512;
-    //     memcpy_uncached_store_64B_name = "AVX512";
-    //     memcpy_uncached_load_64B = memcpy_uncached_load_avx512;
-    //     memcpy_uncached_load_64B_name = "AVX512";
-    // }
-    if (has_movdir64b) {
-        memcpy_uncached_store_64B = memcpy_uncached_store_movdir64b;
-        memcpy_uncached_store_64B_name = "MOVDIR64B";
-    }
 #endif // GDRAPI_X86
 
 #ifdef GDRAPI_ARM64
@@ -1038,110 +958,10 @@ static void gdr_init_cpu_flags(void)
         has_ls64 = 0;
     }
     gdr_dbg("ls64=%d neon=%d sve=%d\n", has_ls64, has_neon, has_sve);
-
-    memcpy_uncached_store_16B = memcpy_uncached_store_arm64;
-    memcpy_uncached_store_16B_name = "STP";
-    memcpy_uncached_store_32B = memcpy_uncached_store_arm64;
-    memcpy_uncached_store_32B_name = "STP";
-    memcpy_uncached_load_16B = memcpy_uncached_load_arm64;
-    memcpy_uncached_load_16B_name = "LDP";
-    memcpy_uncached_load_32B = memcpy_uncached_load_arm64;
-    memcpy_uncached_load_32B_name = "LDP";
-    if (has_ls64) {
-        memcpy_uncached_store_64B = memcpy_uncached_store_ls64;
-        memcpy_uncached_store_64B_name = "ST64B";
-        memcpy_uncached_load_64B = memcpy_uncached_load_ls64;
-        memcpy_uncached_load_64B_name = "LD64B";
-    }
-    else if (has_neon) {
-        memcpy_uncached_store_64B = memcpy_uncached_store_neon;
-        memcpy_uncached_store_64B_name = "NEON";
-        memcpy_uncached_load_64B = memcpy_uncached_load_neon;
-        memcpy_uncached_load_64B_name = "NEON";
-    }
-
 #endif // GDRAPI_ARM64
-
-#ifdef GDRAPI_POWER
-    // detect and enable Altivec/SMX support
-#endif
 }
 
 // note: more than one implementation may be compiled in
-
-static void unroll8_memcpy(void *dst, const void *src, size_t size)
-{
-    const uint64_t *r = (const uint64_t *)src;
-    uint64_t *w = (uint64_t *)dst;
-    size_t nw = size / sizeof(*r);
-    assert(size % sizeof(*r) == 0);
-
-    while (nw) {
-        if (0 == (nw & 3)) {
-            uint64_t r0 = r[0];
-            uint64_t r1 = r[1];
-            uint64_t r2 = r[2];
-            uint64_t r3 = r[3];
-            w[0] = r0;
-            w[1] = r1;
-            w[2] = r2;
-            w[3] = r3;
-            r += 4;
-            w += 4;
-            nw -= 4;
-        } else if (0 == (nw & 1)) {
-            uint64_t r0 = r[0];
-            uint64_t r1 = r[1];
-            w[0] = r0;
-            w[1] = r1;
-            r += 2;
-            w += 2;
-            nw -= 2;
-        } else {
-            w[0] = r[0];
-            ++w;
-            ++r;
-            --nw;
-        }
-    }
-}
-
-static void unroll4_memcpy(void *dst, const void *src, size_t size)
-{
-    const uint32_t *r = (const uint32_t *)src;
-    uint32_t *w = (uint32_t *)dst;
-    size_t nw = size / sizeof(*r);
-    assert(size % sizeof(*r) == 0);
-
-    while (nw) {
-        if (0 == (nw & 3)) {
-            uint32_t r0 = r[0];
-            uint32_t r1 = r[1];
-            uint32_t r2 = r[2];
-            uint32_t r3 = r[3];
-            w[0] = r0;
-            w[1] = r1;
-            w[2] = r2;
-            w[3] = r3;
-            r += 4;
-            w += 4;
-            nw -= 4;
-        } else if (0 == (nw & 1)) {
-            uint32_t r0 = r[0];
-            uint32_t r1 = r[1];
-            w[0] = r0;
-            w[1] = r1;
-            r += 2;
-            w += 2;
-            nw -= 2;
-        } else {
-            w[0] = r[0];
-            ++w;
-            ++r;
-            --nw;
-        }
-    }
-}
 
 static inline int is_aligned(unsigned long value, unsigned powof2)
 {
@@ -1152,6 +972,25 @@ static inline int ptr_is_aligned(const void *ptr, unsigned powof2)
 {
     unsigned long addr = (unsigned long)ptr;
     return is_aligned(addr, powof2);
+}
+
+static inline int needs_mapping_read_fence(gdr_mapping_type_t mapping_type)
+{
+#ifdef GDRAPI_X86
+    return mapping_type == GDR_MAPPING_TYPE_WC ||
+           mapping_type == GDR_MAPPING_TYPE_DEVICE;
+#else
+    return gdr_is_mapped(mapping_type);
+#endif
+}
+
+static inline int needs_mapping_store_fence(gdr_mapping_type_t mapping_type)
+{
+#ifdef GDRAPI_X86
+    return mapping_type == GDR_MAPPING_TYPE_WC;
+#else
+    return gdr_is_mapped(mapping_type);
+#endif
 }
 
 static inline void memcpy_to_device_mapping(void *dst, const void *src, size_t size)
@@ -1267,13 +1106,56 @@ static int aligned_copy(char *dest, const char *src, size_t size, size_t offset_
     return 0;
 }
 
-static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size_t size, gdr_mapping_type_t mapping_type)
+static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size_t size, gdr_mapping_type_t mapping_type, uint32_t flags)
 {
     const int wc_mapping = (mapping_type == GDR_MAPPING_TYPE_WC);
     const int device_mapping = (mapping_type == GDR_MAPPING_TYPE_DEVICE);
+
+    gdr_copy_fn_t memcpy_uncached_store_16B = NULL;
+    const char *memcpy_uncached_store_16B_name = NULL;
+    gdr_copy_fn_t memcpy_uncached_store_32B = NULL;
+    const char *memcpy_uncached_store_32B_name = NULL;
+    gdr_copy_fn_t memcpy_uncached_store_64B = NULL;
+    const char *memcpy_uncached_store_64B_name = NULL;
+#ifdef GDRAPI_X86
+    if (has_sse4_1 && (flags & GDR_COPY_FLAG_USE_SSE4_1)) {
+        memcpy_uncached_store_16B = memcpy_uncached_store_sse41;
+        memcpy_uncached_store_16B_name = "SSE4_1";
+    } else if (has_sse && (flags & GDR_COPY_FLAG_USE_SSE)) {
+        memcpy_uncached_store_16B = memcpy_uncached_store_sse;
+        memcpy_uncached_store_16B_name = "SSE";
+    }
+    if (has_avx2 && (flags & GDR_COPY_FLAG_USE_AVX2)) {
+        memcpy_uncached_store_32B = memcpy_uncached_store_avx2;
+        memcpy_uncached_store_32B_name = "AVX2";
+    } else if (has_avx && (flags & GDR_COPY_FLAG_USE_AVX)) {
+        memcpy_uncached_store_32B = memcpy_uncached_store_avx;
+        memcpy_uncached_store_32B_name = "AVX";
+    }
+    if (has_movdir64b && (flags & GDR_COPY_FLAG_USE_MOVDIR64B)) {
+        memcpy_uncached_store_64B = memcpy_uncached_store_movdir64b;
+        memcpy_uncached_store_64B_name = "MOVDIR64B";
+    } else if ((flags & GDR_COPY_FLAG_USE_AVX512) && has_avx512 && use_intel_avx512) {
+        // AMD platforms implement AVX-512 like normal SIMD, not NT/streaming SIMD variants
+        memcpy_uncached_store_64B = memcpy_uncached_store_avx512;
+        memcpy_uncached_store_64B_name = "AVX512";
+    }
+#elif defined(GDRAPI_ARM64)
+    memcpy_uncached_store_16B = memcpy_uncached_store_arm64;
+    memcpy_uncached_store_16B_name = "STP";
+    memcpy_uncached_store_32B = memcpy_uncached_store_arm64;
+    memcpy_uncached_store_32B_name = "STP";
+    if (has_ls64 && (flags & GDR_COPY_FLAG_USE_LS64)) {
+        memcpy_uncached_store_64B = memcpy_uncached_store_ls64;
+        memcpy_uncached_store_64B_name = "ST64B";
+    } else if (has_neon && (flags & GDR_COPY_FLAG_USE_NEON)) {
+        memcpy_uncached_store_64B = memcpy_uncached_store_neon;
+        memcpy_uncached_store_64B_name = "NEON";
+    }
+#endif
+
     do {
         if(wc_mapping){
-#if defined(GDRAPI_X86) || defined(GDRAPI_ARM64)
             // Assumption: always perform aligned accesses to device, so always align map_d_ptr first
             size_t offset_addr = (uintptr_t) map_d_ptr & 0xF;
             if(size < 16){
@@ -1338,21 +1220,9 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
                 aligned_copy(map_d_ptr, h_ptr, size, 0, true);
             }
             break;
-#endif
         }
 
-        // on POWER, compiler/libc memcpy is not optimal for MMIO
-        // 64bit stores are not better than 32bit ones, so we prefer the latter.
-        // NOTE: if preferred but not aligned, a better implementation would still try to
-        // use byte sized stores to align map_d_ptr and h_ptr to next word.
-        // NOTE2: unroll*_memcpy and memcpy do not include fencing.
-        if (wc_mapping && PREFERS_STORE_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
-            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_to_mapping\n");
-            unroll8_memcpy(map_d_ptr, h_ptr, size);
-        } else if (wc_mapping && PREFERS_STORE_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
-            gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_to_mapping\n");
-            unroll4_memcpy(map_d_ptr, h_ptr, size);
-        } else if (device_mapping) {
+        if (device_mapping) {
             gdr_dbgc(1, "using device-mapping copy for gdr_copy_to_mapping with device mapping\n");
             memcpy_to_device_mapping(map_d_ptr, h_ptr, size);
         } else {
@@ -1361,29 +1231,89 @@ static int gdr_copy_to_mapping_internal(void *map_d_ptr, const void *h_ptr, size
         }
     } while (0);
 
-    if (gdr_has_mix_mapping()) {
-        // All combinations of (ld, st) followed by (ld, st) targetting the
-        // same CUDA buffer is possible. When using multiple mapping types
-        // targeting the same buffer, we need memory fence to guarantee the
-        // program order.
-        memory_fence();
-    } else if (wc_mapping) {
-        // fencing is needed even for plain memcpy(), due to performance
-        // being hit by delayed flushing of WC buffers
-        wc_store_fence();
+    if((flags & GDR_COPY_FLAG_WRITE_FENCE)){
+        if (gdr_has_mix_mapping()) {
+            // All combinations of (ld, st) followed by (ld, st) targetting the
+            // same CUDA buffer is possible. When using multiple mapping types
+            // targeting the same buffer, we need memory fence to guarantee the
+            // program order.
+            memory_fence();
+        } else if (needs_mapping_store_fence(mapping_type)) {
+            // Fencing is needed even for plain memcpy().
+            // On x86, fence flushes WC buffers (no coherent mappings possible).
+            // On ARM, fence orders stores to all mapping types, including cacheable coherent mappings.
+            // Callers that need unrelated prior host stores ordered before these mapping stores
+            // must issue their own store/release barrier before calling gdr_copy_to_mapping().
+            mapping_store_fence();
+        }
     }
 
     return 0;
 }
 
-static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, size_t size, gdr_mapping_type_t mapping_type)
+static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, size_t size, gdr_mapping_type_t mapping_type, uint32_t flags)
 {
     const int wc_mapping = (mapping_type == GDR_MAPPING_TYPE_WC);
     const int device_mapping = (mapping_type == GDR_MAPPING_TYPE_DEVICE);
 
+    gdr_copy_fn_t memcpy_uncached_load_16B = NULL;
+    const char *memcpy_uncached_load_16B_name = NULL;
+    gdr_copy_fn_t memcpy_uncached_load_32B = NULL;
+    const char *memcpy_uncached_load_32B_name = NULL;
+    gdr_copy_fn_t memcpy_uncached_load_64B = NULL;
+    const char *memcpy_uncached_load_64B_name = NULL;
+#ifdef GDRAPI_X86
+    if (has_sse4_1 && (flags & GDR_COPY_FLAG_USE_SSE4_1)) {
+        memcpy_uncached_load_16B = memcpy_uncached_load_sse41;
+        memcpy_uncached_load_16B_name = "SSE4_1";
+    } else if (has_sse && (flags & GDR_COPY_FLAG_USE_SSE)) {
+        memcpy_uncached_load_16B = memcpy_uncached_load_sse;
+        memcpy_uncached_load_16B_name = "SSE";
+    }
+    if (has_avx2 && (flags & GDR_COPY_FLAG_USE_AVX2)) {
+        memcpy_uncached_load_32B = memcpy_uncached_load_avx2;
+        memcpy_uncached_load_32B_name = "AVX2";
+    } else if (has_avx && (flags & GDR_COPY_FLAG_USE_AVX)) {
+        memcpy_uncached_load_32B = memcpy_uncached_load_avx;
+        memcpy_uncached_load_32B_name = "AVX";
+    }
+    if ((flags & GDR_COPY_FLAG_USE_AVX512) && has_avx512 && use_intel_avx512) {
+        // MOVDIR64B cannot be used for writing to host memory
+        // AMD platforms implement AVX-512 like normal SIMD, not NT/streaming SIMD variants
+        memcpy_uncached_load_64B = memcpy_uncached_load_avx512;
+        memcpy_uncached_load_64B_name = "AVX512";
+    }
+#elif defined(GDRAPI_ARM64)
+    memcpy_uncached_load_16B = memcpy_uncached_load_arm64;
+    memcpy_uncached_load_16B_name = "LDP";
+    memcpy_uncached_load_32B = memcpy_uncached_load_arm64;
+    memcpy_uncached_load_32B_name = "LDP";
+    if (has_ls64 && (flags & GDR_COPY_FLAG_USE_LS64)) {
+        memcpy_uncached_load_64B = memcpy_uncached_load_ls64;
+        memcpy_uncached_load_64B_name = "LD64B";
+    } else if (has_neon && (flags & GDR_COPY_FLAG_USE_NEON)) {
+        memcpy_uncached_load_64B = memcpy_uncached_load_neon;
+        memcpy_uncached_load_64B_name = "NEON";
+    }
+#endif
+
+    if (flags & GDR_COPY_FLAG_READ_FENCE) {
+        if(gdr_has_mix_mapping()) {
+            // All combinations of (ld, st) followed by (ld, st) targetting the
+            // same CUDA buffer is possible. When using multiple mapping types
+            // targeting the same buffer, we need memory fence to guarantee the
+            // program order.
+            memory_fence();
+        } else if (needs_mapping_read_fence(mapping_type)) {
+            // Reads from GPU mappings are not necessarily sequentially consistent
+            // with other CPU memory operations. Fencing before the copy prevents
+            // speculation or prefetching ahead of the caller's synchronization point.
+            mapping_load_fence();
+        }
+    }
+
     do {
         if(wc_mapping){
-#if defined(GDRAPI_X86) || defined(GDRAPI_ARM64)
             // Assumption: always perform aligned accesses to device, so always align map_d_ptr first
             size_t offset_addr = (uintptr_t) map_d_ptr & 0xF;
             if(size < 16){
@@ -1448,18 +1378,9 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
                 aligned_copy(h_ptr, map_d_ptr, size, 0, false);
             }
             break;
-#endif
         }
 
-        // on POWER, compiler memcpy is not optimal for MMIO
-        // 64bit loads have 2x the BW of 32bit ones
-        if (wc_mapping && PREFERS_LOAD_UNROLL8 && is_aligned(size, 8) && ptr_is_aligned(map_d_ptr, 8) && ptr_is_aligned(h_ptr, 8)) {
-            gdr_dbgc(1, "using unroll8_memcpy for gdr_copy_from_mapping\n");
-            unroll8_memcpy(h_ptr, map_d_ptr, size);
-        } else if (wc_mapping && PREFERS_LOAD_UNROLL4 && is_aligned(size, 4) && ptr_is_aligned(map_d_ptr, 4) && ptr_is_aligned(h_ptr, 4)) {
-            gdr_dbgc(1, "using unroll4_memcpy for gdr_copy_from_mapping\n");
-            unroll4_memcpy(h_ptr, map_d_ptr, size);
-        } else if (device_mapping) {
+        if (device_mapping) {
             gdr_dbgc(1, "using device-mapping copy for gdr_copy_from_mapping\n");
             memcpy_from_device_mapping(h_ptr, map_d_ptr, size);
         } else {
@@ -1467,25 +1388,23 @@ static int gdr_copy_from_mapping_internal(void *h_ptr, const void *map_d_ptr, si
             memcpy(h_ptr, map_d_ptr, size);
         }
 
-        // note: fencing is not needed because plain stores are used
-        // if non-temporal/uncached stores were used on x86, a proper fence would be needed instead
-        // if (wc_mapping)
-        //    wc_store_fence();
     } while (0);
 
-    if (gdr_has_mix_mapping()) {
-        // All combinations of (ld, st) followed by (ld, st) targetting the
-        // same CUDA buffer is possible. When using multiple mapping types
-        // targeting the same buffer, we need memory fence to guarantee the
-        // program order.
-        memory_fence();
-    } else if (wc_mapping) {
-        // fencing because of NT stores
-        // potential optimization: issue only when NT stores are actually emitted
-        // ARM always requires a fence because of weak ordering model
-        wc_store_fence();
+    if((flags & GDR_COPY_FLAG_WRITE_FENCE)){
+        if (gdr_has_mix_mapping()) {
+            // All combinations of (ld, st) followed by (ld, st) targetting the
+            // same CUDA buffer is possible. When using multiple mapping types
+            // targeting the same buffer, we need memory fence to guarantee the
+            // program order.
+            memory_fence();
+        } else if (needs_mapping_store_fence(mapping_type)) {
+            // fencing because x86 NT stores might have been performed to host memory
+            // potential optimization: issue only when x86 NT stores are actually performed
+            // ARM always requires a fence because of weak ordering model
+            mapping_store_fence();
+        }
     }
-    
+
     return 0;
 }
 
@@ -1498,7 +1417,19 @@ int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, siz
     }
     if (unlikely(size == 0))
         return 0;
-    return gdr_copy_to_mapping_internal(map_d_ptr, h_ptr, size, mh->mapping_type);
+    return gdr_copy_to_mapping_internal(map_d_ptr, h_ptr, size, mh->mapping_type, GDR_COPY_FLAG_DEFAULT);
+}
+
+int gdr_copy_to_mapping_v2(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size, uint32_t flags)
+{
+    gdr_memh_t *mh = to_memh(handle);
+    if (unlikely(!gdr_is_mapped(mh->mapping_type))) {
+        gdr_err("mh is not mapped yet\n");
+        return EINVAL;
+    }
+    if (unlikely(size == 0))
+        return 0;
+    return gdr_copy_to_mapping_internal(map_d_ptr, h_ptr, size, mh->mapping_type, flags);
 }
 
 int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size)
@@ -1510,9 +1441,38 @@ int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, s
     }
     if (unlikely(size == 0))
         return 0;
-    return gdr_copy_from_mapping_internal(h_ptr, map_d_ptr, size, mh->mapping_type);
+    return gdr_copy_from_mapping_internal(h_ptr, map_d_ptr, size, mh->mapping_type, GDR_COPY_FLAG_DEFAULT);
 }
 
+int gdr_copy_from_mapping_v2(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size, uint32_t flags)
+{
+    gdr_memh_t *mh = to_memh(handle);
+    if (unlikely(!gdr_is_mapped(mh->mapping_type))) {
+        gdr_err("mh is not mapped yet\n");
+        return EINVAL;
+    }
+    if (unlikely(size == 0))
+        return 0;
+    return gdr_copy_from_mapping_internal(h_ptr, map_d_ptr, size, mh->mapping_type, flags);
+}
+
+int gdr_copy_fence(gdr_mh_t handle, uint32_t flags)
+{
+    gdr_memh_t *mh = to_memh(handle);
+    if (unlikely(!gdr_is_mapped(mh->mapping_type))) {
+        gdr_err("mh is not mapped yet\n");
+        return EINVAL;
+    }
+    if (gdr_has_mix_mapping() && (flags & (GDR_COPY_FLAG_READ_FENCE | GDR_COPY_FLAG_WRITE_FENCE))) {
+        memory_fence();
+    } else {
+        if ((flags & GDR_COPY_FLAG_READ_FENCE) && needs_mapping_read_fence(mh->mapping_type))
+            mapping_load_fence();
+        if ((flags & GDR_COPY_FLAG_WRITE_FENCE) && needs_mapping_store_fence(mh->mapping_type))
+            mapping_store_fence();
+    }
+    return 0;
+}
 
 void gdr_runtime_get_version(int *major, int *minor)
 {
@@ -1567,6 +1527,12 @@ int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
                 *v = 1;
             }
             goto out;
+        case GDR_ATTR_VMA_INHERITED_ON_FORK:
+            if (g->cache_backend == GDR_USE_DMABUF) {
+                goto out;
+            }
+            params.attr = GDRDRV_ATTR_VMA_INHERITED_ON_FORK;
+            break;
         default:
             gdr_dbg("undefined attribute\n");
             ret = EINVAL;
@@ -1581,7 +1547,7 @@ int gdr_get_attribute(gdr_t g, gdr_attr_t attr, int *v)
     }
 
     retcode = ioctl(g->fd, GDRDRV_IOC_GET_ATTR, &params);
-    if (-EINVAL == retcode) {
+    if (0 != retcode && EINVAL == errno) {
         // gdrdrv might be too old to query this attr.
         // Assume 0.
         *v = 0;

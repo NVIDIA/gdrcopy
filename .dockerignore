@@ -1,0 +1,8 @@
+src/*.o
+src/libgdrapi.so*
+src/gdrdrv/*.o
+src/gdrdrv/*.ko
+tests/*.o
+tests/gdrcopy_*
+build/
+output/

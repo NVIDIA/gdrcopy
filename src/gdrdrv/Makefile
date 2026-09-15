@@ -39,6 +39,10 @@ ifeq ($(HAVE_PROC_OPS),y)
 ccflags-y += -DGDRDRV_HAVE_PROC_OPS
 endif
 
+ifeq ($(HAVE_CLASS_CREATE_WITH_MODULE),y)
+ccflags-y += -DGDRDRV_HAVE_CLASS_CREATE_WITH_MODULE
+endif
+
 else
 
 KVER ?= $(shell uname -r)
@@ -59,6 +63,8 @@ _HAVE_VM_FLAGS_SET := $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_VM_FLAGS_SET.s
 export HAVE_VM_FLAGS_SET ?= $(_HAVE_VM_FLAGS_SET)
 _HAVE_PROC_OPS := $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_PROC_OPS.sh -k $(KVER))
 export HAVE_PROC_OPS ?= $(_HAVE_PROC_OPS)
+_HAVE_CLASS_CREATE_WITH_MODULE := $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_CLASS_CREATE_WITH_MODULE.sh -k $(KVER))
+export HAVE_CLASS_CREATE_WITH_MODULE ?= $(_HAVE_CLASS_CREATE_WITH_MODULE)
 
 all: build
 
@@ -67,6 +73,7 @@ build:
 	@ echo "Setting NVIDIA_IS_OPENSOURCE=$(NVIDIA_IS_OPENSOURCE)"
 	@ echo "Setting HAVE_VM_FLAGS_SET=$(HAVE_VM_FLAGS_SET)"
 	@ echo "Setting HAVE_PROC_OPS=$(HAVE_PROC_OPS)"
+	@ echo "Setting HAVE_CLASS_CREATE_WITH_MODULE=$(HAVE_CLASS_CREATE_WITH_MODULE)"
 	@ $(MAKE) -C $(KDIR) $(MAKE_PARAMS) M=$(PWD) modules
 
 install: build

@@ -276,7 +276,7 @@ int gdr_cuda_device_supports_dmabuf_mmap(CUdevice dev, int *supported)
     }
 
     *supported = 0;
-    res = gdr_cuDeviceGetAttribute(supported, CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED, dev);
+    res = gdr_cuDeviceGetAttribute(supported, CU_DEVICE_ATTRIBUTE_DMA_BUF_MMAP_SUPPORTED, dev);
     if (res != CUDA_SUCCESS) {
         gdr_err("Error in gdr_cuDeviceGetAttribute(DMA_BUF_MMAP_SUPPORTED): %d\n", res);
         return res;

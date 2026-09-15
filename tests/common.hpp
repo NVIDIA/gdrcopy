@@ -29,8 +29,14 @@
 #include <cuda.h>
 #include <cstring>
 #include <map>
+#include <vector>
+#include <algorithm>
 #include <gdrapi.h>
 #include <gdrconfig.h>
+
+#if CUDA_VERSION >= 13040
+#define HAVE_DEVICE_LOCALITY_DOMAIN 1
+#endif
 
 #ifndef ACCESS_ONCE
 #define ACCESS_ONCE(x)      (*(volatile typeof((x)) *)&(x))
@@ -51,10 +57,6 @@
 #define MB() asm volatile("mfence":::"memory")
 #define SB() asm volatile("sfence":::"memory")
 #define LB() asm volatile("lfence":::"memory")
-#elif defined(GDRAPI_POWER)
-#define MB() asm volatile("sync":::"memory")
-#define SB() MB()
-#define LB() MB()
 #elif defined(GDRAPI_ARM64)
 #define MB() asm volatile("dmb sy":::"memory")
 #define SB() asm volatile("dmb st":::"memory")
@@ -142,7 +144,7 @@ namespace gdrcopy {
             size_t allocated_size;
         } gpu_mem_handle_t;
 
-        typedef CUresult (*gpu_memalloc_fn_t)(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops);
+        typedef CUresult (*gpu_memalloc_fn_t)(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops, bool use_locality_domain, int locality_domain_id);
         typedef CUresult (*gpu_memfree_fn_t)(gpu_mem_handle_t *handle);
 
         static inline gdr_t gdr_open_safe()
@@ -160,10 +162,10 @@ namespace gdrcopy {
 
         void print_dbg(const char* fmt, ...);
 
-        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops);
+        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops, bool use_locality_domain = false, int locality_domain_id = 0);
         CUresult gpu_mem_free(gpu_mem_handle_t *handle);
 
-        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops);
+        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops, bool use_locality_domain = false, int locality_domain_id = 0);
         CUresult gpu_vmm_free(gpu_mem_handle_t *handle);
 
         static inline bool operator==(const gdr_mh_t &a, const gdr_mh_t &b) {
@@ -180,7 +182,41 @@ namespace gdrcopy {
 
         bool check_gdr_support(CUdevice dev);
 
+        bool is_coherent_platform(CUdevice dev);
+
         void print_histogram(double *lat_arr, int count, int *bin_arr, int num_bins, double min, double max);
+
+        // Summary statistics over a set of samples.
+        struct aggregate_stats {
+            double average;
+            double median;
+            double stdev;
+            double stdev_pct;
+            double min;
+            double max;
+        };
+
+        // Median of a sorted array, averaging the two middle values for even
+        // counts so the reported median is not biased toward the upper sample.
+        static inline double median_sorted(const double *arr, int n)
+        {
+            if (n <= 0)
+                return 0.0;
+            if (n % 2 == 0)
+                return (arr[n/2 - 1] + arr[n/2]) / 2.0;
+            return arr[n/2];
+        }
+
+        aggregate_stats calc_aggregate_stats(std::vector<double> values);
+
+        template <typename Iterator>
+        static inline aggregate_stats calc_aggregate_stats(Iterator begin, Iterator end)
+        {
+            return calc_aggregate_stats(std::vector<double>(begin, end));
+        }
+
+        // Print aggregate stats with the given label and unit (e.g. "MB/s", "us").
+        void print_aggregate_stats(const char *label, const aggregate_stats &s, const char *unit);
 
         // Calculate the elapsed time in microseconds
         static inline double time_diff(struct timespec beg, struct timespec end)
