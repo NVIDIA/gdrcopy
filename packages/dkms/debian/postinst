@@ -30,6 +30,14 @@ dkms_configure () {
 case "$1" in
 	configure)
 		dkms_configure
+		if ! udevadm control --reload-rules; then
+			echo "Warning: failed to reload udev rules for gdrdrv." >&2
+		fi
+		# modprobe.d install hook creates/refreshes /dev/gdrdrv (needed for
+		# proprietary builds; open-source builds already have udev+device_create).
+		if ! modprobe gdrdrv; then
+			echo "Warning: failed to load gdrdrv module; check DKMS/kernel/signing state." >&2
+		fi
 	;;
 
 	abort-upgrade|abort-remove|abort-deconfigure)

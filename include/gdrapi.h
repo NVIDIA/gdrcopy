@@ -31,13 +31,15 @@
 #define MINOR_VERSION_MASK      (((uint32_t)1 << MAJOR_VERSION_SHIFT) - 1)
 
 #define GDR_API_MAJOR_VERSION    2
-#define GDR_API_MINOR_VERSION    6
+#define GDR_API_MINOR_VERSION    7
 #define GDR_API_VERSION          ((GDR_API_MAJOR_VERSION << MAJOR_VERSION_SHIFT) | GDR_API_MINOR_VERSION)
 
 #define MINIMUM_GDRDRV_MAJOR_VERSION    2
 #define MINIMUM_GDRDRV_MINOR_VERSION    0
 #define MINIMUM_GDRDRV_VERSION          ((MINIMUM_GDRDRV_MAJOR_VERSION << MAJOR_VERSION_SHIFT) | MINIMUM_GDRDRV_MINOR_VERSION)
 
+#define GDR_FLAG_SET(flags, flag)   ((flags) | (flag))
+#define GDR_FLAG_UNSET(flags, flag) ((flags) & ~(flag))
 
 #define GPU_PAGE_SHIFT   16
 #define GPU_PAGE_SIZE    (1UL << GPU_PAGE_SHIFT)
@@ -174,6 +176,32 @@ int gdr_copy_to_mapping(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, siz
 
 int gdr_copy_from_mapping(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size);
 
+// calling v2 with GDR_COPY_FLAG_DEFAULT is equivalent to calling v1 API
+int gdr_copy_to_mapping_v2(gdr_mh_t handle, void *map_d_ptr, const void *h_ptr, size_t size, uint32_t flags);
+
+int gdr_copy_from_mapping_v2(gdr_mh_t handle, void *h_ptr, const void *map_d_ptr, size_t size, uint32_t flags);
+
+int gdr_copy_fence(gdr_mh_t handle, uint32_t flags);
+
+typedef enum gdr_copy_flags {
+    GDR_COPY_FLAG_WRITE_FENCE = 1u << 0,
+    GDR_COPY_FLAG_READ_FENCE = 1u << 1,
+    // x86 specific flags
+    GDR_COPY_FLAG_USE_AVX = 1u << 2,
+    GDR_COPY_FLAG_USE_AVX2 = 1u << 3,
+    GDR_COPY_FLAG_USE_AVX512 = 1u << 4,
+    GDR_COPY_FLAG_USE_SSE = 1u << 5,
+    GDR_COPY_FLAG_USE_SSE4_1 = 1u << 6,
+    GDR_COPY_FLAG_USE_MOVDIR64B = 1u << 7,
+    GDR_DEFAULT_X86_FLAGS = GDR_COPY_FLAG_USE_AVX | GDR_COPY_FLAG_USE_AVX2 | GDR_COPY_FLAG_USE_AVX512 | GDR_COPY_FLAG_USE_SSE | GDR_COPY_FLAG_USE_SSE4_1 | GDR_COPY_FLAG_USE_MOVDIR64B,
+    // ARM specific flags
+    GDR_COPY_FLAG_USE_NEON = 1u << 8,
+    GDR_COPY_FLAG_USE_LS64 = 1u << 9,
+    GDR_DEFAULT_ARM_FLAGS = GDR_COPY_FLAG_USE_NEON | GDR_COPY_FLAG_USE_LS64,
+    GDR_COPY_FLAG_DEFAULT = GDR_COPY_FLAG_WRITE_FENCE | GDR_DEFAULT_X86_FLAGS | GDR_DEFAULT_ARM_FLAGS,
+    // default is same as v1 API (all optimizations enabled and trailing write fence enabled)
+} gdr_copy_flags_t;
+
 // Query the version of libgdrapi
 void gdr_runtime_get_version(int *major, int *minor);
 
@@ -189,6 +217,8 @@ typedef enum gdr_attr {
                                               // Note that passing the flag may still lead to a run-time error,
                                               // for example when running on unsupported platforms.
     GDR_ATTR_USING_DMA_BUF_MMAP = 3, // Return non-zero if gdrcopy is using dma-buf mmap backend.
+    GDR_ATTR_VMA_INHERITED_ON_FORK = 4, // Return non-zero if mmapped regions can be inherited by
+                                        // child processes after fork()
     // For internal use only
     GDR_ATTR_MAX
 } gdr_attr_t;

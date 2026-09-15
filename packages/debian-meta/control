@@ -8,7 +8,7 @@ Section: misc
 Homepage: https://github.com/NVIDIA/gdrcopy
 
 Package: gdrcopy
-Architecture: any
+Architecture: amd64 arm64
 Multi-Arch: same
 Depends: gdrdrv-dkms (= @FULL_VERSION@), libgdrapi (= @FULL_VERSION@), gdrcopy-tests (= @FULL_VERSION@)
 Maintainer: GPUDirect Team <gpudirect@nvidia.com>

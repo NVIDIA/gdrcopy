@@ -48,7 +48,7 @@ RDMA](http://developer.nvidia.com/gpudirect).  For more general information,
 please refer to the official GPUDirect RDMA [design
 document](http://docs.nvidia.com/cuda/gpudirect-rdma).
 
-The device driver requires GPU display driver >= 418.40 on ppc64le and >= 331.14 on other platforms. The library and tests
+The device driver requires GPU display driver >= 331.14. The library and tests
 require CUDA >= 6.0.
 
 DKMS is a prerequisite for installing GDRCopy kernel module package. On RHEL
@@ -78,9 +78,11 @@ via package management, we suggest
 - On Debian, `sudo apt install nvidia-dkms-<your-nvidia-driver-version>`.
 - On SLE, `sudo zypper install nvidia-gfx<your-nvidia-driver-version>-kmp`.
 
-The supported architectures are Linux x86\_64, ppc64le, and arm64. The supported
+The supported architectures are Linux x86\_64 and arm64. The supported
 platforms are RHEL8, RHEL9, Ubuntu20\_04, Ubuntu22\_04,
 SLE-15 (any SP) and Leap 15.x.
+Support for the POWER (ppc64le) architecture has been removed. If you need
+GDRCopy on POWER, please use version 2.6 or earlier.
 
 Root privileges are necessary to load/install the kernel-mode device
 driver.
@@ -208,204 +210,189 @@ restrictions:
 Execute provided tests:
 ```shell
 $ gdrcopy_sanity 
-Total: 28, Passed: 28, Failed: 0, Waived: 0
+Total: 36, Passed: 31, Failed: 0, Waived: 5
 
-List of passed tests:
-    basic_child_thread_pins_buffer_cumemalloc
-    basic_child_thread_pins_buffer_vmmalloc
-    basic_cumemalloc
-    basic_small_buffers_mapping
-    basic_unaligned_mapping
-    basic_vmmalloc
+List of waived tests:
+    basic_v2_forcepci_cumemalloc
+    basic_v2_forcepci_vmmalloc
     basic_with_tokens
-    data_validation_cumemalloc
-    data_validation_vmmalloc
-    invalidation_access_after_free_cumemalloc
-    invalidation_access_after_free_vmmalloc
-    invalidation_access_after_gdr_close_cumemalloc
-    invalidation_access_after_gdr_close_vmmalloc
-    invalidation_fork_access_after_free_cumemalloc
-    invalidation_fork_access_after_free_vmmalloc
-    invalidation_fork_after_gdr_map_cumemalloc
-    invalidation_fork_after_gdr_map_vmmalloc
-    invalidation_fork_child_gdr_map_parent_cumemalloc
-    invalidation_fork_child_gdr_map_parent_vmmalloc
-    invalidation_fork_child_gdr_pin_parent_with_tokens
-    invalidation_fork_map_and_free_cumemalloc
-    invalidation_fork_map_and_free_vmmalloc
-    invalidation_two_mappings_cumemalloc
-    invalidation_two_mappings_vmmalloc
-    invalidation_unix_sock_shared_fd_gdr_map_cumemalloc
-    invalidation_unix_sock_shared_fd_gdr_map_vmmalloc
-    invalidation_unix_sock_shared_fd_gdr_pin_buffer_cumemalloc
-    invalidation_unix_sock_shared_fd_gdr_pin_buffer_vmmalloc
+    data_validation_mix_mappings_cumemalloc
+    data_validation_v2_forcepci_cumemalloc
 
 
 $ gdrcopy_copybw
-GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
-GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
-GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
-GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
-GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
-GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
-GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
-GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
+GPU id:0; name: NVIDIA B200; Bus id: 0000:1b:00
+GPU id:1; name: NVIDIA B200; Bus id: 0000:43:00
+GPU id:2; name: NVIDIA B200; Bus id: 0000:52:00
+GPU id:3; name: NVIDIA B200; Bus id: 0000:61:00
+GPU id:4; name: NVIDIA B200; Bus id: 0000:9d:00
+GPU id:5; name: NVIDIA B200; Bus id: 0000:c3:00
+GPU id:6; name: NVIDIA B200; Bus id: 0000:d1:00
+GPU id:7; name: NVIDIA B200; Bus id: 0000:df:00
 selecting device 0
 testing size: 131072
 rounded size: 131072
 gpu alloc fn: cuMemAlloc
-device ptr: 7f1153a00000
-map_d_ptr: 0x7f1172257000
-info.va: 7f1153a00000
+device ptr: 7df86b000000
+use force pcie: no
+map_d_ptr: 0x7dfa9009c000
+info.va: 7df86b000000
 info.mapped_size: 131072
 info.page_size: 65536
 info.mapped: 1
 info.wc_mapping: 1
 page offset: 0
-user-space pointer:0x7f1172257000
+user-space pointer:0x7dfa9009c000
+store fences: enabled
 writing test, size=131072 offset=0 num_iters=10000
-write BW: 9638.54MB/s
+write BW: median 22360.8MB/s, min 20661.2MB/s
 reading test, size=131072 offset=0 num_iters=100
-read BW: 530.135MB/s
+read BW: median 890.824MB/s, min 841.881MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
 
 
 $ gdrcopy_copylat
-GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
-GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
-GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
-GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
-GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
-GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
-GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
-GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
+GPU id:0; name: NVIDIA B200; Bus id: 0000:1b:00
+GPU id:1; name: NVIDIA B200; Bus id: 0000:43:00
+GPU id:2; name: NVIDIA B200; Bus id: 0000:52:00
+GPU id:3; name: NVIDIA B200; Bus id: 0000:61:00
+GPU id:4; name: NVIDIA B200; Bus id: 0000:9d:00
+GPU id:5; name: NVIDIA B200; Bus id: 0000:c3:00
+GPU id:6; name: NVIDIA B200; Bus id: 0000:d1:00
+GPU id:7; name: NVIDIA B200; Bus id: 0000:df:00
 selecting device 0
-device ptr: 0x7fa2c6000000
+device ptr: 0x73aa1c800000
 allocated size: 16777216
 gpu alloc fn: cuMemAlloc
+use force pcie: no
 
-map_d_ptr: 0x7fa2f9af9000
-info.va: 7fa2c6000000
+map_d_ptr: 0x73a9f3000000
+info.va: 73aa1c800000
 info.mapped_size: 16777216
 info.page_size: 65536
 info.mapped: 1
 info.wc_mapping: 1
 page offset: 0
-user-space pointer: 0x7fa2f9af9000
+user-space pointer: 0x73a9f3000000
+use cold cache: no
+store fences: enabled
+load fences (gdr_copy_from_mapping): enabled
 
 gdr_copy_to_mapping num iters for each size: 10000
-WARNING: Measuring the API invocation overhead as observed by the CPU. Data
-might not be ordered all the way to the GPU internal visibility.
-Test             Size(B)     Avg.Time(us)
-gdr_copy_to_mapping             1         0.0889
-gdr_copy_to_mapping             2         0.0884
-gdr_copy_to_mapping             4         0.0884
-gdr_copy_to_mapping             8         0.0884
-gdr_copy_to_mapping            16         0.0905
-gdr_copy_to_mapping            32         0.0902
-gdr_copy_to_mapping            64         0.0902
-gdr_copy_to_mapping           128         0.0952
-gdr_copy_to_mapping           256         0.0983
-gdr_copy_to_mapping           512         0.1176
-gdr_copy_to_mapping          1024         0.1825
-gdr_copy_to_mapping          2048         0.2549
-gdr_copy_to_mapping          4096         0.4366
-gdr_copy_to_mapping          8192         0.8141
-gdr_copy_to_mapping         16384         1.6155
-gdr_copy_to_mapping         32768         3.2284
-gdr_copy_to_mapping         65536         6.4906
-gdr_copy_to_mapping        131072        12.9761
-gdr_copy_to_mapping        262144        25.9459
-gdr_copy_to_mapping        524288        51.9100
-gdr_copy_to_mapping       1048576       103.8028
-gdr_copy_to_mapping       2097152       207.5990
-gdr_copy_to_mapping       4194304       415.2856
-gdr_copy_to_mapping       8388608       830.6355
-gdr_copy_to_mapping      16777216      1661.3285
+WARNING: Measuring the API invocation overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility.
+Test 			 Size(B) 	 Median Time(us) 	 Min. Time(us)
+gdr_copy_to_mapping 	        1 	      0.1014 	      0.1011
+gdr_copy_to_mapping 	        2 	      0.1015 	      0.0938
+gdr_copy_to_mapping 	        4 	      0.1014 	      0.0938
+gdr_copy_to_mapping 	        8 	      0.1015 	      0.0938
+gdr_copy_to_mapping 	       16 	      0.1015 	      0.0969
+gdr_copy_to_mapping 	       32 	      0.1016 	      0.0976
+gdr_copy_to_mapping 	       64 	      0.1030 	      0.1010
+gdr_copy_to_mapping 	      128 	      0.1043 	      0.0977
+gdr_copy_to_mapping 	      256 	      0.1100 	      0.1038
+gdr_copy_to_mapping 	      512 	      0.1312 	      0.1256
+gdr_copy_to_mapping 	     1024 	      0.1800 	      0.1741
+gdr_copy_to_mapping 	     2048 	      0.2042 	      0.1994
+gdr_copy_to_mapping 	     4096 	      0.2730 	      0.2718
+gdr_copy_to_mapping 	     8192 	      0.4457 	      0.4450
+gdr_copy_to_mapping 	    16384 	      0.7575 	      0.7554
+gdr_copy_to_mapping 	    32768 	      1.3806 	      1.3779
+gdr_copy_to_mapping 	    65536 	      2.8588 	      2.8558
+gdr_copy_to_mapping 	   131072 	      5.5994 	      5.5858
+gdr_copy_to_mapping 	   262144 	     11.0404 	     11.0303
+gdr_copy_to_mapping 	   524288 	     21.9059 	     21.8922
+gdr_copy_to_mapping 	  1048576 	     43.6844 	     43.6310
+gdr_copy_to_mapping 	  2097152 	     91.8368 	     91.7010
+gdr_copy_to_mapping 	  4194304 	    209.8323 	    209.6777
+gdr_copy_to_mapping 	  8388608 	    419.9362 	    419.4436
+gdr_copy_to_mapping 	 16777216 	    839.3445 	    838.9237
 
 gdr_copy_from_mapping num iters for each size: 100
-Test             Size(B)     Avg.Time(us)
-gdr_copy_from_mapping           1         0.9069
-gdr_copy_from_mapping           2         1.7170
-gdr_copy_from_mapping           4         1.7169
-gdr_copy_from_mapping           8         1.7164
-gdr_copy_from_mapping          16         0.8601
-gdr_copy_from_mapping          32         1.7024
-gdr_copy_from_mapping          64         3.1016
-gdr_copy_from_mapping         128         3.4944
-gdr_copy_from_mapping         256         3.6400
-gdr_copy_from_mapping         512         2.4394
-gdr_copy_from_mapping        1024         2.8022
-gdr_copy_from_mapping        2048         4.6615
-gdr_copy_from_mapping        4096         7.9783
-gdr_copy_from_mapping        8192        14.9209
-gdr_copy_from_mapping       16384        28.9571
-gdr_copy_from_mapping       32768        56.9373
-gdr_copy_from_mapping       65536       114.1008
-gdr_copy_from_mapping      131072       234.9382
-gdr_copy_from_mapping      262144       496.4011
-gdr_copy_from_mapping      524288       985.5196
-gdr_copy_from_mapping     1048576      1970.7057
-gdr_copy_from_mapping     2097152      3942.5611
-gdr_copy_from_mapping     4194304      7888.9468
-gdr_copy_from_mapping     8388608     18361.5673
-gdr_copy_from_mapping    16777216     36758.8342
+Test 			 Size(B) 	 Median Time(us) 	 Min. Time(us)
+gdr_copy_from_mapping 	        1 	      1.1600 	      1.1540
+gdr_copy_from_mapping 	        2 	      1.1600 	      1.1300
+gdr_copy_from_mapping 	        4 	      1.1590 	      1.1480
+gdr_copy_from_mapping 	        8 	      1.1590 	      1.1270
+gdr_copy_from_mapping 	       16 	      1.1590 	      1.1240
+gdr_copy_from_mapping 	       32 	      1.1590 	      1.1250
+gdr_copy_from_mapping 	       64 	      1.1590 	      1.1370
+gdr_copy_from_mapping 	      128 	      1.1670 	      1.1470
+gdr_copy_from_mapping 	      256 	      1.1700 	      1.1490
+gdr_copy_from_mapping 	      512 	      1.1890 	      1.1640
+gdr_copy_from_mapping 	     1024 	      2.3940 	      2.3620
+gdr_copy_from_mapping 	     2048 	      2.3700 	      2.3510
+gdr_copy_from_mapping 	     4096 	      4.6920 	      4.6400
+gdr_copy_from_mapping 	     8192 	      8.9220 	      8.6870
+gdr_copy_from_mapping 	    16384 	     17.6940 	     17.3350
+gdr_copy_from_mapping 	    32768 	     35.7300 	     34.7390
+gdr_copy_from_mapping 	    65536 	     70.5915 	     69.6220
+gdr_copy_from_mapping 	   131072 	    140.2520 	    138.9910
+gdr_copy_from_mapping 	   262144 	    279.8475 	    278.2950
+gdr_copy_from_mapping 	   524288 	    562.5135 	    555.5700
+gdr_copy_from_mapping 	  1048576 	   1121.5775 	   1116.1780
+gdr_copy_from_mapping 	  2097152 	   2242.2870 	   2234.7010
+gdr_copy_from_mapping 	  4194304 	   4485.6935 	   4473.8390
+gdr_copy_from_mapping 	  8388608 	   8970.7600 	   8956.1840
+gdr_copy_from_mapping 	 16777216 	  17942.0570 	  17914.3680
 unmapping buffer
 unpinning buffer
 closing gdrdrv
 
 
 $ gdrcopy_apiperf -s 8
-GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
-GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
-GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
-GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
-GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
-GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
-GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
-GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
+GPU id:0; name: NVIDIA B200; Bus id: 0000:1b:00
+GPU id:1; name: NVIDIA B200; Bus id: 0000:43:00
+GPU id:2; name: NVIDIA B200; Bus id: 0000:52:00
+GPU id:3; name: NVIDIA B200; Bus id: 0000:61:00
+GPU id:4; name: NVIDIA B200; Bus id: 0000:9d:00
+GPU id:5; name: NVIDIA B200; Bus id: 0000:c3:00
+GPU id:6; name: NVIDIA B200; Bus id: 0000:d1:00
+GPU id:7; name: NVIDIA B200; Bus id: 0000:df:00
 selecting device 0
-device ptr: 0x7f1563a00000
+device ptr: 0x7a8a6b000000
 allocated size: 65536
-Size(B) pin.Time(us)    map.Time(us)    get_info.Time(us)   unmap.Time(us)
-unpin.Time(us)
-65536   1346.034060 3.603800    0.340270    4.700930    676.612800
+Stat	Size(B)	pin.Time(us)	map.Time(us)	get_info.Time(us)	unmap.Time(us)	unpin.Time(us)
+median	65536	82.119500	3.713000	0.175000	3.922500	29.251000
+min	65536	79.159000	3.570000	0.172000	3.855000	28.218000
 Histogram of gdr_pin_buffer latency for 65536 bytes
-[1303.852000    -   2607.704000]    93
-[2607.704000    -   3911.556000]    0
-[3911.556000    -   5215.408000]    0
-[5215.408000    -   6519.260000]    0
-[6519.260000    -   7823.112000]    0
-[7823.112000    -   9126.964000]    0
-[9126.964000    -   10430.816000]   0
-[10430.816000   -   11734.668000]   0
-[11734.668000   -   13038.520000]   0
-[13038.520000   -   14342.372000]   2
+[79.159000	-	158.318000]	8
+[158.318000	-	237.477000]	9
+[237.477000	-	316.636000]	34
+[316.636000	-	395.795000]	40
+[395.795000	-	474.954000]	5
+[474.954000	-	554.113000]	3
+[554.113000	-	633.272000]	0
+[633.272000	-	712.431000]	0
+[712.431000	-	791.590000]	0
+[791.590000	-	870.749000]	0
 
 closing gdrdrv
 
 
 
 $ numactl -N 1 -l gdrcopy_pplat
-GPU id:0; name: NVIDIA A40; Bus id: 0000:09:00
+GPU id:0; name: NVIDIA B200; Bus id: 0000:1b:00
+GPU id:1; name: NVIDIA B200; Bus id: 0000:43:00
+GPU id:2; name: NVIDIA B200; Bus id: 0000:52:00
+GPU id:3; name: NVIDIA B200; Bus id: 0000:61:00
+GPU id:4; name: NVIDIA B200; Bus id: 0000:9d:00
+GPU id:5; name: NVIDIA B200; Bus id: 0000:c3:00
+GPU id:6; name: NVIDIA B200; Bus id: 0000:d1:00
+GPU id:7; name: NVIDIA B200; Bus id: 0000:df:00
 selecting device 0
-device ptr: 0x7f99d2600000
+use force pcie: no
+We will measure the visibility of the flag value only. Setting nblocks and nthreads to 1.
+Benchmark mode: CPU produces and GPU consumes
 gpu alloc fn: cuMemAlloc
-map_d_ptr: 0x7f9a054fb000
-info.va: 7f99d2600000
-info.mapped_size: 4
-info.page_size: 65536
-info.mapped: 1
-info.wc_mapping: 1
-page offset: 0
-user-space pointer: 0x7f9a054fb000
-CPU does gdr_copy_to_mapping and GPU writes back via cuMemHostAlloc'd buffer.
-Running 1000 iterations with data size 4 bytes.
-Round-trip latency per iteration is 1.08762 us
-unmapping buffer
-unpinning buffer
+Measuring the visibility latency of the flag value.
+Running 1000 iterations with flag size 4 bytes.
+
+CPU writes to gpu_flag. GPU polls on the expected gpu_flag value. GPU writes back via cpu_flag. CPU polls on the expected cpu_flag value. We report the round-trip time from when CPU writes to gpu_flag until it observes the update in cpu_flag.
+CPU does the time measurement.
+
+Round-trip latency per iteration is (min) 2.2055, (median) 2.2139 us
 closing gdrdrv
 ```
 
@@ -422,31 +409,33 @@ affinity, it is possible to run the test onto the optimal processor:
 
 ```shell
 $ numactl -N 0 -l gdrcopy_copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
-GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
-GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
-GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
-GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
-GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
-GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
-GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
-GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
+GPU id:0; name: NVIDIA B200; Bus id: 0000:1b:00
+GPU id:1; name: NVIDIA B200; Bus id: 0000:43:00
+GPU id:2; name: NVIDIA B200; Bus id: 0000:52:00
+GPU id:3; name: NVIDIA B200; Bus id: 0000:61:00
+GPU id:4; name: NVIDIA B200; Bus id: 0000:9d:00
+GPU id:5; name: NVIDIA B200; Bus id: 0000:c3:00
+GPU id:6; name: NVIDIA B200; Bus id: 0000:d1:00
+GPU id:7; name: NVIDIA B200; Bus id: 0000:df:00
 selecting device 0
 testing size: 65536
 rounded size: 65536
 gpu alloc fn: cuMemAlloc
-device ptr: 7f5817a00000
-map_d_ptr: 0x7f583b186000
-info.va: 7f5817a00000
+device ptr: 73de17000000
+use force pcie: no
+map_d_ptr: 0x73de29163000
+info.va: 73de17000000
 info.mapped_size: 65536
 info.page_size: 65536
 info.mapped: 1
 info.wc_mapping: 1
 page offset: 0
-user-space pointer:0x7f583b186000
-writing test, size=65536 offset=0 num_iters=1000
-write BW: 9768.3MB/s
-reading test, size=65536 offset=0 num_iters=1000
-read BW: 548.423MB/s
+user-space pointer:0x73de29163000
+store fences: enabled
+writing test, size=65536 offset=0 num_iters=10000
+write BW: median 22863.4MB/s, min 22336.3MB/s
+reading test, size=65536 offset=0 num_iters=100
+read BW: median 884.505MB/s, min 802.218MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
@@ -455,31 +444,33 @@ closing gdrdrv
 or on the other socket:
 ```shell
 $ numactl -N 1 -l gdrcopy_copybw -d 0 -s $((64 * 1024)) -o $((0 * 1024)) -c $((64 * 1024))
-GPU id:0; name: Tesla V100-SXM2-32GB; Bus id: 0000:06:00
-GPU id:1; name: Tesla V100-SXM2-32GB; Bus id: 0000:07:00
-GPU id:2; name: Tesla V100-SXM2-32GB; Bus id: 0000:0a:00
-GPU id:3; name: Tesla V100-SXM2-32GB; Bus id: 0000:0b:00
-GPU id:4; name: Tesla V100-SXM2-32GB; Bus id: 0000:85:00
-GPU id:5; name: Tesla V100-SXM2-32GB; Bus id: 0000:86:00
-GPU id:6; name: Tesla V100-SXM2-32GB; Bus id: 0000:89:00
-GPU id:7; name: Tesla V100-SXM2-32GB; Bus id: 0000:8a:00
+GPU id:0; name: NVIDIA B200; Bus id: 0000:1b:00
+GPU id:1; name: NVIDIA B200; Bus id: 0000:43:00
+GPU id:2; name: NVIDIA B200; Bus id: 0000:52:00
+GPU id:3; name: NVIDIA B200; Bus id: 0000:61:00
+GPU id:4; name: NVIDIA B200; Bus id: 0000:9d:00
+GPU id:5; name: NVIDIA B200; Bus id: 0000:c3:00
+GPU id:6; name: NVIDIA B200; Bus id: 0000:d1:00
+GPU id:7; name: NVIDIA B200; Bus id: 0000:df:00
 selecting device 0
 testing size: 65536
 rounded size: 65536
 gpu alloc fn: cuMemAlloc
-device ptr: 7fbb63a00000
-map_d_ptr: 0x7fbb82ab0000
-info.va: 7fbb63a00000
+device ptr: 7d660b000000
+use force pcie: no
+map_d_ptr: 0x7d661cf37000
+info.va: 7d660b000000
 info.mapped_size: 65536
 info.page_size: 65536
 info.mapped: 1
 info.wc_mapping: 1
 page offset: 0
-user-space pointer:0x7fbb82ab0000
-writing test, size=65536 offset=0 num_iters=1000
-write BW: 9224.36MB/s
-reading test, size=65536 offset=0 num_iters=1000
-read BW: 521.262MB/s
+user-space pointer:0x7d661cf37000
+store fences: enabled
+writing test, size=65536 offset=0 num_iters=10000
+write BW: median 22047.8MB/s, min 21492.4MB/s
+reading test, size=65536 offset=0 num_iters=100
+read BW: median 829.468MB/s, min 724.512MB/s
 unmapping buffer
 unpinning buffer
 closing gdrdrv
@@ -508,16 +499,24 @@ consumes additional BAR1 space. This is because the space is not properly
 reused. If you encounter this issue, we suggest that you try the latest version
 of NVIDIA GPU driver.
 
-On POWER9 where CPU and GPU are connected via NVLink, CUDA9.2 and GPU Driver
-v396.37 are the minimum requirements in order to achieve the full performance.
-GDRCopy works with ealier CUDA and GPU driver versions but the achievable
-bandwidth is substantially lower.
-
 If gdrdrv is compiled with the proprietary flavor of NVIDIA driver, GDRCopy does not fully support Linux with the
 confidential computing (CC) configuration with Intel CPU. In particular, it does not functional if
 `CONFIG_ARCH_HAS_CC_PLATFORM=y` and CC is enabled at runtime. However, it works if CC is disabled or
 `CONFIG_ARCH_HAS_CC_PLATFORM=n`. This issue is not applied to AMD CPU. To avoid this issue, please compile and load
 gdrdrv with the opensource flavor of NVIDIA driver.
+
+On open-source NVIDIA driver builds, and on proprietary builds with Linux
+before 6.15, `gdr_map()` sets `VM_DONTCOPY` so mappings are not inherited across
+`fork()`.
+
+On proprietary NVIDIA driver builds with Linux 6.15 or later, `VM_DONTCOPY`
+cannot be set because vm_flags_set is GPL protected. Mappings from `gdr_map()` 
+are therefore inherited by children across `fork()`. The child's copy is not 
+tracked by the parent's `gdr_unmap()` / `gdr_unpin_buffer()`, and tearing it down 
+can break the parent's invalidation tracking. Detect this at run time with
+`GDR_ATTR_VMA_INHERITED_ON_FORK` via `gdr_get_attribute()`, or with
+`cat /proc/driver/gdrdrv/params`. The `invalidation_fork_after_gdr_map_*`
+tests in `gdrcopy_sanity` are waived in that configuration.
 
 To allow the loading of unsupported 3rd party modules in SLE, set `allow_unsupported_modules 1` in
 /etc/modprobe.d/unsupported-modules. After making this change, modules missing the "supported" flag, will be allowed to

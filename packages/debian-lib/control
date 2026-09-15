@@ -10,7 +10,7 @@ Homepage: https://github.com/NVIDIA/gdrcopy
 #Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/gdrcopy.git
 
 Package: libgdrapi
-Architecture: any
+Architecture: amd64 arm64
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Replaces: gdrcopy (<= 2.2-1)

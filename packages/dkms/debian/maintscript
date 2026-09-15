@@ -1,0 +1,1 @@
+rm_conffile /etc/init.d/gdrdrv @VERSION@~ gdrdrv-dkms
