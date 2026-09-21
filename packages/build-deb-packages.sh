@@ -114,7 +114,7 @@ else
     FULL_VERSION="${VERSION}-${DEBIAN_VERSION}"
 fi
 
-tmpdir=`mktemp -d /tmp/gdr.XXXXXX`
+tmpdir=`mktemp -d "${TMPDIR:-/tmp}/gdr.XXXXXX"`
 if [ ! -d "${tmpdir}" ]; then
     echo "Failed to create a temp directory!" >&2
     exit 1
