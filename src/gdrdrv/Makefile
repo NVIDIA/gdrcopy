@@ -44,6 +44,7 @@ else
 KVER ?= $(shell uname -r)
 MODULES_DIR := /lib/modules/$(KVER)
 KDIR := $(MODULES_DIR)/build
+export KDIR
 MODULE_SUBDIR ?= /kernel/drivers/misc/
 MODULE_DESTDIR := $(MODULES_DIR)/$(MODULE_SUBDIR)
 DEPMOD := /sbin/depmod
