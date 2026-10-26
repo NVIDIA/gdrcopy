@@ -162,7 +162,7 @@ Kernel-mode driver for GDRCopy built for GPU driver %{NVIDIA_DRIVER_VERSION} and
 echo "building"
 make -j8 CUDA=%{CUDA} config lib exes
 %if %{BUILD_KMOD} > 0
-make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} driver
+make -j8 NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} KVER=%{KVERSION} driver
 %endif
 
 %install
@@ -171,7 +171,7 @@ make install DESTDIR=$RPM_BUILD_ROOT prefix=%{_prefix} libdir=%{_libdir}
 
 %if %{BUILD_KMOD} > 0
 # Install gdrdrv driver
-make drv_install DESTDIR=$RPM_BUILD_ROOT NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR}
+make drv_install DESTDIR=$RPM_BUILD_ROOT NVIDIA_SRC_DIR=%{NVIDIA_SRC_DIR} KVER=%{KVERSION}
 %endif
 
 # Install gdrdrv src
