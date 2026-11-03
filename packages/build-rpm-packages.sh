@@ -34,7 +34,7 @@ ex()
 {
     local rc
     echo "+ $@"
-    $@
+    "$@"
     rc=$?
     
     if [[ $rc -ne 0 ]]; then
@@ -135,33 +135,37 @@ echo "Working in $tmpdir ..."
 
 ex cd ${TOP_DIR_PATH}
 
-ex mkdir -p $tmpdir/gdrcopy
-ex rm -rf $tmpdir/gdrcopy/*
-ex cp -r packages/dkms.conf packages/rhel/init.d packages/rhel/gdrcopy.service scripts/ insmod.sh Makefile README.md include src tests config_arch LICENSE packages/gdrcopy.spec $tmpdir/gdrcopy/
-ex rm -f $tmpdir/gdrcopy-$VERSION.tar.gz
+ex mkdir -p "${tmpdir}"/gdrcopy
+ex rm -rf "${tmpdir}"/gdrcopy/*
+ex cp -r packages/dkms.conf packages/rhel/init.d packages/rhel/gdrcopy.service scripts/ insmod.sh Makefile README.md include src tests config_arch LICENSE packages/gdrcopy.spec "${tmpdir}"/gdrcopy/
+ex rm -f "${tmpdir}"/gdrcopy-$VERSION.tar.gz
 
-ex cd $tmpdir/gdrcopy
+ex cd "${tmpdir}"/gdrcopy
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
 
-ex cd $tmpdir
+ex cd "${tmpdir}"
 ex mv gdrcopy gdrcopy-$VERSION
 ex tar czvf gdrcopy-$VERSION.tar.gz gdrcopy-$VERSION
 
-ex mkdir -p $tmpdir/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
-ex cp gdrcopy-$VERSION/gdrcopy.spec $tmpdir/topdir/SPECS/
-ex cp gdrcopy-$VERSION.tar.gz $tmpdir/topdir/SOURCES/
+ex mkdir -p "${tmpdir}"/topdir/{SRPMS,RPMS,SPECS,BUILD,SOURCES}
+ex cp gdrcopy-$VERSION/gdrcopy.spec "${tmpdir}"/topdir/SPECS/
+ex cp gdrcopy-$VERSION.tar.gz "${tmpdir}"/topdir/SOURCES/
 
-rpmbuild_params="-ba --nodeps --define '_build_id_links none' --define \"_topdir $tmpdir/topdir\" --define \"_release ${RPM_VERSION}\" --define 'dist %{nil}' --define \"CUDA $CUDA\" --define \"GDR_VERSION ${VERSION}\" --define \"KVERSION $(uname -r)\" --define \"MODULE_LOCATION ${MODULE_SUBDIR}\""
+rpmbuild_params=(-ba --nodeps --define '_build_id_links none'
+    --define "_topdir $tmpdir/topdir" --define "_release ${RPM_VERSION}"
+    --define 'dist %{nil}' --define "CUDA $CUDA" --define "GDR_VERSION ${VERSION}"
+    --define "KVERSION $(uname -r)" --define "MODULE_LOCATION ${MODULE_SUBDIR}")
 if [[ ${generate_kmod} == 1 ]]; then
-    rpmbuild_params="${rpmbuild_params} --define \"NVIDIA_DRIVER_VERSION ${NVIDIA_DRIVER_VERSION}\" --define \"NVIDIA_SRC_DIR ${NVIDIA_SRC_DIR}\" --define \"BUILD_KMOD 1\""
+    rpmbuild_params+=(--define "NVIDIA_DRIVER_VERSION ${NVIDIA_DRIVER_VERSION}"
+        --define "NVIDIA_SRC_DIR ${NVIDIA_SRC_DIR}" --define "BUILD_KMOD 1")
 fi
-rpmbuild_params="${rpmbuild_params} $tmpdir/topdir/SPECS/gdrcopy.spec"
-eval "rpmbuild ${rpmbuild_params}"
+rpmbuild_params+=("$tmpdir/topdir/SPECS/gdrcopy.spec")
+ex rpmbuild "${rpmbuild_params[@]}"
 
-rpms=`ls -1 $tmpdir/topdir/RPMS/*/*.rpm`
-srpm=`ls -1 $tmpdir/topdir/SRPMS/`
+rpms=`ls -1 "${tmpdir}"/topdir/RPMS/*/*.rpm`
+srpm=`ls -1 "${tmpdir}"/topdir/SRPMS/`
 if [ -f "/etc/redhat-release" ]; then
     release_version=".el$(cat /etc/redhat-release | grep -o -E '[0-9]+' | head -1)"
 elif [ -f "/etc/centos-release" ]; then
@@ -173,8 +177,9 @@ else
 fi
 echo $srpm $rpms
 ex cd ${CWD}
-for item in `ls $tmpdir/topdir/SRPMS/*.rpm $tmpdir/topdir/RPMS/*/*.rpm`; do
-    item_name=`basename $item .rpm`
+for item in "${tmpdir}"/topdir/SRPMS/*.rpm "${tmpdir}"/topdir/RPMS/*/*.rpm; do
+    [ -f "$item" ] || continue
+    item_name=`basename "$item" .rpm`
     arch=$(sed -ne 's/.*\(\.[^\.]\+\)$/\1/p' <<< $item_name)
     item_name=`basename $item_name $arch`
     if [ "$item_name" == "gdrcopy-${FULL_VERSION}-${RPM_VERSION}.`uname -m`" ]; then
@@ -182,10 +187,10 @@ for item in `ls $tmpdir/topdir/SRPMS/*.rpm $tmpdir/topdir/RPMS/*/*.rpm`; do
     else
         item_name="${item_name}${release_version}${arch}.rpm"
     fi
-    ex cp $item ./${item_name}
+    ex cp "$item" "./${item_name}"
 done
 
 echo
 echo "Cleaning up ..."
 
-ex rm -rf ${tmpdir}
+ex rm -rf "${tmpdir}"

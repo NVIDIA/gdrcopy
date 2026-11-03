@@ -38,7 +38,7 @@ ex()
 {
     local rc
     echo "+ $@"
-    $@
+    "$@"
     rc=$?
     
     if [[ $rc -ne 0 ]]; then
@@ -126,41 +126,41 @@ echo "Working in ${tmpdir} ..."
 
 ex cd ${TOP_DIR_PATH}
 
-ex mkdir -p ${tmpdir}/gdrcopy
-ex rm -rf ${tmpdir}/gdrcopy/*
-ex cp -r * ${tmpdir}/gdrcopy/
-ex cp -r packages/debian-lib ${tmpdir}/gdrcopy/
-ex cp -r packages/debian-tests ${tmpdir}/gdrcopy/
-ex cp README.md ${tmpdir}/gdrcopy/debian-lib/README.Debian
-ex cp README.md ${tmpdir}/gdrcopy/debian-lib/README.source
-ex cp README.md ${tmpdir}/gdrcopy/debian-tests/README.Debian
-ex cp README.md ${tmpdir}/gdrcopy/debian-tests/README.source
+ex mkdir -p "${tmpdir}"/gdrcopy
+ex rm -rf "${tmpdir}"/gdrcopy/*
+ex cp -r * "${tmpdir}"/gdrcopy/
+ex cp -r packages/debian-lib "${tmpdir}"/gdrcopy/
+ex cp -r packages/debian-tests "${tmpdir}"/gdrcopy/
+ex cp README.md "${tmpdir}"/gdrcopy/debian-lib/README.Debian
+ex cp README.md "${tmpdir}"/gdrcopy/debian-lib/README.source
+ex cp README.md "${tmpdir}"/gdrcopy/debian-tests/README.Debian
+ex cp README.md "${tmpdir}"/gdrcopy/debian-tests/README.source
 
-ex cd ${tmpdir}/gdrcopy
+ex cd "${tmpdir}"/gdrcopy
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 
-ex rm -f ${tmpdir}/libgdrapi_${VERSION}.orig.tar.gz
-ex rm -f ${tmpdir}/gdrcopy-tests_${VERSION}.orig.tar.gz
+ex rm -f "${tmpdir}"/libgdrapi_${VERSION}.orig.tar.gz
+ex rm -f "${tmpdir}"/gdrcopy-tests_${VERSION}.orig.tar.gz
 
-ex cd ${tmpdir}
+ex cd "${tmpdir}"
 ex cp -r gdrcopy libgdrapi-${VERSION}
-ex cd ${tmpdir}/libgdrapi-${VERSION}
+ex cd "${tmpdir}"/libgdrapi-${VERSION}
 ex mv debian-lib debian
 ex rm -rf debian-*
 
-ex cd ${tmpdir}
+ex cd "${tmpdir}"
 ex cp -r gdrcopy gdrcopy-tests-${VERSION}
-ex cd ${tmpdir}/gdrcopy-tests-${VERSION}
+ex cd "${tmpdir}"/gdrcopy-tests-${VERSION}
 ex mv debian-tests debian
 ex rm -rf debian-*
 
-ex cd ${tmpdir}
+ex cd "${tmpdir}"
 ex tar czvf libgdrapi_${VERSION}.orig.tar.gz libgdrapi-${VERSION}
 ex tar czvf gdrcopy-tests_${VERSION}.orig.tar.gz gdrcopy-tests-${VERSION}
 
 echo "Building libgdrapi package ..."
-ex cd ${tmpdir}/libgdrapi-${VERSION}
+ex cd "${tmpdir}"/libgdrapi-${VERSION}
 debuild_params="--set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
 if [ "${skip_dep_check}" -eq 1 ]; then
     debuild_params+=" --preserve-env -d"
@@ -173,7 +173,7 @@ ex debuild ${debuild_params}
 if [[ ${build_test_package} == 1 ]]; then
     echo
     echo "Building gdrcopy-tests package ..."
-    ex cd ${tmpdir}/gdrcopy-tests-${VERSION}
+    ex cd "${tmpdir}"/gdrcopy-tests-${VERSION}
     debuild_params="--set-envvar=CUDA=${CUDA} --set-envvar=PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
     if [ "${skip_dep_check}" -eq 1 ]; then
         debuild_params+=" --preserve-env -d"
@@ -187,43 +187,43 @@ fi
 if [[ ${build_driver_package} == 1 ]]; then
     echo
     echo "Building gdrdrv-dkms package ..."
-    ex cd ${tmpdir}/gdrcopy/src/gdrdrv
+    ex cd "${tmpdir}"/gdrcopy/src/gdrdrv
     ex make clean
 
     dkmsdir="${tmpdir}/gdrdrv-dkms-${VERSION}"
-    ex mkdir -p ${dkmsdir}
-    ex cp -r ${tmpdir}/gdrcopy/src/gdrdrv ${dkmsdir}/gdrdrv-${VERSION}
-    ex rm -rf ${dkmsdir}/gdrdrv-${VERSION}/debian-*
-    ex cp ${SCRIPT_DIR_PATH}/dkms.conf ${dkmsdir}/gdrdrv-${VERSION}/
-    ex cp -r ${TOP_DIR_PATH}/scripts ${dkmsdir}/gdrdrv-${VERSION}
-    ex cd ${dkmsdir}
+    ex mkdir -p "${dkmsdir}"
+    ex cp -r "${tmpdir}"/gdrcopy/src/gdrdrv "${dkmsdir}"/gdrdrv-${VERSION}
+    ex rm -rf "${dkmsdir}"/gdrdrv-${VERSION}/debian-*
+    ex cp ${SCRIPT_DIR_PATH}/dkms.conf "${dkmsdir}"/gdrdrv-${VERSION}/
+    ex cp -r ${TOP_DIR_PATH}/scripts "${dkmsdir}"/gdrdrv-${VERSION}
+    ex cd "${dkmsdir}"
     ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
     ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
     ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
     ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
 
-    ex cd ${tmpdir}
+    ex cd "${tmpdir}"
     ex tar czvf gdrdrv-dkms_${VERSION}.orig.tar.gz gdrdrv-dkms-${VERSION}
 
-    ex cd ${dkmsdir}
+    ex cd "${dkmsdir}"
     ex dpkg-buildpackage -rfakeroot -d -F -us -uc
 fi
 
 echo
 echo "Building gdrcopy package ..."
 metadir=${tmpdir}/gdrcopy-${VERSION}
-ex mkdir -p ${metadir}
+ex mkdir -p "${metadir}"
 ex cd ${TOP_DIR_PATH}
-ex cp -r packages/debian-meta ${metadir}/debian
-ex cp README.md ${metadir}/debian/README.Debian
-ex cp README.md ${metadir}/debian/README.source
-ex cd ${metadir}
+ex cp -r packages/debian-meta "${metadir}"/debian
+ex cp README.md "${metadir}"/debian/README.Debian
+ex cp README.md "${metadir}"/debian/README.source
+ex cd "${metadir}"
 ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
 ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
-ex cd ${tmpdir}
+ex cd "${tmpdir}"
 ex tar czvf gdrcopy_${VERSION}.orig.tar.gz gdrcopy-${VERSION}
-cd ${metadir}
+cd "${metadir}"
 ex debuild -us -uc
 
 echo
@@ -238,8 +238,9 @@ fi
 
 ex cd ${CWD}
 
-for item in `ls ${tmpdir}/*.deb`; do
-    item_name=`basename $item`
+for item in "${tmpdir}"/*.deb; do
+    [ -f "$item" ] || continue
+    item_name=`basename "$item"`
     item_name=`echo $item_name | sed -e "s/\.deb//g"`
     item_base_name=`echo ${item_name} | cut -d"_" -f1`
     item_arch_name=`echo ${item_name} | cut -d"_" -f3`
@@ -249,12 +250,12 @@ for item in `ls ${tmpdir}/*.deb`; do
         output_name="${output_name}+cuda${CUDA_MAJOR}.${CUDA_MINOR}"
     fi
     output_name="${output_name}.deb"
-    ex cp $item ./${output_name}
+    ex cp "$item" "./${output_name}"
 done
-ex cp ${tmpdir}/*.tar.* .
-ex cp ${tmpdir}/*.dsc .
+ex cp "${tmpdir}"/*.tar.* .
+ex cp "${tmpdir}"/*.dsc .
 
 echo
 echo "Cleaning up ..."
 
-ex rm -rf ${tmpdir}
+ex rm -rf "${tmpdir}"
