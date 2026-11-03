@@ -68,7 +68,7 @@ obj-m := test-dummy.o
 EOF
 
 cd ${tmpfolder}
-make -C ${kdir} M=${tmpfolder} modules > /dev/null 2>&1
+make -C "${kdir}" M=${tmpfolder} modules > /dev/null 2>&1
 ret=$?
 
 rm -rf ${tmpfolder}

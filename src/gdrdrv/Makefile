@@ -56,9 +56,9 @@ _NVIDIA_IS_OPENSOURCE := $(shell grep -r "MODULE_LICENSE" $(NVIDIA_SRC_DIR)/ | g
 export NVIDIA_IS_OPENSOURCE ?= $(_NVIDIA_IS_OPENSOURCE)
 
 CONF_SCRIPT_DIR ?= $(PWD)/../../scripts
-_HAVE_VM_FLAGS_SET := $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_VM_FLAGS_SET.sh -k $(KVER))
+_HAVE_VM_FLAGS_SET := $(shell KDIR="$(KDIR)" $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_VM_FLAGS_SET.sh -k $(KVER))
 export HAVE_VM_FLAGS_SET ?= $(_HAVE_VM_FLAGS_SET)
-_HAVE_PROC_OPS := $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_PROC_OPS.sh -k $(KVER))
+_HAVE_PROC_OPS := $(shell KDIR="$(KDIR)" $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_PROC_OPS.sh -k $(KVER))
 export HAVE_PROC_OPS ?= $(_HAVE_PROC_OPS)
 
 all: build
