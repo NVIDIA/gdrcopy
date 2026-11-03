@@ -34,7 +34,7 @@ if [ ${set_kver} -eq 0 ]; then
     kver="$(uname -r)"
 fi
 
-kdir="/lib/modules/${kver}/build"
+kdir="${KDIR:-/lib/modules/${kver}/build}"
 
 tmpfolder=$(mktemp --tmpdir -d gdrcopy.XXXXXXXXX)
 
@@ -68,7 +68,7 @@ obj-m := test-dummy.o
 EOF
 
 cd ${tmpfolder}
-make -C ${kdir} M=${tmpfolder} modules > /dev/null 2>&1
+make -C "${kdir}" M=${tmpfolder} modules > /dev/null 2>&1
 ret=$?
 
 rm -rf ${tmpfolder}
@@ -78,4 +78,3 @@ if [ "${ret}" -eq 0 ]; then
 else
     echo "n"
 fi
-
