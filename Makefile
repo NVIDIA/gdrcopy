@@ -111,6 +111,7 @@ dist-lib: lib
 	ln -sf $(LIB_SONAME) $(LIB_BASENAME)
 	cp include/*.h $(INSTALL_ROOT)/libgdrapi/include/
 	cp LICENSE $(INSTALL_ROOT)/libgdrapi/
+	cp packages/udev/rules.d/70-gdrdrv.rules $(INSTALL_ROOT)/libgdrapi/
 	cd $(INSTALL_ROOT) && \
 	tar czf ../libgdrapi-$(OS)-$(ARCH)-$(LIB_VER).tar.gz libgdrapi/
 
