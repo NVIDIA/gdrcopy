@@ -210,6 +210,13 @@ typedef struct {
     void *map_ptr;
 } gh_mem_handle_t;
 
+typedef struct {
+#ifdef HAVE_DEVICE_LOCALITY_DOMAIN
+    CUgreenCtx gCtx;
+#endif
+    CUstream stream;
+} ugpu_context_t;
+
 static int dev_id = 0;
 static gdr_map_flags_t map_type_flag = GDR_MAP_FLAG_DEFAULT;
 static uint32_t num_iters = 1000;
@@ -226,12 +233,18 @@ static mem_loc_t data_buf_loc = MEM_LOC_GPU;
 static gpu_memalloc_fn_t galloc_fn = gpu_mem_alloc;
 static gpu_memfree_fn_t gfree_fn = gpu_mem_free;
 
+static bool use_locality_domain = false;
+static bool use_sm_locality_domain = false;
+static int locality_domain_id = 0;
+static int sm_locality_domain_id = 0;
 static benchmark_mode_t benchmark_mode = BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME;
 
 static unsigned int timeout = 10;  // in s
 // Counter value before checking timeout.
 static unsigned long int timeout_check_threshold = 1000000UL;
 static unsigned long int timeout_counter = 0;
+
+static bool use_force_pcie = false;
 
 static inline string mem_loc_to_str(mem_loc_t loc)
 {
@@ -270,13 +283,16 @@ static void gh_mem_alloc(gh_mem_handle_t *mhandle, size_t size, mem_loc_t loc, g
         gdr_info_t info;
         off_t off;
 
-        ASSERTDRV(galloc_fn(&gmhandle, size, true, true));
+        ASSERTDRV(galloc_fn(&gmhandle, size, true, true, use_locality_domain, locality_domain_id));
         gpu_ptr = gmhandle.ptr;
 
         ASSERTDRV(cuMemsetD8(gpu_ptr, 0, size));
 
-        // tokens are optional in CUDA 6.0
-        ASSERT_EQ(gdr_pin_buffer(g, gpu_ptr, size, 0, 0, &mh), 0);
+        int pin_flags = GDR_PIN_FLAG_DEFAULT;
+        if (use_force_pcie) {
+            pin_flags |= GDR_PIN_FLAG_FORCE_PCIE;
+        }
+        ASSERT_EQ(gdr_pin_buffer_v2(g, gpu_ptr, size, pin_flags, &mh), 0);
         ASSERT_NEQ(mh, null_mh);
 
         ASSERT_EQ(gdr_map_v2(g, mh, &map_ptr, size, map_type_flag), 0);
@@ -334,6 +350,10 @@ static void print_usage(const char *path)
     cout << "   -u <timeout>        Timeout in second. 0 to disable. (default: " << timeout << ")" << endl;
     cout << "   -a <fn>             GPU buffer allocation function (default: cuMemAlloc)" << endl;
     cout << "                           Choices: cuMemAlloc, cuMemCreate" << endl;
+    cout << "   -n <locality-domain-id>    Locality domain ID for GPU memory locality domain" << endl;
+    cout << "                           This option is only supported with cuMemCreate" << endl;
+    cout << "   -g <compute-node-id>    Compute node ID for compute localization" << endl;
+    cout << "                           This option is only supported with cuMemCreate" << endl;
     cout << "   -s <size>           Data size (default: " << data_size << ")" << endl;
     cout << "                           0 means measuring the visibility latency of the flag" << endl;
     cout << "   -B <nblocks>        Number of CUDA blocks (default: " << num_blocks << ")" << endl;
@@ -350,9 +370,10 @@ static void print_usage(const char *path)
     cout << "   -D <data-buf-loc>   The location of data buffer (default: " << mem_loc_to_str(data_buf_loc) << ")" << endl;
     cout << "                           Choices: gpumem, hostmem" << endl;
     cout << "   -M <mapping_type>   Request mapping type (choices: default, wc, cache, device)" << endl;
+    cout << "   -P                  Use GDR_PIN_FLAG_FORCE_PCIE flag (forces WC mapping, cannot be combined with -M cache or -M device)" << endl;
 }
 
-static inline void check_timeout(struct timespec start, double timeout_us)
+static inline void check_timeout(struct timespec start, double timeout_us, CUstream cuda_stream)
 {
     CUresult status;
     const char *cu_status_name;
@@ -365,14 +386,64 @@ static inline void check_timeout(struct timespec start, double timeout_us)
             time_used_us = time_diff(start, now);
             if (time_used_us > timeout_us) {
                 cerr << "ERROR: TIMEOUT!!!" << endl;
-                status = cuStreamQuery(0);
+                status = cuStreamQuery(cuda_stream);
                 cuGetErrorName(status, &cu_status_name);
-                cerr << "cuStreamQuery(0) returned " << cu_status_name << endl;
+                cerr << "cuStreamQuery(" << cuda_stream << ") returned " << cu_status_name << endl;
                 abort();
             }
             timeout_counter = 0;
         }
     }
+}
+
+static ugpu_context_t setup_ugpu_context(int device_id, int sm_locality_domain_id)
+{
+#ifdef HAVE_DEVICE_LOCALITY_DOMAIN
+    CUdevResource initial_SM_resources = {};
+    ASSERTDRV(cuDeviceGetDevResource(device_id, &initial_SM_resources, CU_DEV_RESOURCE_TYPE_SM));
+
+    CUdevResource localizedSm;
+    CU_DEV_SM_RESOURCE_GROUP_PARAMS param;
+    unsigned int flags = 0, nbGroups = 1;
+    memset(&param, 0, sizeof(param));
+    param.coscheduledSmCount = 8;
+    param.flags = CU_DEV_SM_RESOURCE_GROUP_LOCALITY_DOMAIN_ID;
+    param.localityDomainId = (unsigned char)sm_locality_domain_id;
+    ASSERTDRV(cuDevSmResourceSplit(&localizedSm, nbGroups, &initial_SM_resources, NULL, flags, &param));
+
+    CUgreenCtx gCtx;
+    CUdevResourceDesc localizedDesc;
+    ASSERTDRV(cuDevResourceGenerateDesc(&localizedDesc, &localizedSm, nbGroups));
+    ASSERTDRV(cuGreenCtxCreate(&gCtx, localizedDesc, device_id, CU_GREEN_CTX_DEFAULT_STREAM));
+
+    CUstream green_ctx_stream;
+    int priority = 0;
+    ASSERTDRV(cuGreenCtxStreamCreate(&green_ctx_stream,
+                                        gCtx,
+                                        CU_STREAM_NON_BLOCKING,
+                                        priority));
+
+    ugpu_context_t ctx;
+    ctx.gCtx = gCtx;
+    ctx.stream = green_ctx_stream;
+
+    return ctx;
+#else
+    cerr << "SM locality domain requires CUDA toolkit 13.4 or later. Current version: " << CUDA_VERSION << endl;
+    exit(EXIT_FAILURE);
+#endif
+}
+
+static void cleanup_ugpu_context(ugpu_context_t *ctx)
+{
+    if (ctx->stream) {
+        ASSERTDRV(cuStreamDestroy(ctx->stream));
+    }
+#ifdef HAVE_DEVICE_LOCALITY_DOMAIN
+    if (ctx->gCtx) {
+        ASSERTDRV(cuGreenCtxDestroy(ctx->gCtx));
+    }
+#endif
 }
 
 int main(int argc, char *argv[])
@@ -385,7 +456,7 @@ int main(int argc, char *argv[])
 
     while (1) {
         int c;
-        c = getopt(argc, argv, "d:t:u:a:s:B:T:m:G:C:D:M:h");
+        c = getopt(argc, argv, "d:t:u:a:n:g:s:B:T:m:G:C:D:M:Ph");
         if (c == -1)
             break;
 
@@ -415,6 +486,24 @@ int main(int argc, char *argv[])
                 }
                 break;
             }
+            case 'n':
+#ifndef HAVE_DEVICE_LOCALITY_DOMAIN
+                cerr << "Locality domain allocation requires CUDA toolkit 13.4 or later. Current version: " << CUDA_VERSION << endl;
+                exit(EXIT_FAILURE);
+#else
+                use_locality_domain = true;
+                locality_domain_id = strtol(optarg, NULL, 0);
+                break;
+#endif
+            case 'g':
+#ifndef HAVE_DEVICE_LOCALITY_DOMAIN
+                cerr << "SM locality domain allocation requires CUDA toolkit 13.4 or later. Current version: " << CUDA_VERSION << endl;
+                exit(EXIT_FAILURE);
+#else
+                use_sm_locality_domain = true;
+                sm_locality_domain_id = strtol(optarg, NULL, 0);
+                break;
+#endif
             case 's':
                 data_size = strtol(optarg, NULL, 0);
                 break;
@@ -469,6 +558,13 @@ int main(int argc, char *argv[])
                     exit(EXIT_FAILURE);
                 }
                 break;
+            case 'P':
+                use_force_pcie = true;
+                if (map_type_flag == GDR_MAP_FLAG_REQ_CACHE_MAPPING || map_type_flag == GDR_MAP_FLAG_REQ_DEVICE_MAPPING) {
+                    cerr << "ERROR: -P forces a WC mapping, which cannot satisfy -M cache or -M device." << endl;
+                    exit(EXIT_FAILURE);
+                }
+                break;
             case 'h':
                 print_usage(argv[0]);
                 exit(EXIT_SUCCESS);
@@ -476,6 +572,16 @@ int main(int argc, char *argv[])
                 cerr << "ERROR: invalid option" << endl;
                 exit(EXIT_FAILURE);
         }
+    }
+
+    if ((use_locality_domain || use_sm_locality_domain) && galloc_fn != gpu_vmm_alloc) {
+        cerr << "Locality domain/compute node allocation is only supported with cuMemCreate" << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    if (use_locality_domain != use_sm_locality_domain) {
+        cerr << "ERROR: Options -n (locality-domain-id) and -g (compute-node-id) must be specified together." << endl;
+        exit(EXIT_FAILURE);
     }
 
     const bool process_data = (data_size > 0);
@@ -497,6 +603,11 @@ int main(int argc, char *argv[])
 
     if (BENCHMARK_MODE_CPU_PRODUCE_GPU_CONSUME > benchmark_mode || BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME < benchmark_mode) {
         cerr << "ERROR: Unrecognized mode " << benchmark_mode << "." << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    if (use_force_pcie && !((gpu_flag_loc == MEM_LOC_GPU) || (cpu_flag_loc == MEM_LOC_GPU) || (process_data && (data_buf_loc == MEM_LOC_GPU)))) {
+        cerr << "ERROR: GDR_PIN_FLAG_FORCE_PCIE flag is only applicable when at least one of the buffers is allocated in GPU memory." << endl;
         exit(EXIT_FAILURE);
     }
 
@@ -545,6 +656,33 @@ int main(int argc, char *argv[])
     ASSERTDRV(cuDevicePrimaryCtxRetain(&dev_ctx, dev));
     ASSERTDRV(cuCtxSetCurrent(dev_ctx));
 
+#ifdef HAVE_DEVICE_LOCALITY_DOMAIN
+    if (use_locality_domain || use_sm_locality_domain) {
+        int locality_domain_count = 0;
+        ASSERTDRV(cuDeviceGetAttribute(&locality_domain_count, CU_DEVICE_ATTRIBUTE_LOCALITY_DOMAIN_COUNT, dev));
+        if (locality_domain_id < 0 || locality_domain_id >= locality_domain_count) {
+            cerr << "ERROR: locality_domain_id " << locality_domain_id
+                 << " is out of range [0, " << locality_domain_count << ")." << endl;
+            exit(EXIT_FAILURE);
+        }
+        if (sm_locality_domain_id < 0 || sm_locality_domain_id >= locality_domain_count) {
+            cerr << "ERROR: sm_locality_domain_id " << sm_locality_domain_id
+                 << " is out of range [0, " << locality_domain_count << ")." << endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+#endif
+
+    CUstream cuda_stream;
+    ugpu_context_t ugpu_ctx = {};
+    if (use_locality_domain && use_sm_locality_domain) {
+        ugpu_ctx = setup_ugpu_context(dev_id, sm_locality_domain_id);
+        cuda_stream = ugpu_ctx.stream;
+    } else {
+        cuda_stream = 0;  // Default stream
+    }
+
+
     int max_threads_per_block;
     ASSERTDRV(cuDeviceGetAttribute(&max_threads_per_block, CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK, dev));
 
@@ -552,6 +690,8 @@ int main(int argc, char *argv[])
         cerr << "ERROR: nthreads can be at most " << max_threads_per_block << "." << endl;
         exit(EXIT_FAILURE);
     }
+
+    cout << "use force pcie: " << (use_force_pcie ? "yes" : "no") << endl;
 
     if (!process_data) {
         cout << "We will measure the visibility of the flag value only. "
@@ -603,7 +743,7 @@ int main(int argc, char *argv[])
                          << "until it observes the update in cpu_flag." << endl
                          << "CPU does the time measurement." << endl
                          << endl;
-                    pp_data_cpu_produce_gpu_consume_kernel<<< num_blocks, num_threads_per_block >>>(
+                    pp_data_cpu_produce_gpu_consume_kernel<<< num_blocks, num_threads_per_block, 0, cuda_stream >>>(
                         (uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr,
                         num_iters, (uint32_t *)data_buf_mhandle.gpu_ptr, data_size
                     );
@@ -616,7 +756,7 @@ int main(int argc, char *argv[])
                          << "until it observes the update in gpu_flag." << endl
                          << "GPU does the time measurement." << endl
                          << endl;
-                    pp_data_gpu_produce_cpu_consume_kernel<<< num_blocks, num_threads_per_block >>>(
+                    pp_data_gpu_produce_cpu_consume_kernel<<< num_blocks, num_threads_per_block, 0, cuda_stream >>>(
                         (uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr,
                         num_iters, (uint32_t *)data_buf_mhandle.gpu_ptr, data_size,
                         (uint64_t *)gpu_beg_mhandle.gpu_ptr, (uint64_t *)gpu_end_mhandle.gpu_ptr
@@ -641,7 +781,7 @@ int main(int argc, char *argv[])
                          << "until it observes the update in cpu_flag." << endl
                          << "CPU does the time measurement." << endl
                          << endl;
-                    pp_cpu_produce_gpu_consume_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters);
+                    pp_cpu_produce_gpu_consume_kernel<<< num_blocks, num_threads_per_block, 0, cuda_stream >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters);
                     break;
                 case BENCHMARK_MODE_GPU_PRODUCE_CPU_CONSUME:
                     cout << "GPU writes to cpu_flag. CPU polls on the expected cpu_flag value. "
@@ -650,7 +790,7 @@ int main(int argc, char *argv[])
                          << "until it observes the update in gpu_flag." << endl
                          << "GPU does the time measurement." << endl
                          << endl;
-                    pp_gpu_produce_cpu_consume_kernel<<< num_blocks, num_threads_per_block >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters, (uint64_t *)gpu_beg_mhandle.gpu_ptr, (uint64_t *)gpu_end_mhandle.gpu_ptr);
+                    pp_gpu_produce_cpu_consume_kernel<<< num_blocks, num_threads_per_block, 0, cuda_stream >>>((uint32_t *)gpu_flag_mhandle.gpu_ptr, (uint32_t *)cpu_flag_mhandle.gpu_ptr, num_iters, (uint64_t *)gpu_beg_mhandle.gpu_ptr, (uint64_t *)gpu_end_mhandle.gpu_ptr);
                     break;
                 default:
                     cerr << "ERROR: Unrecognized mode." << endl;
@@ -671,7 +811,7 @@ int main(int argc, char *argv[])
 	    ASSERT_EQ(rc, cudaSuccess);
         }
 
-        ASSERT_EQ(cuStreamQuery(0), CUDA_ERROR_NOT_READY);
+        ASSERT_EQ(cuStreamQuery(cuda_stream), CUDA_ERROR_NOT_READY);
 
         uint32_t i = 1;
         uint32_t val;
@@ -686,7 +826,7 @@ int main(int argc, char *argv[])
             if (val == i)
                 ++cpu_flag_idx;
             else
-                check_timeout(beg, timeout_us);
+                check_timeout(beg, timeout_us, cuda_stream);
         }
         while (cpu_flag_idx < num_blocks);
         LB();
@@ -710,19 +850,19 @@ int main(int argc, char *argv[])
                             WRITE_ONCE(*(uint32_t *)gpu_flag_mhandle.host_ptr, val);
                         SB();
 
-                        cpu_flag_idx = 0;
-                        do {
-                            if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
-                                gdr_copy_from_mapping(cpu_flag_mhandle.mh, &val, &((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx], sizeof(uint32_t));
-                            else
-                                val = READ_ONCE(((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx]);
-                            if (val == i + 1)
-                                ++cpu_flag_idx;
-                            else
-                                check_timeout(beg, timeout_us);
-                        }
-                        while (cpu_flag_idx < num_blocks);
-                        LB();
+                    cpu_flag_idx = 0;
+                    do {
+                        if (cpu_flag_mhandle.mem_loc == MEM_LOC_GPU)
+                            gdr_copy_from_mapping(cpu_flag_mhandle.mh, &val, &((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx], sizeof(uint32_t));
+                        else
+                            val = READ_ONCE(((uint32_t *)cpu_flag_mhandle.host_ptr)[cpu_flag_idx]);
+                        if (val == i + 1)
+                            ++cpu_flag_idx;
+                        else
+                            check_timeout(beg, timeout_us, cuda_stream);
+                    }
+                    while (cpu_flag_idx < num_blocks);
+                    LB();
 
                         i = val;
                     }
@@ -757,7 +897,7 @@ int main(int argc, char *argv[])
                         if (val == i + 1)
                             ++cpu_flag_idx;
                         else
-                            check_timeout(beg, timeout_us);
+                            check_timeout(beg, timeout_us, cuda_stream);
                     }
                     while (cpu_flag_idx < num_blocks);
                     LB();
@@ -779,7 +919,7 @@ int main(int argc, char *argv[])
                     i = val;
                 }
 
-                ASSERTDRV(cuStreamSynchronize(0));
+                ASSERTDRV(cuStreamSynchronize(cuda_stream));
 
                 ASSERTDRV(cuMemcpyDtoH(gpu_time_beg_array, gpu_beg_mhandle.gpu_ptr, sizeof(uint64_t) * num_blocks));
                 ASSERTDRV(cuMemcpyDtoH(gpu_time_end_array, gpu_end_mhandle.gpu_ptr, sizeof(uint64_t) * num_blocks));
@@ -796,7 +936,7 @@ int main(int argc, char *argv[])
                 exit(EXIT_FAILURE);
         }
 
-        ASSERTDRV(cuStreamSynchronize(0));
+        ASSERTDRV(cuStreamSynchronize(cuda_stream));
 
         cout << "Round-trip latency per iteration is (min) " << lat_us[0] << ", (median) " << lat_us[num_buckets/2] << " us" << endl;
 
@@ -812,6 +952,10 @@ int main(int argc, char *argv[])
 
     cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
+
+    if (use_locality_domain && use_sm_locality_domain) {
+        cleanup_ugpu_context(&ugpu_ctx);
+    }
 
     return 0;
 }

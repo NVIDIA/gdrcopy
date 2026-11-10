@@ -28,7 +28,6 @@
 #include <iostream>
 #include <iomanip>
 #include <cuda.h>
-#include <algorithm>
 
 using namespace std;
 
@@ -40,18 +39,38 @@ using namespace gdrcopy::test;
 // manually tuned...
 int num_write_iters = 10000;
 int num_read_iters = 100;
+int num_runs = 1;
 const int max_num_buckets = 100;
 int num_write_buckets = max_num_buckets;
 int num_read_buckets = max_num_buckets;
 int dev_id = 0;
 bool do_cumemcpy = false;
 bool use_cold_cache = false;
+bool no_store_fence = false;
 gdr_map_flags_t map_type_flag = GDR_MAP_FLAG_DEFAULT;
+uint32_t copy_flags = GDR_COPY_FLAG_DEFAULT;
+uint32_t copy_flags_read = GDR_COPY_FLAG_DEFAULT;
 size_t _size = (size_t)1 << 24;
+bool use_locality_domain = false;
+int locality_domain_id = 0;
+bool use_force_pcie = false;
+
+static void print_type_aggregate(const char *type, std::map<size_t, std::vector<double> > &medians, int num_runs)
+{
+    if (medians.empty())
+        return;
+    cout << endl << "Aggregate " << type << " latency across " << num_runs << " runs:" << endl;
+    for (std::map<size_t, std::vector<double> >::iterator it = medians.begin();
+         it != medians.end(); ++it) {
+        char label[64];
+        snprintf(label, sizeof(label), "  size=%zu latency", it->first);
+        print_aggregate_stats(label, calc_aggregate_stats(it->second), " us");
+    }
+}
 
 void print_usage(const char *path)
 {
-    cout << "Usage: " << path << " [-h][-c][-s <size>][-d <gpu>][-w <iters>][-r <iters>][-a <fn>]" << endl;
+    cout << "Usage: " << path << " [-h][-c][-C][-F][-P][-s <size>][-d <gpu>][-w <iters>][-r <iters>][-R <runs>][-a <fn>][-M <mapping_type>]" << endl;
     cout << endl;
     cout << "Options:" << endl;
     cout << "   -h              Print this help text" << endl;
@@ -60,11 +79,16 @@ void print_usage(const char *path)
     cout << "   -d <gpu>        GPU ID (default: " << dev_id << ")" << endl;
     cout << "   -w <iters>      Number of write iterations (default: " << num_write_iters << ")" << endl;
     cout << "   -r <iters>      Number of read iterations (default: " << num_read_iters << ")" << endl;
+    cout << "   -R <runs>       Number of independent repeat runs (default: " << num_runs << ")" << endl;
     cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
     cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
+    cout << "   -n <locality-domain-id>    Locality domain ID for GPU memory locality domain" << endl;
+    cout << "                           This option is only supported with cuMemCreate" << endl;
     cout << "   -M <mapping_type>   Request mapping type (choices: default, wc, cache, device)" << endl;
     cout << "   -C              Use cold cache (default: no)" << endl;
     cout << "                       This option takes effect when cache mapping is used such as on Grace-Hopper." << endl;
+    cout << "   -F              Disable store fences via the v2 copy APIs for lower latency (default: no)" << endl;
+    cout << "   -P              Use GDR_PIN_FLAG_FORCE_PCIE flag (forces WC mapping, cannot be combined with -M cache or -M device)" << endl;
 }
 
 int main(int argc, char *argv[])
@@ -78,7 +102,7 @@ int main(int argc, char *argv[])
 
     while(1) {        
         int c;
-        c = getopt(argc, argv, "s:d:w:r:a:M:cCh");
+        c = getopt(argc, argv, "s:d:w:r:R:a:n:M:cCFPh");
         if (c == -1)
             break;
 
@@ -95,6 +119,9 @@ int main(int argc, char *argv[])
             case 'r':
                 num_read_iters = strtol(optarg, NULL, 0);
                 break;
+            case 'R':
+                num_runs = strtol(optarg, NULL, 0);
+                break;
             case 'a':
                 if (strcmp(optarg, "cuMemAlloc") == 0) {
                     galloc_fn = gpu_mem_alloc;
@@ -108,6 +135,15 @@ int main(int argc, char *argv[])
                     cerr << "Unrecognized fn argument" << endl;
                     exit(EXIT_FAILURE);
                 }
+                break;
+            case 'n':
+#ifndef HAVE_DEVICE_LOCALITY_DOMAIN
+                cerr << "Locality domain allocation requires CUDA toolkit 13.4 or later. Current version: " << CUDA_VERSION << endl;
+                exit(EXIT_FAILURE);
+#else
+                use_locality_domain = true;
+                locality_domain_id = strtol(optarg, NULL, 0);
+#endif
                 break;
             case 'M':
                 if (strcmp(optarg, "default") == 0) {
@@ -130,6 +166,17 @@ int main(int argc, char *argv[])
             case 'C':
                 use_cold_cache = true;
                 break;
+            case 'F':
+                no_store_fence = true;
+                copy_flags = GDR_FLAG_UNSET(GDR_COPY_FLAG_DEFAULT, GDR_COPY_FLAG_WRITE_FENCE);
+                break;
+            case 'P':
+                use_force_pcie = true;
+                if (map_type_flag == GDR_MAP_FLAG_REQ_CACHE_MAPPING || map_type_flag == GDR_MAP_FLAG_REQ_DEVICE_MAPPING) {
+                    cerr << "ERROR: -P forces a WC mapping, which cannot satisfy -M cache or -M device." << endl;
+                    exit(EXIT_FAILURE);
+                }
+                break;
             case 'h':
                 print_usage(argv[0]);
                 exit(EXIT_SUCCESS);
@@ -139,6 +186,19 @@ int main(int argc, char *argv[])
         }
     }
     
+    if(copy_flags & GDR_COPY_FLAG_USE_AVX512 || copy_flags & GDR_COPY_FLAG_USE_AVX2 || copy_flags & GDR_COPY_FLAG_USE_SSE4_1)
+        copy_flags_read = GDR_FLAG_SET(copy_flags, GDR_COPY_FLAG_READ_FENCE);
+
+    if (use_locality_domain && galloc_fn != gpu_vmm_alloc) {
+        cerr << "Locality domain allocation is only supported with cuMemCreate" << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    if (num_runs <= 0) {
+        cerr << "ERROR: num_runs must be positive" << endl;
+        exit(EXIT_FAILURE);
+    }
+
     size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
     if(num_write_iters > max_num_buckets && num_write_iters % max_num_buckets != 0){
         int old_num_write_iters = num_write_iters;
@@ -196,7 +256,7 @@ int main(int argc, char *argv[])
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, use_locality_domain, locality_domain_id));
     d_A = mhandle.ptr;
     cout << "device ptr: 0x" << hex << d_A << dec << endl;
     cout << "allocated size: " << size << endl;
@@ -206,6 +266,8 @@ int main(int argc, char *argv[])
     else
         cout << "gpu alloc fn: cuMemCreate" << endl;
 
+    cout << "use force pcie: " << (use_force_pcie ? "yes" : "no") << endl;
+
     uint32_t *init_buf = NULL;
     uint32_t *h_buf = NULL;
     ASSERTDRV(cuMemAllocHost((void **)&init_buf, size));
@@ -214,207 +276,240 @@ int main(int argc, char *argv[])
     ASSERT_NEQ(h_buf, (void*)0);
     init_hbuf_walking_bit(init_buf, size);
 
-    if (do_cumemcpy) {
+    // medians collected per copy size across repeat runs for -R aggregation
+    std::map<size_t, std::vector<double> > h2d_medians;
+    std::map<size_t, std::vector<double> > d2h_medians;
+    std::map<size_t, std::vector<double> > gdr_to_medians;
+    std::map<size_t, std::vector<double> > gdr_from_medians;
+    for (int run = 0; run < num_runs; run++) {
+        if (num_runs > 1)
+            cout << endl << "Starting run " << (run + 1) << " of " << num_runs;
+        if (do_cumemcpy) {
+            cout << endl;
+            cout << "cuMemcpy_H2D num iters for each size: " << num_write_iters << endl;
+            printf("Test \t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
+            BEGIN_CHECK {
+                // cuMemcpy H2D benchmark
+                copy_size = 1;
+                while (copy_size <= size) {
+                    int iter = 0;
+                    for(int bucket = 0; bucket < num_write_buckets; bucket++){
+                        clock_gettime(MYCLOCK, &beg);
+                        for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
+                            ASSERTDRV(cuMemcpy(d_A, (CUdeviceptr)init_buf, copy_size));
+                        }
+                        clock_gettime(MYCLOCK, &end);
+                        lat_us[bucket] = time_diff(beg, end) / (double)iter;
+                    }
+                    sort(lat_us, lat_us+num_write_buckets);
+                    double median = median_sorted(lat_us, num_write_buckets);
+                    h2d_medians[copy_size].push_back(median);
+                    printf("cuMemcpy_H2D \t %8zu \t %11.4f \t %11.4f\n", copy_size, median, lat_us[0]);
+                    copy_size <<= 1;
+                }
+            } END_CHECK;
+
+            cout << endl;
+            cout << "cuMemcpy_D2H num iters for each size: " << num_read_iters << endl;
+            printf("Test \t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
+            BEGIN_CHECK {
+                // cuMemcpy D2H benchmark
+                copy_size = 1;
+                while (copy_size <= size) {
+                    int iter = 0;
+                    for(int bucket = 0; bucket < num_read_buckets; bucket++){
+                        clock_gettime(MYCLOCK, &beg);
+                        for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
+                            ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
+                        }
+                        clock_gettime(MYCLOCK, &end);
+                        lat_us[bucket] = time_diff(beg, end) / (double)iter;
+                    }
+                    sort(lat_us, lat_us+num_read_buckets);
+                    double median = median_sorted(lat_us, num_read_buckets);
+                    d2h_medians[copy_size].push_back(median);
+                    printf("cuMemcpy_D2H \t %8zu \t %11.4f \t %11.4f\n", copy_size, median, lat_us[0]);
+                    copy_size <<= 1;
+                }
+            } END_CHECK;
+
+            cout << endl;
+        }
+
         cout << endl;
-        cout << "cuMemcpy_H2D num iters for each size: " << num_write_iters << endl;
-        printf("Test \t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
+
+        gdr_t g = gdr_open_safe();
+
+        gdr_mh_t mh;
         BEGIN_CHECK {
-            // cuMemcpy H2D benchmark
+            int pin_flags = GDR_PIN_FLAG_DEFAULT;
+            if (use_force_pcie) {
+                pin_flags |= GDR_PIN_FLAG_FORCE_PCIE;
+            }
+            ASSERT_EQ(gdr_pin_buffer_v2(g, d_A, size, pin_flags, &mh), 0);
+            ASSERT_NEQ(mh, null_mh);
+
+            void *map_d_ptr  = NULL;
+            ASSERT_EQ(gdr_map_v2(g, mh, &map_d_ptr, size, map_type_flag), 0);
+            cout << "map_d_ptr: " << map_d_ptr << endl;
+
+            gdr_info_t info;
+            ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+            cout << "info.va: " << hex << info.va << dec << endl;
+            cout << "info.mapped_size: " << info.mapped_size << endl;
+            cout << "info.page_size: " << info.page_size << endl;
+            cout << "info.mapped: " << info.mapped << endl;
+            cout << "info.wc_mapping: " << info.wc_mapping << endl;
+
+            // remember that mappings start on a 64KB boundary, so let's
+            // calculate the offset from the head of the mapping to the
+            // beginning of the buffer
+            int off = info.va - d_A;
+            cout << "page offset: " << off << endl;
+
+            uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
+            cout << "user-space pointer: " << buf_ptr << endl;
+
+            cout << "use cold cache: " << (use_cold_cache ? "yes" : "no") << endl;
+            cout << "store fences: " << (no_store_fence ? "disabled (using v2 API)" : "enabled") << endl;
+            cout << "load fences (gdr_copy_from_mapping): " << ((copy_flags_read & GDR_COPY_FLAG_READ_FENCE) ? "enabled" : "disabled") << endl;
+            if (use_cold_cache && info.mapping_type != GDR_MAPPING_TYPE_CACHING) {
+                cerr << "ERROR: Cold cache has no effect on other mappings except cache mapping" << endl;
+                exit(EXIT_FAILURE);
+            }
+
+            // gdr_copy_to_mapping benchmark
+            cout << endl;
+            cout << "gdr_copy_to_mapping num iters for each size: " << num_write_iters << endl;
+            cout << "WARNING: Measuring the API invocation overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility." << endl;
+            // For more information, see
+            // https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#sync-behavior
+            printf("Test \t\t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
             copy_size = 1;
             while (copy_size <= size) {
                 int iter = 0;
                 for(int bucket = 0; bucket < num_write_buckets; bucket++){
-                    clock_gettime(MYCLOCK, &beg);
-                    for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
-                        ASSERTDRV(cuMemcpy(d_A, (CUdeviceptr)init_buf, copy_size));
+                    if (use_cold_cache) {
+                        clock_gettime(MYCLOCK, &beg);
+                        for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
+                            // Simulate GPU writing the data written by CPU. When cache
+                            // mapping is used, the cache lines will be moved to GPU.
+                            // The next access by CPU will cause the cache lines to
+                            // move back to CPU (cold cache). gdr_copy_to_mapping will
+                            // pay this cost.
+
+                            // We use sync memops. The memset is considered done by the
+                            // time cuMemsetD8 returns.
+                            cuMemsetD8(d_A, 0, copy_size);
+
+                            gdr_copy_to_mapping_v2(mh, buf_ptr, init_buf, copy_size, copy_flags);
+                            SB();
+                        }
+                        clock_gettime(MYCLOCK, &end);
+                        lat_us[bucket] = time_diff(beg, end);
+
+                        // Measure the cost of cuMemsetD8 and remove that from the
+                        // total latency.
+                        clock_gettime(MYCLOCK, &beg);
+                        for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
+                            cuMemsetD8(d_A, 0, copy_size);
+                        }
+                        clock_gettime(MYCLOCK, &end);
+                        lat_us[bucket] -= time_diff(beg, end);
                     }
-                    clock_gettime(MYCLOCK, &end);
-                    lat_us[bucket] = time_diff(beg, end) / (double)iter;
+                    else {
+                        clock_gettime(MYCLOCK, &beg);
+                        for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
+                            gdr_copy_to_mapping_v2(mh, buf_ptr, init_buf, copy_size, copy_flags);
+                        }
+                        clock_gettime(MYCLOCK, &end);
+                        lat_us[bucket] = time_diff(beg, end);
+                    }
+                    lat_us[bucket] /= (double)iter;
                 }
                 sort(lat_us, lat_us+num_write_buckets);
-                printf("cuMemcpy_H2D \t %8zu \t %11.4f \t %11.4f\n", copy_size, lat_us[num_write_buckets/2], lat_us[0]);
+                double median = median_sorted(lat_us, num_write_buckets);
+                gdr_to_medians[copy_size].push_back(median);
+                printf("gdr_copy_to_mapping \t %8zu \t %11.4f \t %11.4f\n", copy_size, median, lat_us[0]);
                 copy_size <<= 1;
             }
-        } END_CHECK;
 
-        cout << endl;
-        cout << "cuMemcpy_D2H num iters for each size: " << num_read_iters << endl;
-        printf("Test \t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
-        BEGIN_CHECK {
-            // cuMemcpy D2H benchmark
+            // gdr_copy_from_mapping benchmark
+            cout << endl;
+            cout << "gdr_copy_from_mapping num iters for each size: " << num_read_iters << endl;
+            printf("Test \t\t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
             copy_size = 1;
             while (copy_size <= size) {
                 int iter = 0;
                 for(int bucket = 0; bucket < num_read_buckets; bucket++){
-                    clock_gettime(MYCLOCK, &beg);
-                    for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
-                        ASSERTDRV(cuMemcpy((CUdeviceptr)h_buf, d_A, copy_size));
+                    if (use_cold_cache) {
+                        clock_gettime(MYCLOCK, &beg);
+                        for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
+                            // Simulate GPU writing the data to the shared buffer. When
+                            // cache mapping is used, the cache lines will be moved to
+                            // GPU.  The next access by CPU will cause the cache lines
+                            // to move back to CPU (cold cache). gdr_copy_from_mapping
+                            // will pay this cost.
+
+                            // We use sync memops. The memset is considered done by the
+                            // time cuMemsetD8 returns.
+                            cuMemsetD8(d_A, 0, copy_size);
+
+                            gdr_copy_from_mapping_v2(mh, h_buf, buf_ptr, copy_size, copy_flags_read);
+                            LB();
+                        }
+                        clock_gettime(MYCLOCK, &end);
+                        lat_us[bucket] = time_diff(beg, end);
+
+                        // Measure the cost of cuMemsetD8 and remove that from the
+                        // total latency.
+                        clock_gettime(MYCLOCK, &beg);
+                        for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
+                            cuMemsetD8(d_A, 0, copy_size);
+                        }
+                        clock_gettime(MYCLOCK, &end);
+                        lat_us[bucket] -= time_diff(beg, end);
                     }
-                    clock_gettime(MYCLOCK, &end);
-                    lat_us[bucket] = time_diff(beg, end) / (double)iter;
+                    else {
+                        clock_gettime(MYCLOCK, &beg);
+                        for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
+                            gdr_copy_from_mapping_v2(mh, h_buf, buf_ptr, copy_size, copy_flags_read);
+                        }
+                        clock_gettime(MYCLOCK, &end);
+                        lat_us[bucket] = time_diff(beg, end);
+                    }
+                    lat_us[bucket] /= (double)iter;
                 }
                 sort(lat_us, lat_us+num_read_buckets);
-                printf("cuMemcpy_D2H \t %8zu \t %11.4f \t %11.4f\n", copy_size, lat_us[num_read_buckets/2], lat_us[0]);
+                double median = median_sorted(lat_us, num_read_buckets);
+                gdr_from_medians[copy_size].push_back(median);
+                printf("gdr_copy_from_mapping \t %8zu \t %11.4f \t %11.4f\n", copy_size, median, lat_us[0]);
                 copy_size <<= 1;
             }
+
+            cout << "unmapping buffer" << endl;
+            ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, size), 0);
+
+            cout << "unpinning buffer" << endl;
+            ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
         } END_CHECK;
 
-        cout << endl;
+        cout << "closing gdrdrv" << endl;
+        ASSERT_EQ(gdr_close(g), 0);
+    } // end repeat-run loop
+
+    if (num_runs > 1) {
+        if (do_cumemcpy) {
+            print_type_aggregate("cuMemcpy_H2D", h2d_medians, num_runs);
+            print_type_aggregate("cuMemcpy_D2H", d2h_medians, num_runs);
+        }
+        print_type_aggregate("gdr_copy_to_mapping", gdr_to_medians, num_runs);
+        print_type_aggregate("gdr_copy_from_mapping", gdr_from_medians, num_runs);
     }
 
-    cout << endl;
-
-    gdr_t g = gdr_open_safe();
-
-    gdr_mh_t mh;
-    BEGIN_CHECK {
-        // tokens are optional in CUDA 6.0
-        ASSERT_EQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
-        ASSERT_NEQ(mh, null_mh);
-
-        void *map_d_ptr  = NULL;
-        ASSERT_EQ(gdr_map_v2(g, mh, &map_d_ptr, size, map_type_flag), 0);
-        cout << "map_d_ptr: " << map_d_ptr << endl;
-
-        gdr_info_t info;
-        ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-        cout << "info.va: " << hex << info.va << dec << endl;
-        cout << "info.mapped_size: " << info.mapped_size << endl;
-        cout << "info.page_size: " << info.page_size << endl;
-        cout << "info.mapped: " << info.mapped << endl;
-        cout << "info.wc_mapping: " << info.wc_mapping << endl;
-
-        // remember that mappings start on a 64KB boundary, so let's
-        // calculate the offset from the head of the mapping to the
-        // beginning of the buffer
-        int off = info.va - d_A;
-        cout << "page offset: " << off << endl;
-
-        uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
-        cout << "user-space pointer: " << buf_ptr << endl;
-
-        cout << "use cold cache: " << (use_cold_cache ? "yes" : "no") << endl;
-        if (use_cold_cache && info.mapping_type != GDR_MAPPING_TYPE_CACHING) {
-            cerr << "ERROR: Cold cache has no effect on other mappings except cache mapping" << endl;
-            exit(EXIT_FAILURE);
-        }
-
-        // gdr_copy_to_mapping benchmark
-        cout << endl;
-        cout << "gdr_copy_to_mapping num iters for each size: " << num_write_iters << endl;
-        cout << "WARNING: Measuring the API invocation overhead as observed by the CPU. Data might not be ordered all the way to the GPU internal visibility." << endl;
-        // For more information, see
-        // https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#sync-behavior
-        printf("Test \t\t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
-        copy_size = 1;
-        while (copy_size <= size) {
-            int iter = 0;
-            for(int bucket = 0; bucket < num_write_buckets; bucket++){
-                if (use_cold_cache) {
-                    clock_gettime(MYCLOCK, &beg);
-                    for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
-                        // Simulate GPU writing the data written by CPU. When cache
-                        // mapping is used, the cache lines will be moved to GPU.
-                        // The next access by CPU will cause the cache lines to
-                        // move back to CPU (cold cache). gdr_copy_to_mapping will
-                        // pay this cost.
-
-                        // We use sync memops. The memset is considered done by the
-                        // time cuMemsetD8 returns.
-                        cuMemsetD8(d_A, 0, copy_size);
-
-                        gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
-                        SB();
-                    }
-                    clock_gettime(MYCLOCK, &end);
-                    lat_us[bucket] = time_diff(beg, end);
-
-                    // Measure the cost of cuMemsetD8 and remove that from the
-                    // total latency.
-                    clock_gettime(MYCLOCK, &beg);
-                    for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
-                        cuMemsetD8(d_A, 0, copy_size);
-                    }
-                    clock_gettime(MYCLOCK, &end);
-                    lat_us[bucket] -= time_diff(beg, end);
-                }
-                else {
-                    clock_gettime(MYCLOCK, &beg);
-                    for (iter = 0; iter < num_write_iters/num_write_buckets; ++iter) {
-                        gdr_copy_to_mapping(mh, buf_ptr, init_buf, copy_size);
-                    }
-                    clock_gettime(MYCLOCK, &end);
-                    lat_us[bucket] = time_diff(beg, end);
-                }
-                lat_us[bucket] /= (double)iter;
-            }
-            sort(lat_us, lat_us+num_write_buckets);
-            printf("gdr_copy_to_mapping \t %8zu \t %11.4f \t %11.4f\n", copy_size, lat_us[num_write_buckets/2], lat_us[0]);
-            copy_size <<= 1;
-        }
-
-        // gdr_copy_from_mapping benchmark
-        cout << endl;
-        cout << "gdr_copy_from_mapping num iters for each size: " << num_read_iters << endl;
-        printf("Test \t\t\t Size(B) \t Median Time(us) \t Min. Time(us)\n");
-        copy_size = 1;
-        while (copy_size <= size) {
-            int iter = 0;
-            for(int bucket = 0; bucket < num_read_buckets; bucket++){
-                if (use_cold_cache) {
-                    clock_gettime(MYCLOCK, &beg);
-                    for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
-                        // Simulate GPU writing the data to the shared buffer. When
-                        // cache mapping is used, the cache lines will be moved to
-                        // GPU.  The next access by CPU will cause the cache lines
-                        // to move back to CPU (cold cache). gdr_copy_from_mapping
-                        // will pay this cost.
-
-                        // We use sync memops. The memset is considered done by the
-                        // time cuMemsetD8 returns.
-                        cuMemsetD8(d_A, 0, copy_size);
-
-                        gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
-                        LB();
-                    }
-                    clock_gettime(MYCLOCK, &end);
-                    lat_us[bucket] = time_diff(beg, end);
-
-                    // Measure the cost of cuMemsetD8 and remove that from the
-                    // total latency.
-                    clock_gettime(MYCLOCK, &beg);
-                    for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
-                        cuMemsetD8(d_A, 0, copy_size);
-                    }
-                    clock_gettime(MYCLOCK, &end);
-                    lat_us[bucket] -= time_diff(beg, end);
-                }
-                else {
-                    clock_gettime(MYCLOCK, &beg);
-                    for (iter = 0; iter < num_read_iters/num_read_buckets; ++iter) {
-                        gdr_copy_from_mapping(mh, h_buf, buf_ptr, copy_size);
-                    }
-                    clock_gettime(MYCLOCK, &end);
-                    lat_us[bucket] = time_diff(beg, end);
-                }
-                lat_us[bucket] /= (double)iter;
-            }
-            sort(lat_us, lat_us+num_read_buckets);
-            printf("gdr_copy_from_mapping \t %8zu \t %11.4f \t %11.4f\n", copy_size, lat_us[num_read_buckets/2], lat_us[0]);
-            copy_size <<= 1;
-        }
-
-        cout << "unmapping buffer" << endl;
-        ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, size), 0);
-
-        cout << "unpinning buffer" << endl;
-        ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
-    } END_CHECK;
-
-    cout << "closing gdrdrv" << endl;
-    ASSERT_EQ(gdr_close(g), 0);
-
     ASSERTDRV(gfree_fn(&mhandle));
+    ASSERTDRV(cuCtxSetCurrent(NULL));
+    ASSERTDRV(cuDevicePrimaryCtxRelease(dev));
 
     return 0;
 }

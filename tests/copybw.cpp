@@ -28,7 +28,6 @@
 #include <iostream>
 #include <iomanip>
 #include <cuda.h>
-#include <vector>
 #include <cstdbool>
 
 using namespace std;
@@ -41,15 +40,35 @@ using namespace gdrcopy::test;
 // manually tuned...
 int num_write_iters = 10000;
 int num_read_iters  = 100;
+int num_runs = 1;
+const int max_num_buckets = 100;
+int num_write_buckets = max_num_buckets;
+int num_read_buckets = max_num_buckets;
 size_t _size = 128*1024;
 size_t copy_offset = 0;
 int dev_id = 0;
+bool no_store_fence = false;
 gdr_map_flags_t map_type_flag = GDR_MAP_FLAG_DEFAULT;
+uint32_t copy_flags = GDR_COPY_FLAG_DEFAULT;
 std::vector<size_t> copy_size;
+bool use_locality_domain = false;
+int locality_domain_id = 0;
+bool use_force_pcie = false;
+
+struct bw_result {
+    double median;
+    double min;
+};
+
+struct copybw_result {
+    size_t size;
+    bw_result write;
+    bw_result read;
+};
 
 void print_usage(const char *path)
 {
-    cout << "Usage: " << path << " [-h][-s <size>][-c <size>][-o <offset>][-d <gpu>][-w <iters>][-r <iters>][-a <fn>]" << endl;
+    cout << "Usage: " << path << " [-h][-l][-F][-P][-s <size>][-c <size>][-o <offset>][-d <gpu>][-w <iters>][-r <iters>][-R <runs>][-a <fn>][-M <mapping_type>]" << endl;
     cout << endl;
     cout << "Options:" << endl;
     cout << "   -h              Print this help text" << endl;
@@ -60,13 +79,49 @@ void print_usage(const char *path)
     cout << "   -d <gpu>        GPU ID (default: " << dev_id << ")" << endl;
     cout << "   -w <iters>      Number of write iterations (default: " << num_write_iters << ")" << endl;
     cout << "   -r <iters>      Number of read iterations (default: " << num_read_iters << ")" << endl;
+    cout << "   -n <locality-domain-id>    Locality domain ID for GPU memory locality domain" << endl;
+    cout << "                           This option is only supported with cuMemCreate" << endl;
+    cout << "   -R <runs>       Number of independent repeat runs (default: " << num_runs << ")" << endl;
     cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
     cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
     cout << "   -M <mapping_type>   Request mapping type (choices: default, wc, cache, device)" << endl;
+    cout << "   -F              Disable store fences via the v2 copy APIs for higher throughput (default: no)" << endl;
+    cout << "   -P              Use GDR_PIN_FLAG_FORCE_PCIE flag (forces WC mapping, cannot be combined with -M cache or -M device)" << endl;
 }
 
-void run_test(CUdeviceptr d_A, size_t size)
+static void print_run_aggregate_results(const std::vector<std::vector<copybw_result> > &run_results)
 {
+    if (run_results.empty())
+        return;
+
+    for (size_t size_index = 0; size_index < copy_size.size(); size_index++) {
+        std::vector<double> write_medians;
+        std::vector<double> read_medians;
+        size_t size = 0;
+
+        for (size_t run = 0; run < run_results.size(); run++) {
+            if (size_index >= run_results[run].size())
+                continue;
+
+            size = run_results[run][size_index].size;
+            write_medians.push_back(run_results[run][size_index].write.median);
+            read_medians.push_back(run_results[run][size_index].read.median);
+        }
+
+        if (write_medians.empty() || read_medians.empty())
+            continue;
+
+        cout << endl << "Aggregate BW across " << run_results.size()
+             << " runs, size=" << size
+             << " offset=" << copy_offset << endl;
+        print_aggregate_stats("Write BW", calc_aggregate_stats(write_medians), " MB/s");
+        print_aggregate_stats("Read BW", calc_aggregate_stats(read_medians), " MB/s");
+    }
+}
+
+std::vector<copybw_result> run_test(CUdeviceptr d_A, size_t size)
+{
+    std::vector<copybw_result> results;
     uint32_t *init_buf = NULL;
     ASSERTDRV(cuMemAllocHost((void **)&init_buf, size));
     ASSERT_NEQ(init_buf, (void*)0);
@@ -76,9 +131,11 @@ void run_test(CUdeviceptr d_A, size_t size)
 
     gdr_mh_t mh;
     BEGIN_CHECK {
-        // tokens are optional in CUDA 6.0
-        // wave out the test if GPUDirectRDMA is not enabled
-        ASSERT_EQ(gdr_pin_buffer(g, d_A, size, 0, 0, &mh), 0);
+        int pin_flags = GDR_PIN_FLAG_DEFAULT;
+        if (use_force_pcie) {
+            pin_flags |= GDR_PIN_FLAG_FORCE_PCIE;
+        }
+        ASSERT_EQ(gdr_pin_buffer_v2(g, d_A, size, pin_flags, &mh), 0);
         ASSERT_NEQ(mh, null_mh);
 
         void *map_d_ptr  = NULL;
@@ -101,43 +158,57 @@ void run_test(CUdeviceptr d_A, size_t size)
 
         uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
         cout << "user-space pointer:" << buf_ptr << endl;
+        cout << "store fences: " << (no_store_fence ? "disabled (using v2 API)" : "enabled") << endl;
+        double bw_MBps[max_num_buckets];
 
         for (int i = 0; i < copy_size.size(); i++)
         {
+            copybw_result result;
+            result.size = copy_size[i];
+
             // copy to GPU benchmark
             cout << "writing test, size=" << copy_size[i] << " offset=" << copy_offset << " num_iters=" << num_write_iters << endl;
             struct timespec beg, end;
-            clock_gettime(MYCLOCK, &beg);
-            for (int iter = 0; iter < num_write_iters; ++iter)
-                gdr_copy_to_mapping(mh, buf_ptr + copy_offset / 4, init_buf, copy_size[i]);
-            clock_gettime(MYCLOCK, &end);
+            for (int bucket = 0; bucket < num_write_buckets; bucket++) {
+                int bucket_iters = num_write_iters / num_write_buckets;
+                clock_gettime(MYCLOCK, &beg);
+                for (int iter = 0; iter < bucket_iters; ++iter)
+                    gdr_copy_to_mapping_v2(mh, buf_ptr + copy_offset / 4, init_buf, copy_size[i], copy_flags);
+                clock_gettime(MYCLOCK, &end);
 
-            double woMBps;
-            {
-                double byte_count = (double)copy_size[i] * num_write_iters;
+                double byte_count = (double)copy_size[i] * bucket_iters;
                 double dt_us = time_diff(beg, end);
                 double Bps = byte_count / dt_us * 1e6;
-                woMBps = Bps / 1024.0 / 1024.0;
-                cout << "write BW: " << woMBps << "MB/s" << endl;
+                bw_MBps[bucket] = Bps / 1024.0 / 1024.0;
             }
+            aggregate_stats write_stats = calc_aggregate_stats(bw_MBps, bw_MBps + num_write_buckets);
+            result.write.median = write_stats.median;
+            result.write.min = write_stats.min;
+            cout << "write BW: median " << result.write.median << "MB/s, min " << result.write.min << "MB/s" << endl;
 
+            if(no_store_fence)
+                gdr_copy_fence(mh, GDR_COPY_FLAG_WRITE_FENCE);
             compare_buf(init_buf, buf_ptr + copy_offset / 4, copy_size[i]);
 
             // copy from GPU benchmark
             cout << "reading test, size=" << copy_size[i] << " offset=" << copy_offset << " num_iters=" << num_read_iters << endl;
-            clock_gettime(MYCLOCK, &beg);
-            for (int iter = 0; iter < num_read_iters; ++iter)
-                gdr_copy_from_mapping(mh, init_buf, buf_ptr + copy_offset / 4, copy_size[i]);
-            clock_gettime(MYCLOCK, &end);
+            for (int bucket = 0; bucket < num_read_buckets; bucket++) {
+                int bucket_iters = num_read_iters / num_read_buckets;
+                clock_gettime(MYCLOCK, &beg);
+                for (int iter = 0; iter < bucket_iters; ++iter)
+                    gdr_copy_from_mapping_v2(mh, init_buf, buf_ptr + copy_offset / 4, copy_size[i], copy_flags);
+                clock_gettime(MYCLOCK, &end);
 
-            double roMBps;
-            {
-                double byte_count = (double)copy_size[i] * num_read_iters;
+                double byte_count = (double)copy_size[i] * bucket_iters;
                 double dt_us = time_diff(beg, end);
                 double Bps = byte_count / dt_us * 1e6;
-                roMBps = Bps / 1024.0 / 1024.0;
-                cout << "read BW: " << roMBps << "MB/s" << endl;
+                bw_MBps[bucket] = Bps / 1024.0 / 1024.0;
             }
+            aggregate_stats read_stats = calc_aggregate_stats(bw_MBps, bw_MBps + num_read_buckets);
+            result.read.median = read_stats.median;
+            result.read.min = read_stats.min;
+            cout << "read BW: median " << result.read.median << "MB/s, min " << result.read.min << "MB/s" << endl;
+            results.push_back(result);
         }
 
         cout << "unmapping buffer" << endl;
@@ -149,6 +220,9 @@ void run_test(CUdeviceptr d_A, size_t size)
 
     cout << "closing gdrdrv" << endl;
     ASSERT_EQ(gdr_close(g), 0);
+    ASSERTDRV(cuMemFreeHost(init_buf));
+
+    return results;
 }
 
 int main(int argc, char *argv[])
@@ -158,9 +232,9 @@ int main(int argc, char *argv[])
     size_t copy_size_upper_bound = 0;
     bool copy_size_range = false;
 
-    while(1) {        
+    while (1) {
         int c;
-        c = getopt(argc, argv, "s:d:o:c:w:r:a:M:hl");
+        c = getopt(argc, argv, "s:d:o:c:w:r:R:a:n:M:hlFP");
         if (c == -1)
             break;
 
@@ -171,9 +245,9 @@ int main(int argc, char *argv[])
         case 'c':
 	    copy_size_upper_bound = strtol(optarg, NULL, 0);
             break;
-	case 'l':
-	    copy_size_range = true;
-	    break;
+        case 'l':
+          copy_size_range = true;
+          break;
         case 'o':
             copy_offset = strtol(optarg, NULL, 0);
             break;
@@ -185,6 +259,9 @@ int main(int argc, char *argv[])
             break;
         case 'r':
             num_read_iters = strtol(optarg, NULL, 0);
+            break;
+        case 'R':
+            num_runs = strtol(optarg, NULL, 0);
             break;
         case 'a':
             if (strcmp(optarg, "cuMemAlloc") == 0) {
@@ -200,6 +277,15 @@ int main(int argc, char *argv[])
                 exit(EXIT_FAILURE);
             }
             break;
+        case 'n':
+#ifndef HAVE_DEVICE_LOCALITY_DOMAIN
+            cerr << "Locality domain allocation requires CUDA toolkit 13.4 or later. Current version: " << CUDA_VERSION << endl;
+            exit(EXIT_FAILURE);
+#else
+            use_locality_domain = true;
+            locality_domain_id = strtol(optarg, NULL, 0);
+#endif
+            break;
         case 'M':
             if (strcmp(optarg, "default") == 0) {
                 map_type_flag = GDR_MAP_FLAG_DEFAULT;
@@ -212,6 +298,17 @@ int main(int argc, char *argv[])
             } else {
                 cerr << "ERROR: invalid mapping_type '" << optarg
                      << "'. Valid options: default, wc, cache, device." << endl;
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'F':
+            no_store_fence = true;
+            copy_flags = GDR_FLAG_UNSET(GDR_COPY_FLAG_DEFAULT, GDR_COPY_FLAG_WRITE_FENCE);
+            break;
+        case 'P':
+            use_force_pcie = true;
+            if (map_type_flag == GDR_MAP_FLAG_REQ_CACHE_MAPPING || map_type_flag == GDR_MAP_FLAG_REQ_DEVICE_MAPPING) {
+                cerr << "ERROR: -P forces a WC mapping, which cannot satisfy -M cache or -M device." << endl;
                 exit(EXIT_FAILURE);
             }
             break;
@@ -240,8 +337,26 @@ int main(int argc, char *argv[])
         }
     }
 
+    if (use_locality_domain && galloc_fn != gpu_vmm_alloc) {
+        cerr << "Locality domain allocation is only supported with cuMemCreate" << endl;
+        exit(EXIT_FAILURE);
+    }
+
     if (copy_offset % sizeof(uint32_t) != 0) {
         fprintf(stderr, "ERROR: offset must be multiple of 4 bytes\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (num_write_iters <= 0) {
+        fprintf(stderr, "ERROR: num_write_iters must be positive\n");
+        exit(EXIT_FAILURE);
+    }
+    if (num_read_iters <= 0) {
+        fprintf(stderr, "ERROR: num_read_iters must be positive\n");
+        exit(EXIT_FAILURE);
+    }
+    if (num_runs <= 0) {
+        fprintf(stderr, "ERROR: num_runs must be positive\n");
         exit(EXIT_FAILURE);
     }
 
@@ -251,6 +366,23 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
     }
+
+    if(num_write_iters > max_num_buckets && num_write_iters % max_num_buckets != 0){
+        int old_num_write_iters = num_write_iters;
+        num_write_iters += max_num_buckets - (num_write_iters % max_num_buckets);
+        cerr << "WARNING: num_write_iters is not a multiple of " << max_num_buckets
+             << ". Increasing num_write_iters from " << old_num_write_iters
+             << " to " << num_write_iters << "." << endl;
+    }
+    if(num_read_iters > max_num_buckets && num_read_iters % max_num_buckets != 0){
+        int old_num_read_iters = num_read_iters;
+        num_read_iters += max_num_buckets - (num_read_iters % max_num_buckets);
+        cerr << "WARNING: num_read_iters is not a multiple of " << max_num_buckets
+             << ". Increasing num_read_iters from " << old_num_read_iters
+             << " to " << num_read_iters << "." << endl;
+    }
+    num_write_buckets = (num_write_iters > max_num_buckets) ? max_num_buckets : num_write_iters;
+    num_read_buckets = (num_read_iters > max_num_buckets) ? max_num_buckets : num_read_iters;
 
     size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
@@ -302,11 +434,21 @@ int main(int argc, char *argv[])
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, use_locality_domain, locality_domain_id));
     d_A = mhandle.ptr;
     cout << "device ptr: " << hex << d_A << dec << endl;
+    cout << "use force pcie: " << (use_force_pcie ? "yes" : "no") << endl;
 
-    run_test(d_A, size);
+    if (num_runs == 1) {
+        run_test(d_A, size);
+    } else {
+        std::vector<std::vector<copybw_result> > run_results;
+        for (int run = 0; run < num_runs; run++) {
+            cout << endl << "starting run " << (run + 1) << " of " << num_runs << endl;
+            run_results.push_back(run_test(d_A, size));
+        }
+        print_run_aggregate_results(run_results);
+    }
 
     ASSERTDRV(gfree_fn(&mhandle));
 

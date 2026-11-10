@@ -1,12 +1,16 @@
 #/usr/bin/make
 SRC = $(DESTDIR)/usr/src
 SHARE = $(DESTDIR)/usr/share/$(NAME)-dkms
+MODULES_LOAD_DIR = $(DESTDIR)/usr/lib/modules-load.d
+UDEV_RULES_DIR = $(DESTDIR)/usr/lib/udev/rules.d
+MODPROBE_DIR = $(DESTDIR)/usr/lib/modprobe.d
+LIBEXEC_DIR = $(DESTDIR)/usr/libexec/gdrcopy
 
 all:
 
 clean:
 
-install:
+install: install-config
 
 #source tree
 ifeq ("$(wildcard $(NAME)-$(VERSION))", "$(NAME)-$(VERSION)")
@@ -31,3 +35,14 @@ ifeq ("$(wildcard common.postinst)", "common.postinst")
 	install -d "$(SHARE)"
 	install -m 755 $(PREFIX)/usr/lib/dkms/common.postinst $(SHARE)/postinst
 endif
+
+#boot loading, device-node permissions, and proprietary load hooks
+install-config:
+	install -d "$(MODULES_LOAD_DIR)"
+	install -m 644 gdrdrv.conf "$(MODULES_LOAD_DIR)/gdrdrv.conf"
+	install -d "$(UDEV_RULES_DIR)"
+	install -m 644 70-gdrdrv.rules "$(UDEV_RULES_DIR)/70-gdrdrv.rules"
+	install -d "$(MODPROBE_DIR)"
+	install -m 644 gdrdrv-modprobe.conf "$(MODPROBE_DIR)/gdrdrv.conf"
+	install -d "$(LIBEXEC_DIR)"
+	install -m 755 gdrdrv_devnode.sh "$(LIBEXEC_DIR)/gdrdrv_devnode.sh"

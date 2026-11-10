@@ -111,20 +111,23 @@ dist-lib: lib
 	ln -sf $(LIB_SONAME) $(LIB_BASENAME)
 	cp include/*.h $(INSTALL_ROOT)/libgdrapi/include/
 	cp LICENSE $(INSTALL_ROOT)/libgdrapi/
+	cp packages/udev/rules.d/70-gdrdrv.rules $(INSTALL_ROOT)/libgdrapi/
 	cd $(INSTALL_ROOT) && \
 	tar czf ../libgdrapi-$(OS)-$(ARCH)-$(LIB_VER).tar.gz libgdrapi/
 
 dist-tests: exes
-	mkdir -p $(INSTALL_ROOT)/gdrcopy-tests/bin
-	cp tests/gdrcopy_* $(INSTALL_ROOT)/gdrcopy-tests/bin/
-	cp LICENSE $(INSTALL_ROOT)/gdrcopy-tests/
+	mkdir -p $(INSTALL_ROOT)/gdrcopy_tests/bin
+	cp tests/gdrcopy_* $(INSTALL_ROOT)/gdrcopy_tests/bin/
+	cp LICENSE $(INSTALL_ROOT)/gdrcopy_tests/
 	cd $(INSTALL_ROOT) && \
-	tar czf ../gdrcopy-tests-$(OS)-$(ARCH)-$(LIB_VER).tar.gz gdrcopy-tests/
+	tar czf ../gdrcopy_tests-$(OS)-$(ARCH)-$(LIB_VER).tar.gz gdrcopy_tests/
 
 dist-driver:
 	cd src/gdrdrv && make clean
-	mkdir -p $(INSTALL_ROOT)/gdrdrv/src
-	cp src/gdrdrv/* $(INSTALL_ROOT)/gdrdrv/src/
+	mkdir -p $(INSTALL_ROOT)/gdrdrv/scripts
+	cp src/gdrdrv/Makefile src/gdrdrv/gdrdrv.c src/gdrdrv/gdrdrv.h src/gdrdrv/nv-p2p-dummy.c $(INSTALL_ROOT)/gdrdrv/
+	cp packages/dkms.conf $(INSTALL_ROOT)/gdrdrv/
+	cp scripts/test_gdrdrv_HAVE_VM_FLAGS_SET.sh scripts/test_gdrdrv_HAVE_PROC_OPS.sh scripts/test_gdrdrv_HAVE_CLASS_CREATE_WITH_MODULE.sh $(INSTALL_ROOT)/gdrdrv/scripts/
 	cp LICENSE $(INSTALL_ROOT)/gdrdrv/
 	cd $(INSTALL_ROOT) && \
 	tar czf ../gdrdrv-$(OS)-$(ARCH)-$(LIB_VER).tar.gz gdrdrv/

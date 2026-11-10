@@ -7,7 +7,7 @@ Build-Depends: debhelper (>= 9), dkms
 Standards-Version: @FULL_VERSION@
 
 Package: gdrdrv-dkms
-Architecture: any
+Architecture: amd64 arm64
 Multi-Arch: same
 Depends: dkms (>= 1.95), ${misc:Depends}
 Description: gdrdrv driver in DKMS format.

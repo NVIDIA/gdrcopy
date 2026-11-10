@@ -39,6 +39,9 @@
 #include <linux/pci.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+#include <linux/device.h>
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
 #include <linux/sched/signal.h>
@@ -88,6 +91,19 @@ extern bool pat_enabled(void);
 # define fallthrough    do {} while (0)  /* fallthrough */
 #endif
 
+#if defined(GDRDRV_HAVE_VM_FLAGS_SET) && LINUX_VERSION_CODE >= KERNEL_VERSION(6,15,0) && !defined(GDRDRV_OPENSOURCE_NVIDIA)
+#define GDRDRV_CAN_SET_VM_FLAGS 0
+#else
+#define GDRDRV_CAN_SET_VM_FLAGS 1
+#endif
+
+/**
+ * VM_DONTCOPY is what prevents our mmapped regions from propagating to children
+ * processes. We cannot set it if we cannot touch the VMA flags, in which case
+ * those regions are inherited on fork.
+ */
+#define GDRDRV_VMA_INHERITED_ON_FORK (GDRDRV_CAN_SET_VM_FLAGS ? 0 : 1)
+
 //-----------------------------------------------------------------------------
 
 static const unsigned int GDRDRV_BF3_PCI_ROOT_DEV_VENDOR_ID = 0x15b3;
@@ -98,6 +114,9 @@ static const unsigned int GDRDRV_BF3_PCI_ROOT_DEV_DEVICE_ID[2] = {0xa2da, 0xa2db
 static int gdrdrv_major = 0;
 static int gdrdrv_cpu_could_cache_gpu_mappings = 0;
 static int gdrdrv_cpu_must_use_device_mapping = 0;
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+static struct class *gdrdrv_class;
+#endif
 
 //-----------------------------------------------------------------------------
 
@@ -149,16 +168,23 @@ static inline bool gdrdrv_pat_enabled(void)
 #endif
 }
 
-#ifndef GDRDRV_HAVE_VM_FLAGS_SET
 /**
  * This API requires Linux kernel 6.3.
  * See https://github.com/torvalds/linux/commit/bc292ab00f6c7a661a8a605c714e8a148f629ef6
  */
-static inline void vm_flags_set(struct vm_area_struct *vma, vm_flags_t flags)
+static inline void gdrdrv_vm_flags_set(struct vm_area_struct *vma, vm_flags_t flags)
 {
+#if !GDRDRV_CAN_SET_VM_FLAGS
+    // Linux 6.15+ with the proprietary flavor of NVIDIA driver. Setting the VMA
+    // flags is not possible here, so this is a no-op.
+#elif defined(GDRDRV_HAVE_VM_FLAGS_SET)
+    // Linux 6.3 - 6.14 (any flavor), or Linux 6.15+ with the opensource flavor.
+    vm_flags_set(vma, flags);
+#else
+    // Linux < 6.3. vma->vm_flags is still writable.
     vma->vm_flags |= flags;
-}
 #endif
+}
 
 
 #if defined(CONFIG_X86_64) || defined(CONFIG_X86_32)
@@ -184,34 +210,6 @@ static inline bool gdr_pfn_is_ram(unsigned long pfn)
     return false;
 }
 
-#elif defined(CONFIG_PPC64)
-#include <asm/reg.h>
-static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
-{
-    return pgprot_writecombine(old_prot);
-}
-static inline pgprot_t pgprot_modify_device(pgprot_t old_prot)
-{
-    // Device mapping should never be called on PPC64
-    BUG_ON(1);
-    return old_prot;
-}
-#define get_tsc_khz() (get_cycles()/1000) // dirty hack
-static inline bool gdr_pfn_is_ram(unsigned long pfn)
-{
-    // catch platforms, e.g. POWER8, POWER9 with GPUs not attached via NVLink,
-    // where GPU memory is non-coherent
-#ifdef GDRDRV_OPENSOURCE_NVIDIA
-    // page_is_ram is a GPL symbol. We can use it with the open flavor of NVIDIA driver.
-    return page_is_ram(pfn);
-#else
-    // For the proprietary flavor, we approximate using the following algorithm.
-    unsigned long start = pfn << PAGE_SHIFT;
-    unsigned long mask_47bits = (1UL<<47)-1;
-    return gdrdrv_cpu_could_cache_gpu_mappings && (0 == (start & ~mask_47bits));
-#endif
-}
-
 #elif defined(CONFIG_ARM64)
 static inline pgprot_t pgprot_modify_writecombine(pgprot_t old_prot)
 {
@@ -233,7 +231,7 @@ static inline bool gdr_pfn_is_ram(unsigned long pfn)
 }
 
 #else
-#error "X86_64/32 or PPC64 or ARM64 is required"
+#error "X86_64/32 or ARM64 is required"
 #endif
 
 #include "gdrdrv.h"
@@ -1252,6 +1250,9 @@ static int gdrdrv_get_attr(gdr_info_t *info, void __user *_params)
     case GDRDRV_ATTR_SUPPORT_PIN_FLAG_FORCE_PCIE:
         params.val = gdr_support_force_pcie();
         break;
+    case GDRDRV_ATTR_VMA_INHERITED_ON_FORK:
+        params.val = GDRDRV_VMA_INHERITED_ON_FORK;
+        break;
     default:
         ret = -EINVAL;
     }
@@ -1558,7 +1559,7 @@ static int gdrdrv_remap_gpu_mem(struct vm_area_struct *vma, unsigned long vaddr,
     pfn = paddr >> PAGE_SHIFT;
 
     // Disallow mmapped VMA to propagate to children processes
-    vm_flags_set(vma, VM_DONTCOPY);
+    gdrdrv_vm_flags_set(vma, VM_DONTCOPY);
 
     if (mapping_type == GDR_MR_WC) {
         // override prot to create non-coherent WC mappings
@@ -1751,6 +1752,7 @@ static int gdrdrv_proc_params_read(struct seq_file *s, void *v)
     seq_printf(s, "Version: %s\n", GDRDRV_VERSION_STRING);
     seq_printf(s, "Built for NVIDIA driver flavor: %s\n", GDRDRV_BUILT_FOR_NVIDIA_FLAVOR_STRING);
     seq_printf(s, "Use persistent mapping: %s\n", gdr_use_persistent_mapping() ? "yes" : "no");
+    seq_printf(s, "VMA inherited on fork: %s\n", GDRDRV_VMA_INHERITED_ON_FORK ? "yes" : "no");
     seq_printf(s, "dbg_enabled: %d\n", dbg_enabled);
     seq_printf(s, "info_enabled: %d\n", info_enabled);
     return 0;
@@ -1893,19 +1895,43 @@ static int __init gdrdrv_init(void)
     }
     if (gdrdrv_major == 0) gdrdrv_major = result; /* dynamic */
 
+    /*
+     * class_create()/device_create() are EXPORT_SYMBOL_GPL. Using them when
+     * built against proprietary NVIDIA prevents resolving nvidia_p2p_* from
+     * nvidia.ko (same class of issue as page_is_ram / vm_flags_set). Only the
+     * open-source NVIDIA flavor may create /dev/gdrdrv from the kernel; the
+     * proprietary flavor relies on userspace (insmod/packaging) for the node.
+     */
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+    {
+        struct device *gdrdrv_device;
+
+#ifdef GDRDRV_HAVE_CLASS_CREATE_WITH_MODULE
+        gdrdrv_class = class_create(THIS_MODULE, DEVNAME);
+#else
+        gdrdrv_class = class_create(DEVNAME);
+#endif
+        if (IS_ERR(gdrdrv_class)) {
+            result = PTR_ERR(gdrdrv_class);
+            gdr_err("can't create device class, error %d\n", result);
+            goto failed_class_create;
+        }
+
+        gdrdrv_device = device_create(gdrdrv_class, NULL,
+                                      MKDEV(gdrdrv_major, 0), NULL, DEVNAME);
+        if (IS_ERR(gdrdrv_device)) {
+            result = PTR_ERR(gdrdrv_device);
+            gdr_err("can't create device, error %d\n", result);
+            goto failed_device_create;
+        }
+    }
+#endif
+
     gdr_msg(KERN_INFO, "loading gdrdrv version %s built for %s NVIDIA driver\n", GDRDRV_VERSION_STRING, GDRDRV_BUILT_FOR_NVIDIA_FLAVOR_STRING);
     gdr_msg(KERN_INFO, "device registered with major number %d\n", gdrdrv_major);
     gdr_msg(KERN_INFO, "dbg traces %s, info traces %s", dbg_enabled ? "enabled" : "disabled", info_enabled ? "enabled" : "disabled");
 
-#if defined(CONFIG_PPC64) && defined(PVR_POWER9)
-    if (pvr_version_is(PVR_POWER9)) {
-        // Approximating CPU-GPU coherence with CPU model
-        // This might break in the future
-        // A better way would be to detect the presence of the IBM-NPU bridges and
-        // verify that all GPUs are connected through those
-        gdrdrv_cpu_could_cache_gpu_mappings = 1;
-    }
-#elif defined(CONFIG_ARM64)
+#if defined(CONFIG_ARM64)
     // Grace-Hopper supports CPU cached mapping. But this feature might be disabled at runtime.
     // gdrdrv_pin_buffer will do the right thing.
     gdrdrv_cpu_could_cache_gpu_mappings = 1;
@@ -1940,6 +1966,14 @@ static int __init gdrdrv_init(void)
     gdrdrv_procfs_init();
 
     return 0;
+
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+failed_device_create:
+    class_destroy(gdrdrv_class);
+failed_class_create:
+    unregister_chrdev(gdrdrv_major, DEVNAME);
+    return result;
+#endif
 }
 
 //-----------------------------------------------------------------------------
@@ -1950,6 +1984,12 @@ static void __exit gdrdrv_cleanup(void)
     gdr_msg(KERN_INFO, "unregistering major number %d\n", gdrdrv_major);
 
     gdrdrv_procfs_cleanup();
+
+#ifdef GDRDRV_OPENSOURCE_NVIDIA
+    /* Remove /dev/gdrdrv through udev before unregistering its major. */
+    device_destroy(gdrdrv_class, MKDEV(gdrdrv_major, 0));
+    class_destroy(gdrdrv_class);
+#endif
 
     /* cleanup_module is never called if registering failed */
     unregister_chrdev(gdrdrv_major, DEVNAME);
