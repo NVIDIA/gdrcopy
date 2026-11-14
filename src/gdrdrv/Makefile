@@ -58,7 +58,7 @@ export NVIDIA_SRC_DIR ?= $(shell { find /usr/src/kernel-modules/nvidia-* /usr/sr
 _NVIDIA_IS_OPENSOURCE := $(shell grep -r "MODULE_LICENSE" $(NVIDIA_SRC_DIR)/ | grep -s -q "GPL" && echo "y")
 export NVIDIA_IS_OPENSOURCE ?= $(_NVIDIA_IS_OPENSOURCE)
 
-CONF_SCRIPT_DIR ?= $(PWD)/../../scripts
+CONF_SCRIPT_DIR ?= $(if $(wildcard $(PWD)/scripts),$(PWD)/scripts,$(PWD)/../../scripts)
 _HAVE_VM_FLAGS_SET := $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_VM_FLAGS_SET.sh -k $(KVER))
 export HAVE_VM_FLAGS_SET ?= $(_HAVE_VM_FLAGS_SET)
 _HAVE_PROC_OPS := $(shell $(CONF_SCRIPT_DIR)/test_gdrdrv_HAVE_PROC_OPS.sh -k $(KVER))
