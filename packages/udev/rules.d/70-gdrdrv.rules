@@ -1,1 +1,9 @@
-KERNEL=="gdrdrv", MODE="0666"
+
+ACTION=="add", SUBSYSTEM=="module", KERNEL=="nvidia", RUN{builtin}+="kmod load gdrdrv"
+
+ACTION=="add", SUBSYSTEM=="module", KERNEL=="gdrdrv", TEST!="/sys/class/gdrdrv", \
+  RUN+="/bin/sh -c 'while read major name; do case $$name in gdrdrv) rm -f /dev/gdrdrv; exec mknod -m 0666 /dev/gdrdrv c $$major 0;; esac; done < /proc/devices'"
+
+SUBSYSTEM=="gdrdrv", KERNEL=="gdrdrv", MODE="0666"
+
+ACTION=="remove", SUBSYSTEM=="module", KERNEL=="gdrdrv", RUN+="/bin/rm -f /dev/gdrdrv"
