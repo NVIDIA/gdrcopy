@@ -1523,6 +1523,16 @@ void gdr_runtime_get_version(int *major, int *minor)
 int gdr_driver_get_version(gdr_t g, int *major, int *minor)
 {
     assert(g != NULL);
+
+    if (g->cache_backend == GDR_USE_DMABUF) {
+        // gdrdrv is not used with the dma-buf mmap backend, so there is no
+        // driver version to report. Also report 0.0 for callers that do not
+        // check the return value.
+        *major = 0;
+        *minor = 0;
+        return ENODEV;
+    }
+
     assert(g->fd > 0);
 
     struct GDRDRV_IOC_GET_VERSION_PARAMS params;

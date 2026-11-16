@@ -330,6 +330,27 @@ GDRCOPY_TEST(basic_v2_forcepci_vmmalloc)
 }
 #endif
 
+GDRCOPY_TEST(basic_driver_get_version)
+{
+    expecting_exception_signal = false;
+    int major = -1, minor = -1;
+    int using_dma_buf_mmap = 0;
+
+    gdr_t g = gdr_open_safe();
+    ASSERT_EQ(gdr_get_attribute(g, GDR_ATTR_USING_DMA_BUF_MMAP, &using_dma_buf_mmap), 0);
+    int ret = gdr_driver_get_version(g, &major, &minor);
+    if (using_dma_buf_mmap) {
+        // No gdrdrv to query: must fail cleanly instead of aborting.
+        ASSERT_NEQ(ret, 0);
+        ASSERT_EQ(major, 0);
+        ASSERT_EQ(minor, 0);
+    } else {
+        ASSERT_EQ(ret, 0);
+        ASSERT(major >= MINIMUM_GDRDRV_MAJOR_VERSION);
+    }
+    ASSERT_EQ(gdr_close(g), 0);
+}
+
 GDRCOPY_TEST(basic_with_tokens)
 {
     expecting_exception_signal = false;
