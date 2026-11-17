@@ -2,7 +2,15 @@ gdrdrv-dkms (@FULL_VERSION@) stable; urgency=low
 
   * See CHANGELOG.md.
 
- -- GPUDirect Team <gpudirect@nvidia.com>  Thu, 21 May 2026 14:00:00 -0700
+ -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 17 Aug 2026 16:00:00 -0700
+
+gdrdrv-dkms (2.7) stable; urgency=low
+
+  * Introduce GDR_ATTR_VMA_INHERITED_ON_FORK so applications can query whether gdr_map mappings are inherited by child processes across fork. This happens on Linux 6.15 and later when gdrdrv is built against the proprietary flavor of NVIDIA driver, because VM_DONTCOPY can no longer be set. The invalidation_fork_after_gdr_map_* tests in gdrcopy_sanity are waived in that case.
+  * Replace legacy init and systemd load scripts with modules-load.d, udev, and modprobe integration for automatic gdrdrv loading and /dev/gdrdrv creation.
+  * Remove support for the POWER (ppc64le) architecture. Users who need POWER support should use GDRCopy 2.6 or earlier.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 17 Aug 2026 16:00:00 -0700
 
 gdrdrv-dkms (2.6) stable; urgency=low
 
@@ -107,4 +115,3 @@ gdrdrv-dkms (2.0) stable; urgency=low
   * Enable cached mappings in POWER9.
 
  -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 16 Sep 2019 11:59:59 -0700
-

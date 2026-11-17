@@ -25,12 +25,50 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <map>
+#include <cmath>
+#include <iostream>
 #include <cuda.h>
 #include "common.hpp"
 
 namespace gdrcopy {
     namespace test {
         bool print_dbg_msg = false;
+
+        aggregate_stats calc_aggregate_stats(std::vector<double> values)
+        {
+            aggregate_stats stats = {0, 0, 0, 0, 0, 0};
+            if (values.empty())
+                return stats;
+
+            std::sort(values.begin(), values.end());
+
+            double sum = 0.0;
+            for (size_t i = 0; i < values.size(); i++)
+                sum += values[i];
+            stats.average = sum / values.size();
+
+            stats.median = median_sorted(&values[0], (int)values.size());
+
+            double sum_sq = 0.0;
+            for (size_t i = 0; i < values.size(); i++)
+                sum_sq += (values[i] - stats.average) * (values[i] - stats.average);
+            stats.stdev = values.size() > 1 ? sqrt(sum_sq / (values.size() - 1)) : 0.0;
+            stats.stdev_pct = stats.average != 0.0 ? stats.stdev / stats.average * 100.0 : 0.0;
+            stats.min = values.front();
+            stats.max = values.back();
+            return stats;
+        }
+
+        void print_aggregate_stats(const char *label, const aggregate_stats &s, const char *unit)
+        {
+            std::cout << label << " aggregate: "
+                      << "Average(of medians)= " << s.average << unit << ", "
+                      << "Median= " << s.median << unit << ", "
+                      << "Stdev= " << s.stdev << unit << ", "
+                      << "Stdev%= " << s.stdev_pct << "%, "
+                      << "Min= " << s.min << unit << ", "
+                      << "Max= " << s.max << unit << std::endl;
+        }
 
         void print_dbg(const char* fmt, ...)
         {
@@ -42,8 +80,13 @@ namespace gdrcopy {
             }
         }
 
-        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops)
+        CUresult gpu_mem_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops, bool use_locality_domain, int locality_domain_id)
         {
+            if (use_locality_domain) {
+                print_dbg("Locality domain allocation is not supported with the cuMemAlloc allocator.\n");
+                return CUDA_ERROR_NOT_SUPPORTED;
+            }
+
             CUresult ret = CUDA_SUCCESS;
             CUdeviceptr ptr, out_ptr;
             size_t allocated_size;
@@ -97,7 +140,7 @@ namespace gdrcopy {
          * VMM API is available since CUDA 10.2. However, the RDMA support is added in CUDA 11.0.
          * Our tests are not useful without RDMA support. So, we enable this VMM allocation from CUDA 11.0.
          */
-        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops)
+        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops, bool use_locality_domain, int locality_domain_id)
         {
             CUresult ret = CUDA_SUCCESS;
 
@@ -143,11 +186,50 @@ namespace gdrcopy {
                 goto out;
             }
 
+#ifdef HAVE_DEVICE_LOCALITY_DOMAIN
+            if (use_locality_domain) {
+                if (is_coherent_platform(gpu_dev)) {
+                    print_dbg("Locality domain allocation + GPUDirect RDMA is not supported on coherent platforms\n");
+                    ret = CUDA_ERROR_NOT_SUPPORTED;
+                    goto out;
+                }
+                int locality_domain_count = 0;
+                ret = cuDeviceGetAttribute(&locality_domain_count, CU_DEVICE_ATTRIBUTE_LOCALITY_DOMAIN_COUNT, gpu_dev);
+                if (ret != CUDA_SUCCESS) {
+                    print_dbg("cuDeviceGetAttribute(CU_DEVICE_ATTRIBUTE_LOCALITY_DOMAIN_COUNT) failed: %d\n", ret);
+                    goto out;
+                }
+                if (locality_domain_count <= 0) {
+                    print_dbg("CUDA toolkit %d or gpu architecture does not support locality domain allocation\n", CUDA_VERSION);
+                    ret = CUDA_ERROR_NOT_SUPPORTED;
+                    goto out;
+                }
+                if (locality_domain_id < 0 || locality_domain_id >= locality_domain_count) {
+                    print_dbg("Locality domain id %d is out of range for device %d\n", locality_domain_id, gpu_dev);
+                    ret = CUDA_ERROR_INVALID_VALUE;
+                    goto out;
+                }
+            }
+#else
+            if (use_locality_domain) {
+                print_dbg("Locality domain allocation requires CUDA toolkit 13.4 or later. Current version: %d\n", CUDA_VERSION);
+                ret = CUDA_ERROR_NOT_SUPPORTED;
+                goto out;
+            }
+#endif
+
             memset(&mprop, 0, sizeof(CUmemAllocationProp));
             mprop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
             mprop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
             mprop.location.id = gpu_dev;
             mprop.allocFlags.gpuDirectRDMACapable = 1;
+#ifdef HAVE_DEVICE_LOCALITY_DOMAIN
+            if (use_locality_domain) {
+                mprop.location.type = CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN;
+                mprop.location.localized.deviceId = gpu_dev;
+                mprop.location.localized.localityDomainId = locality_domain_id;
+            }
+#endif
 
             ret = cuMemGetAllocationGranularity(&gran, &mprop, CU_MEM_ALLOC_GRANULARITY_RECOMMENDED);
             if (ret != CUDA_SUCCESS) {
@@ -182,6 +264,13 @@ namespace gdrcopy {
             access.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
             access.location.id = gpu_dev;
             access.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+#ifdef HAVE_DEVICE_LOCALITY_DOMAIN
+            if (use_locality_domain) {
+                access.location.type = CU_MEM_LOCATION_TYPE_DEVICE_LOCALITY_DOMAIN;
+                access.location.localized.deviceId = gpu_dev;
+                access.location.localized.localityDomainId = locality_domain_id;
+            }
+#endif
 
             ret = cuMemSetAccess(ptr, rounded_size, &access, 1);
             if (ret != CUDA_SUCCESS) {
@@ -240,7 +329,7 @@ out:
         }
 #else
         /* VMM with RDMA is not available before CUDA 11.0 */
-        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops)
+        CUresult gpu_vmm_alloc(gpu_mem_handle_t *handle, const size_t size, bool aligned_mapping, bool set_sync_memops, bool use_locality_domain, int locality_domain_id)
         {
             return CUDA_ERROR_NOT_SUPPORTED;
         }
@@ -320,7 +409,7 @@ out:
             const size_t size = GPU_PAGE_SIZE;
             CUdeviceptr d_A;
             gpu_mem_handle_t mhandle;
-            ASSERTDRV(gpu_mem_alloc(&mhandle, size, true, true));
+            ASSERTDRV(gpu_mem_alloc(&mhandle, size, true, true, false, 0));
             d_A = mhandle.ptr;
 
             gdr_t g = gdr_open_safe();
@@ -339,6 +428,25 @@ out:
             ASSERTDRV(gpu_mem_free(&mhandle));
 
             return status == 0;
+        }
+
+        bool is_coherent_platform(CUdevice dev)
+        {
+            int is_coherent = 0;
+            CUresult ret;
+            // This is the same as CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES.
+            // However, we may compile with an old CUDA toolkit such that this attribute is not
+            // defined. In that case, we can still detect it with CUDA_ERROR_INVALID_VALUE.
+            #ifndef _CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES
+            #define _CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES 100
+            #endif
+            ret = cuDeviceGetAttribute(&is_coherent, (CUdevice_attribute)_CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES, dev);
+
+            // If the attribute is not supported (CUDA_ERROR_INVALID_VALUE) or the call failed, it's not coherent
+            if (ret == CUDA_ERROR_INVALID_VALUE || ret != CUDA_SUCCESS)
+                return false;
+            // If the attribute is 0, it's not coherent
+            return is_coherent != 0;
         }
 
         void print_histogram(double *lat_arr, int count, int *bin_arr, int num_bins, double min, double max)

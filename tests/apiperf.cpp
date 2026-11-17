@@ -40,13 +40,51 @@ using namespace gdrcopy::test;
 int num_iters        = 100;
 int num_bins         = 10;
 int num_warmup_iters = 10;
+int num_runs         = 1;
+const int max_num_buckets = 100;
+int num_buckets = max_num_buckets;
 size_t _size = (size_t)1 << 24;
 int dev_id = 0;
 gdr_map_flags_t map_type_flag = GDR_MAP_FLAG_DEFAULT;
 
+// Per-size median latency of each measured API for a single run.
+struct apiperf_result {
+    size_t size;
+    double pin;
+    double map;
+    double get_info;
+    double unmap;
+    double unpin;
+};
+
+static void print_run_aggregate_results(const std::vector<apiperf_result> &results, int num_runs)
+{
+    std::map<size_t, std::vector<apiperf_result> > by_size;
+    for (size_t i = 0; i < results.size(); i++)
+        by_size[results[i].size].push_back(results[i]);
+
+    for (std::map<size_t, std::vector<apiperf_result> >::iterator it = by_size.begin();
+         it != by_size.end(); ++it) {
+        std::vector<double> pin_v, map_v, info_v, unmap_v, unpin_v;
+        for (size_t i = 0; i < it->second.size(); i++) {
+            pin_v.push_back(it->second[i].pin);
+            map_v.push_back(it->second[i].map);
+            info_v.push_back(it->second[i].get_info);
+            unmap_v.push_back(it->second[i].unmap);
+            unpin_v.push_back(it->second[i].unpin);
+        }
+        cout << endl << "Aggregate latency across " << num_runs << " runs, size=" << it->first << endl;
+        print_aggregate_stats("pin latency", calc_aggregate_stats(pin_v), " us");
+        print_aggregate_stats("map latency", calc_aggregate_stats(map_v), " us");
+        print_aggregate_stats("get_info latency", calc_aggregate_stats(info_v), " us");
+        print_aggregate_stats("unmap latency", calc_aggregate_stats(unmap_v), " us");
+        print_aggregate_stats("unpin latency", calc_aggregate_stats(unpin_v), " us");
+    }
+}
+
 void print_usage(const char *path)
 {
-    cout << "Usage: " << path << " [-h][-s <max-size>][-d <gpu>][-n <iters>][-w <iters>][-a <fn>]" << endl;
+    cout << "Usage: " << path << " [-h][-s <max-size>][-d <gpu>][-n <iters>][-w <iters>][-R <runs>][-a <fn>]" << endl;
     cout << endl;
     cout << "Options:" << endl;
     cout << "   -h              Print this help text" << endl;
@@ -54,12 +92,13 @@ void print_usage(const char *path)
     cout << "   -d <gpu>        GPU ID (default: " << dev_id << ")" << endl;
     cout << "   -n <iters>      Number of benchmark iterations (default: " << num_iters << ")" << endl;
     cout << "   -w <iters>      Number of warm-up iterations (default: " << num_warmup_iters << ")" << endl;
+    cout << "   -R <runs>       Number of independent repeat runs (default: " << num_runs << ")" << endl;
     cout << "   -a <fn>         GPU buffer allocation function (default: cuMemAlloc)" << endl;
     cout << "                       Choices: cuMemAlloc, cuMemCreate" << endl;
     cout << "   -M <mapping_type>   Request mapping type (choices: default, wc, cache, device)" << endl;
 }
 
-void run_test(CUdeviceptr d_A, size_t size)
+void run_test(CUdeviceptr d_A, size_t size, std::vector<apiperf_result> *results = NULL)
 {
     // minimum pinning size is a GPU page size
     size_t pin_request_size = GPU_PAGE_SIZE;
@@ -72,6 +111,12 @@ void run_test(CUdeviceptr d_A, size_t size)
     double delta_lat_us;
     double *lat_arr;
     int *bin_arr;
+    // per-bucket average latency of each measured API
+    double pin_bkt[max_num_buckets];
+    double map_bkt[max_num_buckets];
+    double inf_bkt[max_num_buckets];
+    double unmap_bkt[max_num_buckets];
+    double unpin_bkt[max_num_buckets];
 
     gdr_t g = gdr_open();
     ASSERT_NEQ(g, (void*)0);
@@ -86,15 +131,12 @@ void run_test(CUdeviceptr d_A, size_t size)
 
         while (pin_request_size <= size) {
             int iter = 0;
+            int lat_count = 0;
+            int bucket_iters = num_iters / num_buckets;
             size_t actual_pin_size;
             double min_lat, max_lat;
             min_lat = -1;
             max_lat = -1;
-            pin_lat_us = 0;
-            map_lat_us = 0;
-            unpin_lat_us = 0;
-            unmap_lat_us = 0;
-            inf_lat_us = 0;
             actual_pin_size = PAGE_ROUND_UP(pin_request_size, GPU_PAGE_SIZE);
 
             for (iter = 0; iter < num_warmup_iters; ++iter) {
@@ -111,58 +153,89 @@ void run_test(CUdeviceptr d_A, size_t size)
                 ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
             }
 
-            for (iter = 0; iter < num_iters; ++iter) {
+            for (int bucket = 0; bucket < num_buckets; bucket++) {
+                pin_lat_us = 0;
+                map_lat_us = 0;
+                unpin_lat_us = 0;
+                unmap_lat_us = 0;
+                inf_lat_us = 0;
+                for (iter = 0; iter < bucket_iters; ++iter) {
 
-                clock_gettime(MYCLOCK, &beg);
-                ASSERT_EQ(gdr_pin_buffer(g, d_A, actual_pin_size, 0, 0, &mh), 0);
-                clock_gettime(MYCLOCK, &end);
-                delta_lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
-                pin_lat_us += delta_lat_us;
-                ASSERT_NEQ(mh, null_mh);
-                lat_arr[iter] = delta_lat_us;
-                min_lat = (min_lat == -1) ? delta_lat_us : ((delta_lat_us < min_lat) ? delta_lat_us : min_lat);
-                max_lat = delta_lat_us > max_lat ? delta_lat_us : max_lat;
+                    clock_gettime(MYCLOCK, &beg);
+                    ASSERT_EQ(gdr_pin_buffer(g, d_A, actual_pin_size, 0, 0, &mh), 0);
+                    clock_gettime(MYCLOCK, &end);
+                    delta_lat_us = time_diff(beg, end);
+                    pin_lat_us += delta_lat_us;
+                    ASSERT_NEQ(mh, null_mh);
+                    lat_arr[lat_count++] = delta_lat_us;
+                    min_lat = (min_lat == -1) ? delta_lat_us : ((delta_lat_us < min_lat) ? delta_lat_us : min_lat);
+                    max_lat = delta_lat_us > max_lat ? delta_lat_us : max_lat;
 
-                void *map_d_ptr  = NULL;
-                clock_gettime(MYCLOCK, &beg);
-                ASSERT_EQ(gdr_map_v2(g, mh, &map_d_ptr, actual_pin_size, map_type_flag), 0);
-                clock_gettime(MYCLOCK, &end);
-                delta_lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
-                map_lat_us += delta_lat_us;
+                    void *map_d_ptr  = NULL;
+                    clock_gettime(MYCLOCK, &beg);
+                    ASSERT_EQ(gdr_map_v2(g, mh, &map_d_ptr, actual_pin_size, map_type_flag), 0);
+                    clock_gettime(MYCLOCK, &end);
+                    delta_lat_us = time_diff(beg, end);
+                    map_lat_us += delta_lat_us;
 
-                gdr_info_t info;
-                clock_gettime(MYCLOCK, &beg);
-                ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
-                clock_gettime(MYCLOCK, &end);
-                delta_lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
-                inf_lat_us += delta_lat_us;
+                    gdr_info_t info;
+                    clock_gettime(MYCLOCK, &beg);
+                    ASSERT_EQ(gdr_get_info(g, mh, &info), 0);
+                    clock_gettime(MYCLOCK, &end);
+                    delta_lat_us = time_diff(beg, end);
+                    inf_lat_us += delta_lat_us;
 
-                clock_gettime(MYCLOCK, &beg);
-                ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, actual_pin_size), 0);
-                clock_gettime(MYCLOCK, &end);
-                delta_lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
-                unmap_lat_us += delta_lat_us;
+                    clock_gettime(MYCLOCK, &beg);
+                    ASSERT_EQ(gdr_unmap(g, mh, map_d_ptr, actual_pin_size), 0);
+                    clock_gettime(MYCLOCK, &end);
+                    delta_lat_us = time_diff(beg, end);
+                    unmap_lat_us += delta_lat_us;
 
-                clock_gettime(MYCLOCK, &beg);
-                ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
-                clock_gettime(MYCLOCK, &end);
-                delta_lat_us = ((end.tv_nsec-beg.tv_nsec)/1000.0 + (end.tv_sec-beg.tv_sec)*1000000.0);
-                unpin_lat_us += delta_lat_us;
+                    clock_gettime(MYCLOCK, &beg);
+                    ASSERT_EQ(gdr_unpin_buffer(g, mh), 0);
+                    clock_gettime(MYCLOCK, &end);
+                    delta_lat_us = time_diff(beg, end);
+                    unpin_lat_us += delta_lat_us;
+                }
+                pin_bkt[bucket]   = pin_lat_us / bucket_iters;
+                map_bkt[bucket]   = map_lat_us / bucket_iters;
+                inf_bkt[bucket]   = inf_lat_us / bucket_iters;
+                unmap_bkt[bucket] = unmap_lat_us / bucket_iters;
+                unpin_bkt[bucket] = unpin_lat_us / bucket_iters;
             }
 
-            pin_lat_us /= iter;
-            map_lat_us /= iter;
-            inf_lat_us /= iter;
-            unpin_lat_us /= iter;
-            unmap_lat_us /= iter;
+            sort(pin_bkt, pin_bkt + num_buckets);
+            sort(map_bkt, map_bkt + num_buckets);
+            sort(inf_bkt, inf_bkt + num_buckets);
+            sort(unmap_bkt, unmap_bkt + num_buckets);
+            sort(unpin_bkt, unpin_bkt + num_buckets);
 
-            printf("Size(B)\tpin.Time(us)\tmap.Time(us)\tget_info.Time(us)\tunmap.Time(us)\tunpin.Time(us)\n");
-            printf("%zu\t%f\t%f\t%f\t%f\t%f\n",
-                    actual_pin_size, pin_lat_us, map_lat_us, inf_lat_us, unmap_lat_us, unpin_lat_us);
+            double pin_med = median_sorted(pin_bkt, num_buckets),     pin_min = pin_bkt[0];
+            double map_med = median_sorted(map_bkt, num_buckets),     map_min = map_bkt[0];
+            double inf_med = median_sorted(inf_bkt, num_buckets),     inf_min = inf_bkt[0];
+            double unmap_med = median_sorted(unmap_bkt, num_buckets), unmap_min = unmap_bkt[0];
+            double unpin_med = median_sorted(unpin_bkt, num_buckets), unpin_min = unpin_bkt[0];
+
+            printf("Stat\tSize(B)\tpin.Time(us)\tmap.Time(us)\tget_info.Time(us)\tunmap.Time(us)\tunpin.Time(us)\n");
+            printf("median\t%zu\t%f\t%f\t%f\t%f\t%f\n",
+                    actual_pin_size, pin_med, map_med, inf_med, unmap_med, unpin_med);
+            printf("min\t%zu\t%f\t%f\t%f\t%f\t%f\n",
+                    actual_pin_size, pin_min, map_min, inf_min, unmap_min, unpin_min);
+
+            if (results != NULL) {
+                apiperf_result r;
+                r.size = actual_pin_size;
+                r.pin = pin_med;
+                r.map = map_med;
+                r.get_info = inf_med;
+                r.unmap = unmap_med;
+                r.unpin = unpin_med;
+                results->push_back(r);
+            }
             pin_request_size <<= 1;
 
             printf("Histogram of gdr_pin_buffer latency for %ld bytes\n", actual_pin_size);
-            print_histogram(lat_arr, num_iters, bin_arr, num_bins, min_lat, max_lat);
+            print_histogram(lat_arr, lat_count, bin_arr, num_bins, min_lat, max_lat);
             printf("\n");
         }
 
@@ -182,7 +255,7 @@ int main(int argc, char *argv[])
 
     while(1) {
         int c;
-        c = getopt(argc, argv, "s:d:n:w:a:M:h");
+        c = getopt(argc, argv, "s:d:n:w:R:a:M:h");
         if (c == -1)
             break;
 
@@ -198,6 +271,9 @@ int main(int argc, char *argv[])
                 break;
             case 'w':
                 num_warmup_iters = strtol(optarg, NULL, 0);
+                break;
+            case 'R':
+                num_runs = strtol(optarg, NULL, 0);
                 break;
             case 'a':
                 if (strcmp(optarg, "cuMemAlloc") == 0) {
@@ -237,6 +313,23 @@ int main(int argc, char *argv[])
                 exit(EXIT_FAILURE);
         }
     }
+
+    if (num_runs <= 0) {
+        fprintf(stderr, "ERROR: num_runs must be positive\n");
+        exit(EXIT_FAILURE);
+    }
+    if (num_iters <= 0) {
+        fprintf(stderr, "ERROR: num_iters must be positive\n");
+        exit(EXIT_FAILURE);
+    }
+    if (num_iters > max_num_buckets && num_iters % max_num_buckets != 0) {
+        int old_num_iters = num_iters;
+        num_iters += max_num_buckets - (num_iters % max_num_buckets);
+        cerr << "WARNING: num_iters is not a multiple of " << max_num_buckets
+             << ". Increasing num_iters from " << old_num_iters
+             << " to " << num_iters << "." << endl;
+    }
+    num_buckets = (num_iters > max_num_buckets) ? max_num_buckets : num_iters;
 
     size_t size = PAGE_ROUND_UP(_size, GPU_PAGE_SIZE);
 
@@ -279,12 +372,21 @@ int main(int argc, char *argv[])
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
     cout << "device ptr: 0x" << hex << d_A << dec << endl;
     cout << "allocated size: " << size << endl;
 
-    run_test(d_A, size);
+    if (num_runs == 1) {
+        run_test(d_A, size);
+    } else {
+        std::vector<apiperf_result> results;
+        for (int run = 0; run < num_runs; run++) {
+            cout << endl << "starting run " << (run + 1) << " of " << num_runs << endl;
+            run_test(d_A, size, &results);
+        }
+        print_run_aggregate_results(results, num_runs);
+    }
 
     ASSERTDRV(gfree_fn(&mhandle));
 

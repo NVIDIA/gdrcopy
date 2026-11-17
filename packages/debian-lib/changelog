@@ -2,7 +2,17 @@ libgdrapi (@FULL_VERSION@) stable; urgency=low
 
   * See CHANGELOG.md.
 
- -- GPUDirect Team <gpudirect@nvidia.com>  Thu, 21 May 2026 14:00:00 -0700
+ -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 17 Aug 2026 16:00:00 -0700
+
+libgdrapi (2.7) stable; urgency=low
+
+  * Introduce gdr_copy_to_mapping_v2, gdr_copy_from_mapping_v2, and gdr_copy_fence APIs with flags for selecting CPU copy implementations and controlling read and write fences. Add -F to gdrcopy_copybw and gdrcopy_copylat to disable per-copy store fences.
+  * Introduce GDR_ATTR_VMA_INHERITED_ON_FORK so applications can query whether gdr_map mappings are inherited by child processes across fork. This happens on Linux 6.15 and later when gdrdrv is built against the proprietary flavor of NVIDIA driver, because VM_DONTCOPY can no longer be set. The invalidation_fork_after_gdr_map_* tests in gdrcopy_sanity are waived in that case.
+  * Remove support for the POWER (ppc64le) architecture. Users who need POWER support should use GDRCopy 2.6 or earlier.
+  * Fix DMA-BUF mmap capability detection to query the CUDA DMA-BUF mmap support attribute.
+  * Fix libgdrapi shared-library linkage with libdl, including downstream linking on RHEL 8.
+
+ -- GPUDirect Team <gpudirect@nvidia.com>  Mon, 17 Aug 2026 16:00:00 -0700
 
 libgdrapi (2.6) stable; urgency=low
 
@@ -74,4 +84,3 @@ libgdrapi (2.3) stable; urgency=low
   * Initial version of libgdrapi package -- was a part of gdrcopy package.
 
  -- Pak Markthub <pmarkthub@nvidia.com>  Mon, 23 Jul 2021 11:59:59 -0700
-

@@ -1,8 +1,22 @@
 # Changelog
 
-## [master] - 2026-05-21
+## [master] - 2026-08-17
 
-- No change
+- No changes since [2.7].
+
+## [2.7] - 2026-08-17
+
+- Introduce gdr_copy_to_mapping_v2, gdr_copy_from_mapping_v2, and gdr_copy_fence APIs with flags for selecting CPU copy implementations and controlling read and write fences. Add -F to gdrcopy_copybw and gdrcopy_copylat to disable per-copy store fences.
+- Introduce -P in gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_pplat to use GDR_PIN_FLAG_FORCE_PCIE.
+- Add CUDA 13.4+ locality-domain GPU memory allocation support to gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_pplat with -n. Add -g to gdrcopy_pplat to localize compute to the selected domain.
+- Make gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_apiperf report median and minimum bandwidth or latency over timing buckets to reduce sensitivity to outliers.
+- Add -R to gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_apiperf to aggregate results across independent pin and map trials.
+- Add read fences to gdrcopy_copylat when benchmarking optimized gdr_copy_from_mapping implementations so iterations are serialized correctly.
+- Introduce GDR_ATTR_VMA_INHERITED_ON_FORK so applications can query whether gdr_map mappings are inherited by child processes across fork. This happens on Linux 6.15 and later when gdrdrv is built against the proprietary flavor of NVIDIA driver, because VM_DONTCOPY can no longer be set. The invalidation_fork_after_gdr_map_* tests in gdrcopy_sanity are waived in that case.
+- Replace legacy init and systemd load scripts with modules-load.d, udev, and modprobe integration for automatic gdrdrv loading and /dev/gdrdrv creation.
+- Remove support for the POWER (ppc64le) architecture. Users who need POWER support should use GDRCopy 2.6 or earlier.
+- Fix DMA-BUF mmap capability detection to query the CUDA DMA-BUF mmap support attribute.
+- Fix libgdrapi shared-library linkage with libdl, including downstream linking on RHEL 8.
 
 ## [2.6] - 2026-05-21
 - Introduce a DMA-BUF mmap backend for mapping GPU memory without the GDRCopy kernel module. GDRCopy still prefers gdrdrv when available, can fall back to DMA-BUF mmap with CUDA driver 13.3+, and can force the new backend with GDRCOPY_USE_DMABUF_MMAP.
@@ -139,6 +153,7 @@
 - Add a script for packaging gdrcopy in the rpm format.
 
 [master]: https://github.com/NVIDIA/gdrcopy
+[2.7]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.7
 [2.6]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.6
 [2.5.2]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.5.2
 [2.5.1]: https://github.com/NVIDIA/gdrcopy/releases/tag/v2.5.1

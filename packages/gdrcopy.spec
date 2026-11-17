@@ -27,51 +27,33 @@
 %endif
 
 %define gdrcopy_service_install_script                                  \
+# Remove the legacy service when upgrading from an older package.       \
 %if 0%{!?suse_version:1}                                                \
-# RHEL                                                                  \
-%if 0%{?rhel} >= 9                                                      \
 if [ -e /usr/bin/systemctl ]; then                                      \
-    /usr/bin/systemctl enable gdrcopy||:                                \
-    /usr/bin/systemctl start gdrcopy||:                                 \
+    /usr/bin/systemctl disable --now gdrcopy >/dev/null 2>&1 ||:        \
 fi                                                                      \
-%else                                                                   \
-# RHEL 8 or earlier                                                     \
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
    true                                                                 \
 fi                                                                      \
-/sbin/chkconfig --add gdrcopy                                           \
-service gdrcopy start                                                   \
-%endif                                                                  \
-# No service for SUSE                                                   \
 %endif
 
 %define gdrcopy_service_uninstall_script                                \
-%if 0%{!?suse_version:1}                                                \
-# RHEL                                                                  \
-%if 0%{?rhel} >= 9                                                      \
-if [ -e /usr/bin/systemctl ]; then                                      \
-    /usr/bin/systemctl stop gdrcopy||:                                  \
-    /usr/bin/systemctl disable gdrcopy||:                               \
-fi                                                                      \
-%else                                                                   \
-# RHEL 8 or earlier                                                     \
-service gdrcopy stop||:                                                 \
 %{MODPROBE} -rq gdrdrv||:                                               \
+%if 0%{!?suse_version:1}                                                \
+if [ -e /usr/bin/systemctl ]; then                                      \
+    /usr/bin/systemctl disable --now gdrcopy >/dev/null 2>&1 ||:        \
+fi                                                                      \
 if ! ( /sbin/chkconfig --del gdrcopy > /dev/null 2>&1 ); then           \
    true                                                                 \
 fi                                                                      \
-%endif                                                                  \
-%else                                                                   \
-# No service for SUSE but we still need to unload the driver            \
-%{MODPROBE} -rq gdrdrv||:                                               \
 %endif
 
 
 %define gdrdrv_install_script                                           \
 /sbin/depmod -a %{kernel_version} &> /dev/null ||:                      \
-%{MODPROBE} -rq gdrdrv||:                                               \
-%{MODPROBE} gdrdrv||:                                                   \
-%{gdrcopy_service_install_script}
+%{gdrcopy_service_install_script}                                       \
+%{MODPROBE} -rq gdrdrv >/dev/null 2>&1 ||:                              \
+%{MODPROBE} gdrdrv||:
 
 
 %global dkms_install_script                                             \
@@ -96,7 +78,7 @@ if [ -e /usr/bin/systemctl ]; then                                      \
     /usr/bin/systemctl daemon-reload                                    \
 fi
 
-%global __requires_exclude ^libcuda\\.so.*$
+%global __requires_exclude ^(libcuda\\.so.*|\\(kmod\\(gdrdrv\\.ko\\) if kernel\\))$
 
 
 Name:           gdrcopy
@@ -108,6 +90,8 @@ License:        MIT
 URL:            https://github.com/NVIDIA/gdrcopy
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  gcc kernel-headers
+# POWER (ppc64le) is no longer supported. Use GDRCopy 2.6 or earlier for POWER.
+ExclusiveArch:  x86_64 aarch64
 
 %package devel
 Summary: The development files
@@ -184,32 +168,16 @@ cp -a $RPM_BUILD_DIR/%{name}-%{version}/src/gdrdrv/nv-p2p-dummy.c $RPM_BUILD_ROO
 cp -a $RPM_BUILD_DIR/%{name}-%{version}/dkms.conf $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}
 cp -a -r $RPM_BUILD_DIR/%{name}-%{version}/scripts $RPM_BUILD_ROOT%{usr_src_dir}/gdrdrv-%{version}/
 
-%if 0%{!?suse_version:1}
-# RHEL
-
-%if 0%{?rhel} >= 9
-# Install systemd service
+# Load gdrdrv at boot; udev for open-source device_create; modprobe.d for
+# proprietary /dev/gdrdrv create/remove on every load (including after reboot).
+install -d $RPM_BUILD_ROOT/usr/lib/modules-load.d
+install -m 0644 $RPM_BUILD_DIR/%{name}-%{version}/modules-load.d/gdrdrv.conf $RPM_BUILD_ROOT/usr/lib/modules-load.d/gdrdrv.conf
+install -d $RPM_BUILD_ROOT/usr/lib/udev/rules.d
+install -m 0644 $RPM_BUILD_DIR/%{name}-%{version}/udev/rules.d/70-gdrdrv.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/70-gdrdrv.rules
+install -d $RPM_BUILD_ROOT/usr/lib/modprobe.d
+install -m 0644 $RPM_BUILD_DIR/%{name}-%{version}/modprobe.d/gdrdrv.conf $RPM_BUILD_ROOT/usr/lib/modprobe.d/gdrdrv.conf
 install -d $RPM_BUILD_ROOT/usr/libexec/gdrcopy
-install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/usr/libexec/gdrcopy
-install -d $RPM_BUILD_ROOT/usr/lib/systemd/system
-install -m 0644 $RPM_BUILD_DIR/%{name}-%{version}/gdrcopy.service $RPM_BUILD_ROOT/usr/lib/systemd/system
-%else
-# RHEL8 or earlier
-# Install gdrdrv service script
-install -d $RPM_BUILD_ROOT/etc/init.d
-install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/init.d/gdrcopy $RPM_BUILD_ROOT/etc/init.d
-%endif
-
-%else # SUSE
-mkdir -p $RPM_BUILD_ROOT/etc/modprobe.d
-cat <<"EOF" > $RPM_BUILD_ROOT/etc/modprobe.d/50-gdrdrv.conf
-#options gdrdrv dbg_enabled=1
-#options info_enabled=1
-install gdrdrv PATH=$PATH:/bin:/usr/bin; /sbin/modprobe --ignore-install gdrdrv $CMDLINE_OPTS && rm -f /dev/gdrdrv && mknod -m 660 /dev/gdrdrv c $(gawk '/gdrdrv/{printf"%%s",$1}' /proc/devices) 0 && chgrp video /dev/gdrdrv
-remove gdrdrv PATH=$PATH:/bin:/usr/bin; /sbin/modprobe --remove --ignore-remove gdrdrv && rm -f /dev/gdrdrv
-EOF
-chmod 0644 $RPM_BUILD_ROOT/etc/modprobe.d/50-gdrdrv.conf
-%endif
+install -m 0755 $RPM_BUILD_DIR/%{name}-%{version}/scripts/gdrdrv_devnode.sh $RPM_BUILD_ROOT/usr/libexec/gdrcopy/gdrdrv_devnode.sh
 
 %post %{dkms}
 if [ "$1" == "2" ] && [ -e "%{old_driver_install_dir}/gdrdrv.ko" ]; then
@@ -327,16 +295,10 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 
 %files %{dkms}
 %defattr(-,root,root,-)
-%if 0%{!?suse_version:1}
-%if 0%{?rhel} >= 9
-/usr/libexec/gdrcopy/gdrcopy
-/usr/lib/systemd/system/gdrcopy.service
-%else
-/etc/init.d/gdrcopy
-%endif
-%else
-/etc/modprobe.d/50-gdrdrv.conf
-%endif
+/usr/lib/modules-load.d/gdrdrv.conf
+/usr/lib/udev/rules.d/70-gdrdrv.rules
+/usr/lib/modprobe.d/gdrdrv.conf
+/usr/libexec/gdrcopy/gdrdrv_devnode.sh
 %{usr_src_dir}/gdrdrv-%{version}/gdrdrv.c
 %{usr_src_dir}/gdrdrv-%{version}/gdrdrv.h
 %{usr_src_dir}/gdrdrv-%{version}/Makefile
@@ -348,23 +310,29 @@ rm -rf $RPM_BUILD_DIR/%{name}-%{version}
 %if %{BUILD_KMOD} > 0
 %files %{kmod_fullname}
 %defattr(-,root,root,-)
-%if 0%{!?suse_version:1}
-%if 0%{?rhel} >= 9
-/usr/libexec/gdrcopy/gdrcopy
-/usr/lib/systemd/system/gdrcopy.service
-%else
-/etc/init.d/gdrcopy
-%endif
-%else
-/etc/modprobe.d/50-gdrdrv.conf
-%endif
+/usr/lib/modules-load.d/gdrdrv.conf
+/usr/lib/udev/rules.d/70-gdrdrv.rules
+/usr/lib/modprobe.d/gdrdrv.conf
+/usr/libexec/gdrcopy/gdrdrv_devnode.sh
 %{old_driver_install_dir}/gdrdrv.ko
 %endif
 
 
 %changelog
-* Thu May 21 2026 GPUDirect Team <gpudirect@nvidia.com> %{GDR_VERSION}-%{_release}
+* Mon Aug 17 2026 GPUDirect Team <gpudirect@nvidia.com> %{GDR_VERSION}-%{_release}
 - See CHANGELOG.md.
+* Mon Aug 17 2026 GPUDirect Team <gpudirect@nvidia.com> 2.7-%{_release}
+- Introduce gdr_copy_to_mapping_v2, gdr_copy_from_mapping_v2, and gdr_copy_fence APIs with flags for selecting CPU copy implementations and controlling read and write fences. Add -F to gdrcopy_copybw and gdrcopy_copylat to disable per-copy store fences.
+- Introduce -P in gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_pplat to use GDR_PIN_FLAG_FORCE_PCIE.
+- Add CUDA 13.4+ locality-domain GPU memory allocation support to gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_pplat with -n. Add -g to gdrcopy_pplat to localize compute to the selected domain.
+- Make gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_apiperf report median and minimum bandwidth or latency over timing buckets to reduce sensitivity to outliers.
+- Add -R to gdrcopy_copybw, gdrcopy_copylat, and gdrcopy_apiperf to aggregate results across independent pin and map trials.
+- Add read fences to gdrcopy_copylat when benchmarking optimized gdr_copy_from_mapping implementations so iterations are serialized correctly.
+- Introduce GDR_ATTR_VMA_INHERITED_ON_FORK so applications can query whether gdr_map mappings are inherited by child processes across fork. This happens on Linux 6.15 and later when gdrdrv is built against the proprietary flavor of NVIDIA driver, because VM_DONTCOPY can no longer be set. The invalidation_fork_after_gdr_map_* tests in gdrcopy_sanity are waived in that case.
+- Replace legacy init and systemd load scripts with modules-load.d, udev, and modprobe integration for automatic gdrdrv loading and /dev/gdrdrv creation.
+- Remove support for the POWER (ppc64le) architecture. Users who need POWER support should use GDRCopy 2.6 or earlier.
+- Fix DMA-BUF mmap capability detection to query the CUDA DMA-BUF mmap support attribute.
+- Fix libgdrapi shared-library linkage with libdl, including downstream linking on RHEL 8.
 * Thu May 21 2026 GPUDirect Team <gpudirect@nvidia.com> 2.6-%{_release}
 - Introduce a DMA-BUF mmap backend for mapping GPU memory without the GDRCopy kernel module. GDRCopy still prefers gdrdrv when available, can fall back to DMA-BUF mmap with CUDA driver 13.3+, and can force the new backend with GDRCOPY_USE_DMABUF_MMAP.
 - Introduce GDR_ATTR_USING_DMA_BUF_MMAP so applications can query whether GDRCopy is using the DMA-BUF mmap backend.

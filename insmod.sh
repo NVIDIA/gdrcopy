@@ -19,23 +19,36 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-THIS_DIR=$(dirname $0)
+THIS_DIR=$(dirname "$0")
 
 # remove driver
-grep gdrdrv /proc/devices >/dev/null && sudo /sbin/rmmod gdrdrv
-
-# insert driver
-sudo /sbin/insmod src/gdrdrv/gdrdrv.ko dbg_enabled=0 info_enabled=0 use_persistent_mapping=1
-
-# create device inodes
-major=`fgrep gdrdrv /proc/devices | cut -b 1-4`
-echo "INFO: driver major is $major"
+if grep -qw gdrdrv /proc/devices; then
+    if ! sudo /sbin/rmmod gdrdrv; then
+        echo "ERROR: could not unload the existing gdrdrv module" >&2
+        exit 1
+    fi
+fi
 
 # remove old inodes just in case
 if [ -e /dev/gdrdrv ]; then
     sudo rm /dev/gdrdrv
 fi
 
-echo "INFO: creating /dev/gdrdrv inode"
-sudo mknod /dev/gdrdrv c $major 0
-sudo chmod a+w+r /dev/gdrdrv
+# insert driver
+if ! sudo /sbin/insmod "$THIS_DIR/src/gdrdrv/gdrdrv.ko" dbg_enabled=0 info_enabled=0 use_persistent_mapping=1; then
+    echo "ERROR: could not load gdrdrv" >&2
+    exit 1
+fi
+
+# insmod bypasses modprobe.d; create/refresh the node the same way the package hook does.
+if ! sudo "$THIS_DIR/scripts/gdrdrv_devnode.sh" create; then
+    echo "ERROR: /dev/gdrdrv was not created" >&2
+    exit 1
+fi
+if [ ! -e /dev/gdrdrv ]; then
+    echo "ERROR: /dev/gdrdrv was not created" >&2
+    exit 1
+fi
+
+echo "INFO: /dev/gdrdrv is ready"
+ls -l /dev/gdrdrv

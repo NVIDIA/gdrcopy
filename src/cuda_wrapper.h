@@ -48,7 +48,7 @@ typedef enum CUpointer_attribute_enum {
 
 typedef enum CUdevice_attribute_enum {
     CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS_USES_HOST_PAGE_TABLES = 100,
-    CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED = 124,
+    CU_DEVICE_ATTRIBUTE_DMA_BUF_MMAP_SUPPORTED = 152,
     CU_DEVICE_ATTRIBUTE_MAX               = 0x7FFFFFFF
 } CUdevice_attribute;
 

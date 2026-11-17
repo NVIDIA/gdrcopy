@@ -148,6 +148,19 @@ void waive_if_dma_buf_mmap_backend()
     }
 }
 
+void waive_if_vma_inherited_on_fork()
+{
+    gdr_t g = gdr_open_safe();
+    int vma_inherited_on_fork = 0, status = 0;
+    status = gdr_get_attribute(g, GDR_ATTR_VMA_INHERITED_ON_FORK, &vma_inherited_on_fork);
+    gdr_close(g);
+    ASSERT_EQ(status, 0);
+    if (vma_inherited_on_fork) {
+        print_dbg("gdrdrv mappings are inherited on fork, waiving this test\n");
+        exit(EXIT_WAIVED);
+    }
+}
+
 /**
  * Sends given file descriptior via given socket
  *
@@ -276,7 +289,7 @@ void basic()
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     gdr_t g = gdr_open_safe();
@@ -575,7 +588,7 @@ void data_validation()
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
@@ -645,6 +658,26 @@ void data_validation()
     print_dbg("check 3: gdr_copy_to_bar() + read back via gdr_copy_from_bar()\n");
     gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
     gdr_copy_from_mapping(mh, copy_buf, buf_ptr, size);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
+    memset(copy_buf, 0xA5, size);
+    ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+    ASSERTDRV(cuCtxSynchronize());
+
+    // v2 copy API checks. The v2 functions use the same internal functions as v1,
+    // so we only exercise the two v2-specific flag behaviors:
+    // (i) an extra read fence and (ii) ignored store fence.
+    print_dbg("check 3.1: gdr_copy_from_mapping_v2(DEFAULT | READ_FENCE) issues an extra read fence\n");
+    gdr_copy_to_mapping(mh, buf_ptr, init_buf, size);
+    ASSERT_EQ(gdr_copy_from_mapping_v2(mh, copy_buf, buf_ptr, size, GDR_FLAG_SET(GDR_COPY_FLAG_DEFAULT, GDR_COPY_FLAG_READ_FENCE)), 0);
+    errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
+    memset(copy_buf, 0xA5, size);
+    ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
+    ASSERTDRV(cuCtxSynchronize());
+
+    print_dbg("check 3.2: gdr_copy_to_mapping_v2(DEFAULT & ~WRITE_FENCE) suppresses the store fence + manual SB()\n");
+    ASSERT_EQ(gdr_copy_to_mapping_v2(mh, buf_ptr, init_buf, size, GDR_FLAG_UNSET(GDR_COPY_FLAG_DEFAULT, GDR_COPY_FLAG_WRITE_FENCE)), 0);
+    SB();
+    ASSERTDRV(cuMemcpyDtoH(copy_buf, d_ptr, size));
     errs += compare_buf(init_buf, copy_buf, size) ? 1 : 0;
     memset(copy_buf, 0xA5, size);
     ASSERTDRV(cuMemsetD8(d_A, 0xA5, size));
@@ -782,7 +815,7 @@ void data_validation_mix_mappings()
     print_dbg("buffer size: %zu\n", size);
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x7D, size));
@@ -920,7 +953,7 @@ void invalidation_access_after_gdr_close()
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
@@ -1015,7 +1048,7 @@ void invalidation_access_after_free()
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
@@ -1126,7 +1159,7 @@ void invalidation_two_mappings()
     gpu_mem_handle_t mhandle[2];
 
     for (int i = 0; i < 2; ++i) {
-        ASSERTDRV(galloc_fn(&mhandle[i], size, true, true));
+        ASSERTDRV(galloc_fn(&mhandle[i], size, true, true, false, 0));
         d_A[i] = mhandle[i].ptr;
         ASSERTDRV(cuMemsetD8(d_A[i], 0x95, size));
     }
@@ -1293,7 +1326,7 @@ void invalidation_fork_access_after_free()
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
@@ -1403,6 +1436,7 @@ void invalidation_fork_after_gdr_map()
     expecting_exception_signal = false;
     MB();
     waive_if_dma_buf_mmap_backend();
+    waive_if_vma_inherited_on_fork();
 
     int filedes_0[2];
     int filedes_1[2];
@@ -1420,7 +1454,7 @@ void invalidation_fork_after_gdr_map()
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
@@ -1578,7 +1612,7 @@ void invalidation_fork_child_gdr_map_parent()
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
@@ -1708,7 +1742,7 @@ void invalidation_fork_map_and_free()
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
@@ -1831,7 +1865,7 @@ void invalidation_unix_sock_shared_fd_gdr_pin_buffer()
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
@@ -1967,7 +2001,7 @@ void invalidation_unix_sock_shared_fd_gdr_map()
 
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+    ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
     d_A = mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(d_A, 0x95, size));
@@ -1992,12 +2026,17 @@ void invalidation_unix_sock_shared_fd_gdr_map()
         _g.fd = fd;
         gdr_t g = &_g;
 
-        print_dbg("%s: Receiving gdr_memh_t from parent\n", myname);
-        gdr_memh_t memh;
-        ASSERT_EQ(read(read_fd, &memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
-        print_dbg("%s: Got handle 0x%lx\n", myname, memh.backend.gdrdrv_memh.handle);
+        print_dbg("%s: Receiving gdrdrv handle from parent\n", myname);
+        uint32_t gdrdrv_handle = 0;
+        ASSERT_EQ(read(read_fd, &gdrdrv_handle, sizeof(gdrdrv_handle)), sizeof(gdrdrv_handle));
+        print_dbg("%s: Got handle 0x%x\n", myname, gdrdrv_handle);
 
         print_dbg("%s: Converting gdr_memh_t to gdr_mh_t\n", myname);
+        gdr_memh_t memh;
+        memset(&memh, 0, sizeof(memh));
+        memh.mapping_type = GDR_MAPPING_TYPE_NONE;
+        memh.backend.gdrdrv_memh.handle = gdrdrv_handle;
+
         gdr_mh_t mh;
         mh.h = (unsigned long)(&memh);
 
@@ -2024,10 +2063,11 @@ void invalidation_unix_sock_shared_fd_gdr_map()
         ASSERT(sendfd(pair[1], fd) >= 0);
 
         gdr_memh_t *memh = (gdr_memh_t *)mh.h;
-        print_dbg("%s: Extracted gdr_memh_t from gdr_mh_t got handle 0x%lx\n", myname, memh->backend.gdrdrv_memh.handle);
+        uint32_t gdrdrv_handle = memh->backend.gdrdrv_memh.handle;
+        print_dbg("%s: Extracted gdr_memh_t from gdr_mh_t got handle 0x%x\n", myname, gdrdrv_handle);
 
-        print_dbg("%s: Sending gdr_memh_t to child\n", myname);
-        ASSERT_EQ(write(write_fd, memh, sizeof(gdr_memh_t)), sizeof(gdr_memh_t));
+        print_dbg("%s: Sending gdrdrv handle to child\n", myname);
+        ASSERT_EQ(write(write_fd, &gdrdrv_handle, sizeof(gdrdrv_handle)), sizeof(gdrdrv_handle));
 
         print_dbg("%s: Waiting for child to finish\n", myname);
         int child_exit_status = -EINVAL;
@@ -2127,7 +2167,7 @@ GDRCOPY_TEST(invalidation_fork_child_gdr_pin_parent_with_tokens)
         init_cuda(g_dev_id);
 
         gpu_mem_handle_t mhandle;
-        ASSERTDRV(gpu_mem_alloc(&mhandle, size, true, true));
+        ASSERTDRV(gpu_mem_alloc(&mhandle, size, true, true, false, 0));
         d_A = mhandle.ptr;
 
         ASSERTDRV(cuPointerGetAttribute(&tokens, CU_POINTER_ATTRIBUTE_P2P_TOKENS, d_A));
@@ -2223,7 +2263,7 @@ void basic_child_thread_pins_buffer()
 
     t.gfree_fn = gfree_fn;
 
-    ASSERTDRV(galloc_fn(&t.mhandle, t.size, true, true));
+    ASSERTDRV(galloc_fn(&t.mhandle, t.size, true, true, false, 0));
     t.d_buf = t.mhandle.ptr;
 
     ASSERTDRV(cuMemsetD8(t.d_buf, 0xA5, t.size));
@@ -2391,7 +2431,7 @@ void leakage_pin_pages_fork()
 
         CUdeviceptr d_A;
         gpu_mem_handle_t mhandle;
-        ASSERTDRV(galloc_fn(&mhandle, size, true, true));
+        ASSERTDRV(galloc_fn(&mhandle, size, true, true, false, 0));
         d_A = mhandle.ptr;
 
         gdr_mh_t mh;

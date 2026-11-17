@@ -198,6 +198,10 @@ if [[ ${build_driver_package} == 1 ]]; then
     ex cp -r ${TOP_DIR_PATH}/scripts ${dkmsdir}/gdrdrv-${VERSION}
     ex cd ${dkmsdir}
     ex cp -r ${SCRIPT_DIR_PATH}/dkms/* .
+    ex cp "${SCRIPT_DIR_PATH}/modules-load.d/gdrdrv.conf" .
+    ex cp "${SCRIPT_DIR_PATH}/udev/rules.d/70-gdrdrv.rules" .
+    ex cp "${SCRIPT_DIR_PATH}/modprobe.d/gdrdrv.conf" ./gdrdrv-modprobe.conf
+    ex cp "${TOP_DIR_PATH}/scripts/gdrdrv_devnode.sh" .
     ex find . -type f -exec sed -i "s/@FULL_VERSION@/${FULL_VERSION}/g" {} +
     ex find . -type f -exec sed -i "s/@VERSION@/${VERSION}/g" {} +
     ex find . -type f -exec sed -i "s/@MODULE_LOCATION@/${MODULE_SUBDIR//\//\\/}/g" {} +
